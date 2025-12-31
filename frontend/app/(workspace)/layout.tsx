@@ -16,7 +16,7 @@ import {
 	SidebarTrigger,
 	useSidebar,
 } from "@/components/ui/sidebar";
-import { Home, Search, FileText } from "lucide-react";
+import { Home, Search, FileText, Settings } from "lucide-react";
 
 function SidebarHeaderContent() {
 	const { state } = useSidebar();
@@ -51,6 +51,8 @@ function getPageTitle(pathname: string): string {
 		return "Search Address";
 	} else if (pathname === "/reports") {
 		return "Reports";
+	} else if (pathname === "/settings") {
+		return "Settings";
 	}
 	return "Home";
 }
@@ -106,6 +108,18 @@ export default function WorkspaceLayout({
 										<Link href="/reports">
 											<FileText className="size-4" />
 											<span>Reports</span>
+										</Link>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										tooltip="Settings"
+										isActive={pathname === "/settings"}
+										asChild
+									>
+										<Link href="/settings">
+											<Settings className="size-4" />
+											<span>Settings</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>
