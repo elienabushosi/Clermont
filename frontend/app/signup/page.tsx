@@ -15,36 +15,39 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 
-const loginSchema = z.object({
+const signupSchema = z.object({
 	email: z.string().email("Please enter a valid email address"),
-	password: z.string().min(1, "Password is required"),
+	firstName: z.string().min(1, "First name is required"),
+	password: z.string().min(6, "Password must be at least 6 characters"),
+	organizationName: z.string().min(1, "Organization name is required"),
 });
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+type SignupFormValues = z.infer<typeof signupSchema>;
 
-export default function LoginPage() {
+export default function SignupPage() {
 	const router = useRouter();
 	const [isLoading, setIsLoading] = useState(false);
-	const [isSuccess, setIsSuccess] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [success, setSuccess] = useState(false);
 
-	const form = useForm<LoginFormValues>({
-		resolver: zodResolver(loginSchema),
+	const form = useForm<SignupFormValues>({
+		resolver: zodResolver(signupSchema),
 		defaultValues: {
 			email: "",
+			firstName: "",
 			password: "",
+			organizationName: "",
 		},
 	});
 
-	const onSubmit = async (data: LoginFormValues) => {
+	const onSubmit = async (data: SignupFormValues) => {
 		setError(null);
 		setIsLoading(true);
 
 		try {
 			const response = await fetch(
-				"http://localhost:3002/api/auth/login",
+				"http://localhost:3002/api/auth/signup",
 				{
 					method: "POST",
 					headers: {
@@ -57,26 +60,19 @@ export default function LoginPage() {
 			const result = await response.json();
 
 			if (!response.ok) {
-				setError(result.message || "Invalid email or password");
+				setError(result.message || "Failed to create account");
 				setIsLoading(false);
 				return;
 			}
 
-			// Success - store the token if provided
-			if (result.token) {
-				localStorage.setItem("auth_token", result.token);
-			}
-
-			// Wait 1 second, then turn button green
+			// Success
+			setSuccess(true);
+			// Redirect to login page after a short delay
 			setTimeout(() => {
-				setIsSuccess(true);
-				// Navigate to home page after showing success
-				setTimeout(() => {
-					router.push("/home");
-				}, 500);
-			}, 1000);
+				router.push("/login");
+			}, 2000);
 		} catch (error) {
-			console.error("Login error:", error);
+			console.error("Signup error:", error);
 			setError("An error occurred. Please try again.");
 			setIsLoading(false);
 		}
@@ -87,13 +83,32 @@ export default function LoginPage() {
 			<div className="w-full max-w-md">
 				<div className="bg-white rounded-lg shadow-sm border border-[rgba(55,50,47,0.12)] p-8">
 					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
-						Log in to Lindero
+						Create an account
 					</h1>
 					<Form {...form}>
 						<form
 							onSubmit={form.handleSubmit(onSubmit)}
 							className="space-y-6"
 						>
+							<FormField
+								control={form.control}
+								name="firstName"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel className="text-[#37322F]">
+											First Name
+										</FormLabel>
+										<FormControl>
+											<Input
+												type="text"
+												placeholder="Enter your first name"
+												{...field}
+											/>
+										</FormControl>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
 							<FormField
 								control={form.control}
 								name="email"
@@ -132,35 +147,52 @@ export default function LoginPage() {
 									</FormItem>
 								)}
 							/>
+							<FormField
+								control={form.control}
+								name="organizationName"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel className="text-[#37322F]">
+											Organization Name
+										</FormLabel>
+										<FormControl>
+											<Input
+												type="text"
+												placeholder="Enter your organization name"
+												{...field}
+											/>
+										</FormControl>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
 							{error && (
 								<div className="text-sm text-red-600">
 									{error}
 								</div>
 							)}
+							{success && (
+								<div className="text-sm text-green-600">
+									Account created successfully! Redirecting to
+									login...
+								</div>
+							)}
 							<Button
 								type="submit"
-								disabled={isLoading || isSuccess}
+								disabled={isLoading || success}
 								className={`w-full text-white ${
-									isSuccess
+									success
 										? "bg-green-600 hover:bg-green-700"
 										: "bg-[#37322F] hover:bg-[#37322F]/90"
 								}`}
 							>
 								{isLoading
-									? "Logging in..."
-									: isSuccess
-									? "Access granted"
-									: "Log in"}
+									? "Creating account..."
+									: success
+									? "Account created!"
+									: "Create account"}
 							</Button>
 						</form>
-						<div className="mt-6 text-center">
-							<Link
-								href="/signup"
-								className="text-sm text-[#37322F] hover:text-[#4090C2] transition-colors underline"
-							>
-								Create an account
-							</Link>
-						</div>
 					</Form>
 				</div>
 			</div>

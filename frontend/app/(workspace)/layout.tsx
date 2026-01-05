@@ -1,13 +1,16 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import { getAuthToken, verifyToken, removeAuthToken } from "@/lib/auth";
 import {
 	Sidebar,
 	SidebarContent,
 	SidebarGroup,
 	SidebarGroupContent,
 	SidebarHeader,
+	SidebarFooter,
 	SidebarMenu,
 	SidebarMenuButton,
 	SidebarMenuItem,
@@ -16,7 +19,7 @@ import {
 	SidebarTrigger,
 	useSidebar,
 } from "@/components/ui/sidebar";
-import { Home, Search, FileText, Settings } from "lucide-react";
+import { Home, Search, FileText, Settings, LogOut } from "lucide-react";
 
 function SidebarHeaderContent() {
 	const { state } = useSidebar();
@@ -25,11 +28,17 @@ function SidebarHeaderContent() {
 	return (
 		<div className="flex flex-col items-center gap-3 p-4">
 			{/* Logo */}
-			<div className={`flex items-center justify-center ${isCollapsed ? "w-10" : "w-full max-w-[140px]"}`}>
+			<div
+				className={`flex items-center justify-center ${
+					isCollapsed ? "w-10" : "w-full max-w-[140px]"
+				}`}
+			>
 				<img
 					src="/logos/ArcNoma_Logo.png"
 					alt="Arcnoma, LLC Logo"
-					className={`object-contain ${isCollapsed ? "h-8" : "h-auto w-full"}`}
+					className={`object-contain ${
+						isCollapsed ? "h-8" : "h-auto w-full"
+					}`}
 				/>
 			</div>
 			{/* Company name - hidden when collapsed */}
@@ -63,7 +72,45 @@ export default function WorkspaceLayout({
 	children: React.ReactNode;
 }) {
 	const pathname = usePathname();
+	const router = useRouter();
+	const [isAuthenticated, setIsAuthenticated] = useState(false);
+	const [isChecking, setIsChecking] = useState(true);
 	const pageTitle = getPageTitle(pathname);
+
+	useEffect(() => {
+		const checkAuth = async () => {
+			const token = getAuthToken();
+
+			if (!token) {
+				router.push("/login");
+				return;
+			}
+
+			// Verify token with backend
+			const isValid = await verifyToken(token);
+
+			if (!isValid) {
+				// Remove invalid token
+				localStorage.removeItem("auth_token");
+				router.push("/login");
+				return;
+			}
+
+			setIsAuthenticated(true);
+			setIsChecking(false);
+		};
+
+		checkAuth();
+	}, [router]);
+
+	// Show loading state while checking authentication
+	if (isChecking || !isAuthenticated) {
+		return (
+			<div className="w-full min-h-screen bg-[#F7F5F3] flex items-center justify-center">
+				<div className="text-[#37322F]">Loading...</div>
+			</div>
+		);
+	}
 
 	return (
 		<SidebarProvider>
@@ -78,7 +125,10 @@ export default function WorkspaceLayout({
 								<SidebarMenuItem>
 									<SidebarMenuButton
 										tooltip="Home"
-										isActive={pathname === "/home" || pathname === "/"}
+										isActive={
+											pathname === "/home" ||
+											pathname === "/"
+										}
 										asChild
 									>
 										<Link href="/home">
@@ -90,7 +140,9 @@ export default function WorkspaceLayout({
 								<SidebarMenuItem>
 									<SidebarMenuButton
 										tooltip="Search Address"
-										isActive={pathname === "/search-address"}
+										isActive={
+											pathname === "/search-address"
+										}
 										asChild
 									>
 										<Link href="/search-address">
@@ -127,6 +179,23 @@ export default function WorkspaceLayout({
 						</SidebarGroupContent>
 					</SidebarGroup>
 				</SidebarContent>
+				<SidebarFooter>
+					<SidebarMenu>
+						<SidebarMenuItem>
+							<SidebarMenuButton
+								tooltip="Sign out"
+								onClick={() => {
+									removeAuthToken();
+									router.push("/login");
+								}}
+								className="w-full"
+							>
+								<LogOut className="size-4" />
+								<span>Sign out</span>
+							</SidebarMenuButton>
+						</SidebarMenuItem>
+					</SidebarMenu>
+				</SidebarFooter>
 			</Sidebar>
 			<SidebarInset>
 				{/* Header with toggle button */}
@@ -142,4 +211,3 @@ export default function WorkspaceLayout({
 		</SidebarProvider>
 	);
 }
-

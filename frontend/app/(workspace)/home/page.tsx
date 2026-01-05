@@ -288,6 +288,7 @@ export default function HomePage() {
 							if (value) setViewMode(value as "Lead" | "Address");
 						}}
 						variant="outline"
+						size="lg"
 					>
 						<ToggleGroupItem value="Lead" aria-label="Lead view">
 							Lead
