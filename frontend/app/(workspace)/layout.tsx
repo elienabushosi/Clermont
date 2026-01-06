@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { getAuthToken, verifyToken, removeAuthToken } from "@/lib/auth";
+import {
+	getAuthToken,
+	verifyToken,
+	removeAuthToken,
+	getCurrentUser,
+} from "@/lib/auth";
 import {
 	Sidebar,
 	SidebarContent,
@@ -19,9 +24,13 @@ import {
 	SidebarTrigger,
 	useSidebar,
 } from "@/components/ui/sidebar";
-import { Home, Search, FileText, Settings, LogOut } from "lucide-react";
+import { Home, Search, FileText, Settings, LogOut, User } from "lucide-react";
 
-function SidebarHeaderContent() {
+function SidebarHeaderContent({
+	organizationName,
+}: {
+	organizationName: string | null;
+}) {
 	const { state } = useSidebar();
 	const isCollapsed = state === "collapsed";
 
@@ -45,7 +54,7 @@ function SidebarHeaderContent() {
 			{!isCollapsed && (
 				<div className="text-center">
 					<h2 className="text-lg font-semibold text-[#37322F]">
-						Arcnoma, LLC
+						{organizationName || "Organization"}
 					</h2>
 				</div>
 			)}
@@ -75,6 +84,20 @@ export default function WorkspaceLayout({
 	const router = useRouter();
 	const [isAuthenticated, setIsAuthenticated] = useState(false);
 	const [isChecking, setIsChecking] = useState(true);
+	const [userData, setUserData] = useState<{
+		user: {
+			IdUser: string;
+			Name: string;
+			Email: string;
+			Role: string;
+			IdOrganization: string | null;
+		};
+		organization: {
+			IdOrganization: string;
+			Name: string;
+			Type: string | null;
+		} | null;
+	} | null>(null);
 	const pageTitle = getPageTitle(pathname);
 
 	useEffect(() => {
@@ -86,7 +109,7 @@ export default function WorkspaceLayout({
 				return;
 			}
 
-			// Verify token with backend
+			// Verify token with backend and get user data
 			const isValid = await verifyToken(token);
 
 			if (!isValid) {
@@ -94,6 +117,12 @@ export default function WorkspaceLayout({
 				localStorage.removeItem("auth_token");
 				router.push("/login");
 				return;
+			}
+
+			// Fetch user data with organization
+			const userInfo = await getCurrentUser();
+			if (userInfo) {
+				setUserData(userInfo);
 			}
 
 			setIsAuthenticated(true);
@@ -116,7 +145,9 @@ export default function WorkspaceLayout({
 		<SidebarProvider>
 			<Sidebar collapsible="icon">
 				<SidebarHeader>
-					<SidebarHeaderContent />
+					<SidebarHeaderContent
+						organizationName={userData?.organization?.Name || null}
+					/>
 				</SidebarHeader>
 				<SidebarContent>
 					<SidebarGroup>
@@ -181,6 +212,21 @@ export default function WorkspaceLayout({
 				</SidebarContent>
 				<SidebarFooter>
 					<SidebarMenu>
+						{/* User info section */}
+						{userData && (
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									tooltip={userData.user.Name}
+									className="w-full cursor-default"
+									disabled
+								>
+									<User className="size-4" />
+									<span className="truncate">
+										{userData.user.Name}
+									</span>
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+						)}
 						<SidebarMenuItem>
 							<SidebarMenuButton
 								tooltip="Sign out"

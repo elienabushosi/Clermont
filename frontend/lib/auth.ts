@@ -36,3 +36,41 @@ export async function verifyToken(token: string): Promise<boolean> {
 	}
 }
 
+// Get current user data with organization
+export async function getCurrentUser(): Promise<{
+	user: {
+		IdUser: string;
+		Name: string;
+		Email: string;
+		Role: string;
+		IdOrganization: string | null;
+	};
+	organization: {
+		IdOrganization: string;
+		Name: string;
+		Type: string | null;
+	} | null;
+} | null> {
+	try {
+		const token = getAuthToken();
+		if (!token) return null;
+
+		const response = await fetch("http://localhost:3002/api/auth/verify", {
+			method: "GET",
+			headers: {
+				Authorization: `Bearer ${token}`,
+			},
+		});
+
+		if (!response.ok) return null;
+
+		const data = await response.json();
+		return {
+			user: data.user,
+			organization: data.organization || null,
+		};
+	} catch (error) {
+		console.error("Error fetching user data:", error);
+		return null;
+	}
+}

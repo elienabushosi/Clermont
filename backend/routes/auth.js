@@ -324,10 +324,25 @@ router.get("/verify", async (req, res) => {
 			});
 		}
 
+		// Get organization details if user has an organization
+		let organizationData = null;
+		if (userData.IdOrganization) {
+			const { data: orgData, error: orgError } = await supabase
+				.from("organizations")
+				.select("IdOrganization, Name, Type")
+				.eq("IdOrganization", userData.IdOrganization)
+				.single();
+
+			if (!orgError && orgData) {
+				organizationData = orgData;
+			}
+		}
+
 		res.json({
 			status: "success",
 			message: "Token is valid",
 			user: userData,
+			organization: organizationData,
 		});
 	} catch (error) {
 		console.error("Token verification error:", error);
