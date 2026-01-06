@@ -1,8 +1,12 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import AddressAutocomplete, {
+	AddressData,
+} from "@/components/address-autocomplete";
+import AddressMap from "@/components/address-map";
 
 const recentAddresses = [
 	"123 Park Ave, Manhattan, NY 10017",
@@ -14,17 +18,47 @@ const recentAddresses = [
 ];
 
 export default function SearchAddressPage() {
+	const [addressData, setAddressData] = useState<AddressData | null>(null);
+
+	const handleAddressSelect = (data: AddressData) => {
+		setAddressData(data);
+	};
+
+	const handleGenerateReport = () => {
+		if (!addressData) {
+			alert("Please select an address first");
+			return;
+		}
+		// TODO: Call backend API to generate report
+		console.log("Generating report for:", addressData.normalizedAddress);
+	};
+
 	return (
 		<div className="p-8">
-			<div className="max-w-2xl">
+			<div className="max-w-4xl">
 				<div className="flex gap-4 mb-8">
-					<Input
-						type="text"
+					<AddressAutocomplete
+						onAddressSelect={handleAddressSelect}
 						placeholder="Add Address"
 						className="flex-1"
 					/>
-					<Button>Generate Report</Button>
+					<Button
+						onClick={handleGenerateReport}
+						disabled={!addressData}
+					>
+						Generate Report
+					</Button>
 				</div>
+
+				{/* Map display when address is selected */}
+				{addressData && (
+					<div className="mb-8">
+						<AddressMap addressData={addressData} />
+						<p className="text-sm text-[#605A57] mt-2">
+							{addressData.address}
+						</p>
+					</div>
+				)}
 
 				<div>
 					<h2 className="text-xl font-semibold text-[#37322F] mb-4">
