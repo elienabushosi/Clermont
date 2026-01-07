@@ -77,7 +77,7 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'report_status_enum') THEN
-        CREATE TYPE report_status_enum AS ENUM ('ready', 'failed');
+        CREATE TYPE report_status_enum AS ENUM ('pending', 'ready', 'failed');
     END IF;
 END$$;
 

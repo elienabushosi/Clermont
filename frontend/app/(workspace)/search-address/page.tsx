@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import AddressAutocomplete, {
 	AddressData,
 } from "@/components/address-autocomplete";
 import AddressMap from "@/components/address-map";
+import { getAuthToken } from "@/lib/auth";
 
 const recentAddresses = [
 	"123 Park Ave, Manhattan, NY 10017",
@@ -24,13 +26,59 @@ export default function SearchAddressPage() {
 		setAddressData(data);
 	};
 
-	const handleGenerateReport = () => {
+	const handleGenerateReport = async () => {
 		if (!addressData) {
-			alert("Please select an address first");
+			toast.error("Please select an address first");
 			return;
 		}
-		// TODO: Call backend API to generate report
-		console.log("Generating report for:", addressData.normalizedAddress);
+
+		const token = getAuthToken();
+		if (!token) {
+			toast.error("Please log in to generate reports");
+			return;
+		}
+
+		try {
+			toast.loading("Generating report...", { id: "generate-report" });
+
+			const response = await fetch(
+				"http://localhost:3002/api/reports/generate",
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${token}`,
+					},
+					body: JSON.stringify({
+						address: addressData.address,
+						normalizedAddress: addressData.normalizedAddress,
+						location: addressData.location,
+						placeId: addressData.placeId,
+					}),
+				}
+			);
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				toast.error(result.message || "Failed to generate report", {
+					id: "generate-report",
+				});
+				return;
+			}
+
+			toast.success("Report generation started successfully!", {
+				id: "generate-report",
+			});
+
+			console.log("Report generated:", result);
+			// TODO: Navigate to report page or update UI to show report status
+		} catch (error) {
+			console.error("Error generating report:", error);
+			toast.error("Network error. Please try again later.", {
+				id: "generate-report",
+			});
+		}
 	};
 
 	return (

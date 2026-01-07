@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { supabase } from "./lib/supabase.js";
 import authRoutes from "./routes/auth.js";
+import reportRoutes from "./routes/reports.js";
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -12,6 +13,7 @@ app.use(express.json());
 
 // API routes
 app.use("/api/auth", authRoutes);
+app.use("/api/reports", reportRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
