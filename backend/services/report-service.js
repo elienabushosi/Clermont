@@ -125,11 +125,71 @@ export async function getReportSources(reportId) {
 
 	if (error) {
 		console.error("Error fetching report sources:", error);
-		throw new Error(
-			`Failed to fetch report sources: ${error.message}`
-		);
+		throw new Error(`Failed to fetch report sources: ${error.message}`);
 	}
 
 	return data || [];
 }
 
+/**
+ * Get all reports for an organization with client information
+ * @param {string} organizationId - Organization ID
+ * @returns {Promise<Array>} Array of reports with client names
+ */
+export async function getReportsByOrganization(organizationId) {
+	// First, get all reports
+	const { data: reports, error: reportsError } = await supabase
+		.from("reports")
+		.select(
+			"IdReport, Address, AddressNormalized, Status, CreatedAt, UpdatedAt, IdClient"
+		)
+		.eq("IdOrganization", organizationId)
+		.eq("Enabled", true)
+		.order("CreatedAt", { ascending: false });
+
+	if (reportsError) {
+		console.error("Error fetching reports:", reportsError);
+		throw new Error(`Failed to fetch reports: ${reportsError.message}`);
+	}
+
+	if (!reports || reports.length === 0) {
+		return [];
+	}
+
+	// Get client IDs that exist
+	const clientIds = reports
+		.map((r) => r.IdClient)
+		.filter((id) => id !== null);
+
+	// Fetch clients if there are any
+	let clientsMap = {};
+	if (clientIds.length > 0) {
+		const { data: clients, error: clientsError } = await supabase
+			.from("clients")
+			.select("IdClient, Name, Email")
+			.in("IdClient", clientIds);
+
+		if (!clientsError && clients) {
+			clientsMap = clients.reduce((acc, client) => {
+				acc[client.IdClient] = client;
+				return acc;
+			}, {});
+		}
+	}
+
+	// Combine reports with client information
+	return reports.map((report) => {
+		const client = report.IdClient ? clientsMap[report.IdClient] : null;
+
+		return {
+			IdReport: report.IdReport,
+			Address: report.Address,
+			AddressNormalized: report.AddressNormalized,
+			Status: report.Status,
+			CreatedAt: report.CreatedAt,
+			UpdatedAt: report.UpdatedAt,
+			ClientName: client?.Name || null,
+			ClientEmail: client?.Email || null,
+		};
+	});
+}

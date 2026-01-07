@@ -1,7 +1,153 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { format } from "date-fns";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { getReports, type Report } from "@/lib/reports";
+
+function getStatusColor(status: Report["Status"]) {
+	switch (status) {
+		case "pending":
+			return "bg-yellow-100 text-yellow-700 border-yellow-200";
+		case "ready":
+			return "bg-green-100 text-green-700 border-green-200";
+		case "failed":
+			return "bg-red-100 text-red-700 border-red-200";
+	}
+}
+
 export default function ReportsPage() {
+	const [reports, setReports] = useState<Report[]>([]);
+	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		const fetchReports = async () => {
+			try {
+				setIsLoading(true);
+				setError(null);
+				const data = await getReports();
+				setReports(data);
+			} catch (err) {
+				console.error("Error fetching reports:", err);
+				setError(
+					err instanceof Error ? err.message : "Failed to load reports"
+				);
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		fetchReports();
+	}, []);
+
+	if (isLoading) {
+		return (
+			<div className="p-8">
+				<div className="max-w-6xl mx-auto">
+					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
+						Reports
+					</h1>
+					<div className="space-y-2">
+						{Array.from({ length: 5 }).map((_, i) => (
+							<Skeleton key={i} className="h-12 w-full" />
+						))}
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	if (error) {
+		return (
+			<div className="p-8">
+				<div className="max-w-6xl mx-auto">
+					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
+						Reports
+					</h1>
+					<div className="bg-red-50 border border-red-200 rounded-lg p-4">
+						<p className="text-red-700">{error}</p>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="p-8">
-			{/* Reports page content will be added here */}
+			<div className="max-w-6xl mx-auto">
+				<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
+					Reports
+				</h1>
+
+				{reports.length === 0 ? (
+					<div className="bg-white rounded-lg border border-[rgba(55,50,47,0.12)] p-8 text-center">
+						<p className="text-[#605A57]">No reports found</p>
+					</div>
+				) : (
+					<div className="bg-white rounded-lg border border-[rgba(55,50,47,0.12)] overflow-hidden">
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead className="text-[#37322F]">
+										Address
+									</TableHead>
+									<TableHead className="text-[#37322F]">
+										Client
+									</TableHead>
+									<TableHead className="text-[#37322F]">
+										Created At
+									</TableHead>
+									<TableHead className="text-[#37322F]">
+										Status
+									</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{reports.map((report) => (
+									<TableRow key={report.IdReport}>
+										<TableCell className="text-[#37322F]">
+											{report.Address}
+										</TableCell>
+										<TableCell className="text-[#37322F]">
+											{report.ClientName || (
+												<span className="text-[#605A57]">
+													—
+												</span>
+											)}
+										</TableCell>
+										<TableCell className="text-[#37322F]">
+											{format(
+												new Date(report.CreatedAt),
+												"MMM d, yyyy 'at' h:mm a"
+											)}
+										</TableCell>
+										<TableCell>
+											<Badge
+												variant="outline"
+												className={`text-xs ${getStatusColor(
+													report.Status
+												)}`}
+											>
+												{report.Status}
+											</Badge>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					</div>
+				)}
+			</div>
 		</div>
 	);
 }

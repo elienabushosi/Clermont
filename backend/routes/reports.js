@@ -1,6 +1,7 @@
 // Reports routes
 import express from "express";
 import { generateReport } from "../orchestration/orchestrator.js";
+import { getReportsByOrganization } from "../services/report-service.js";
 import { supabase } from "../lib/supabase.js";
 
 const router = express.Router();
@@ -88,6 +89,70 @@ router.post("/generate", async (req, res) => {
 		res.status(500).json({
 			status: "error",
 			message: "Failed to generate report",
+			error: error.message,
+		});
+	}
+});
+
+/**
+ * GET /api/reports
+ * Get all reports for the authenticated user's organization
+ */
+router.get("/", async (req, res) => {
+	try {
+		// Get auth token from header
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+
+		// Verify token and get user
+		const {
+			data: { user },
+			error: authError,
+		} = await supabase.auth.getUser(token);
+
+		if (authError || !user) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		// Get user details from our custom users table
+		const { data: userData, error: userError } = await supabase
+			.from("users")
+			.select("IdUser, IdOrganization")
+			.eq("Email", user.email)
+			.single();
+
+		if (userError || !userData) {
+			return res.status(401).json({
+				status: "error",
+				message: "User not found",
+			});
+		}
+
+		// Get reports for the organization
+		const reports = await getReportsByOrganization(
+			userData.IdOrganization
+		);
+
+		res.json({
+			status: "success",
+			reports: reports,
+		});
+	} catch (error) {
+		console.error("Error fetching reports:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Failed to fetch reports",
 			error: error.message,
 		});
 	}
