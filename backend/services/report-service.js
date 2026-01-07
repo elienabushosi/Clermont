@@ -132,6 +132,69 @@ export async function getReportSources(reportId) {
 }
 
 /**
+ * Get a single report with all its sources
+ * @param {string} reportId - Report ID
+ * @param {string} organizationId - Organization ID (for security check)
+ * @returns {Promise<Object>} Report with sources
+ */
+export async function getReportWithSources(reportId, organizationId) {
+	// First, get the report and verify it belongs to the organization
+	const { data: report, error: reportError } = await supabase
+		.from("reports")
+		.select("*")
+		.eq("IdReport", reportId)
+		.eq("IdOrganization", organizationId)
+		.single();
+
+	if (reportError || !report) {
+		throw new Error("Report not found or access denied");
+	}
+
+	// Get client information if report has a client
+	let clientData = null;
+	if (report.IdClient) {
+		const { data: client, error: clientError } = await supabase
+			.from("clients")
+			.select("IdClient, Name, Email, PhoneNumber")
+			.eq("IdClient", report.IdClient)
+			.single();
+
+		if (!clientError && client) {
+			clientData = client;
+		}
+	}
+
+	// Get all report sources
+	const { data: sources, error: sourcesError } = await supabase
+		.from("report_sources")
+		.select(
+			"IdReportSource, SourceKey, ContentText, ContentJson, SourceUrl, Status, ErrorMessage, CreatedAt, UpdatedAt"
+		)
+		.eq("IdReport", reportId)
+		.order("CreatedAt", { ascending: true });
+
+	if (sourcesError) {
+		console.error("Error fetching report sources:", sourcesError);
+		// Don't throw - return report without sources if sources fail
+	}
+
+	return {
+		report: {
+			IdReport: report.IdReport,
+			Address: report.Address,
+			AddressNormalized: report.AddressNormalized,
+			Name: report.Name,
+			Description: report.Description,
+			Status: report.Status,
+			CreatedAt: report.CreatedAt,
+			UpdatedAt: report.UpdatedAt,
+		},
+		client: clientData,
+		sources: sources || [],
+	};
+}
+
+/**
  * Get all reports for an organization with client information
  * @param {string} organizationId - Organization ID
  * @returns {Promise<Array>} Array of reports with client names

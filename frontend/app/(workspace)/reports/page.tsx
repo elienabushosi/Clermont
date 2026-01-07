@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
 	Table,
@@ -11,6 +12,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getReports, type Report } from "@/lib/reports";
 
@@ -26,6 +28,7 @@ function getStatusColor(status: Report["Status"]) {
 }
 
 export default function ReportsPage() {
+	const router = useRouter();
 	const [reports, setReports] = useState<Report[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -40,7 +43,9 @@ export default function ReportsPage() {
 			} catch (err) {
 				console.error("Error fetching reports:", err);
 				setError(
-					err instanceof Error ? err.message : "Failed to load reports"
+					err instanceof Error
+						? err.message
+						: "Failed to load reports"
 				);
 			} finally {
 				setIsLoading(false);
@@ -110,6 +115,9 @@ export default function ReportsPage() {
 									<TableHead className="text-[#37322F]">
 										Status
 									</TableHead>
+									<TableHead className="text-[#37322F]">
+										Actions
+									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -141,6 +149,19 @@ export default function ReportsPage() {
 												{report.Status}
 											</Badge>
 										</TableCell>
+										<TableCell>
+											<Button
+												variant="outline"
+												size="sm"
+												onClick={() =>
+													router.push(
+														`/viewreport/${report.IdReport}`
+													)
+												}
+											>
+												View
+											</Button>
+										</TableCell>
 									</TableRow>
 								))}
 							</TableBody>
@@ -151,4 +172,3 @@ export default function ReportsPage() {
 		</div>
 	);
 }
-
