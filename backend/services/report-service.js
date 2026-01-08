@@ -5,10 +5,13 @@ import { supabase } from "../lib/supabase.js";
  * Create a new report record
  * @param {Object} reportData - Report data
  * @param {string} reportData.address - Address string
- * @param {string} reportData.normalizedAddress - Normalized address
+ * @param {string} reportData.normalizedAddress - Normalized address (optional)
  * @param {string} reportData.organizationId - Organization ID
  * @param {string} reportData.clientId - Client ID (optional)
  * @param {string} reportData.name - Report name
+ * @param {string} reportData.bbl - BBL identifier (optional, will be set by Geoservice)
+ * @param {number} reportData.latitude - Latitude (optional)
+ * @param {number} reportData.longitude - Longitude (optional)
  * @returns {Promise<Object>} Created report
  */
 export async function createReport(reportData) {
@@ -20,6 +23,9 @@ export async function createReport(reportData) {
 			Name: reportData.name || reportData.address,
 			Address: reportData.address,
 			AddressNormalized: reportData.normalizedAddress || null,
+			BBL: reportData.bbl || null,
+			Latitude: reportData.latitude || null,
+			Longitude: reportData.longitude || null,
 			Status: "pending",
 			Enabled: true,
 		})
@@ -29,6 +35,56 @@ export async function createReport(reportData) {
 	if (error) {
 		console.error("Error creating report:", error);
 		throw new Error(`Failed to create report: ${error.message}`);
+	}
+
+	return data;
+}
+
+/**
+ * Update report with BBL and location data from Geoservice
+ * @param {string} reportId - Report ID
+ * @param {Object} geoserviceData - Geoservice extracted data
+ * @param {string} geoserviceData.bbl - BBL identifier
+ * @param {string} geoserviceData.normalizedAddress - Normalized address
+ * @param {number} geoserviceData.lat - Latitude
+ * @param {number} geoserviceData.lng - Longitude
+ * @returns {Promise<Object>} Updated report
+ */
+export async function updateReportWithGeoserviceData(
+	reportId,
+	geoserviceData
+) {
+	const updateData = {};
+
+	if (geoserviceData.bbl) {
+		updateData.BBL = geoserviceData.bbl;
+	}
+	if (geoserviceData.normalizedAddress) {
+		updateData.AddressNormalized = geoserviceData.normalizedAddress;
+	}
+	if (geoserviceData.lat !== null && geoserviceData.lat !== undefined) {
+		updateData.Latitude = geoserviceData.lat;
+	}
+	if (geoserviceData.lng !== null && geoserviceData.lng !== undefined) {
+		updateData.Longitude = geoserviceData.lng;
+	}
+
+	if (Object.keys(updateData).length === 0) {
+		return null; // Nothing to update
+	}
+
+	const { data, error } = await supabase
+		.from("reports")
+		.update(updateData)
+		.eq("IdReport", reportId)
+		.select()
+		.single();
+
+	if (error) {
+		console.error("Error updating report with Geoservice data:", error);
+		throw new Error(
+			`Failed to update report with Geoservice data: ${error.message}`
+		);
 	}
 
 	return data;

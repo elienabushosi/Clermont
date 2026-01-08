@@ -52,21 +52,27 @@ router.post("/generate", async (req, res) => {
 		}
 
 		// Validate request body
-		const { address, normalizedAddress, location, placeId } = req.body;
+		// V1: Accept only address string (backend will resolve via Geoservice)
+		const { address } = req.body;
 
-		if (!address) {
+		if (
+			!address ||
+			typeof address !== "string" ||
+			address.trim().length === 0
+		) {
 			return res.status(400).json({
 				status: "error",
-				message: "Address is required",
+				message: "Address is required and must be a non-empty string",
 			});
 		}
 
-		// Prepare address data
+		// Prepare address data (minimal - backend will resolve via Geoservice)
 		const addressData = {
-			address: address,
-			normalizedAddress: normalizedAddress || address,
-			location: location || { lat: null, lng: null },
-			placeId: placeId || null,
+			address: address.trim(),
+			// Optional hints from frontend (if provided, will be used but Geoservice is source of truth)
+			normalizedAddress: req.body.normalizedAddress || null,
+			location: req.body.location || null,
+			placeId: req.body.placeId || null,
 		};
 
 		// Generate report

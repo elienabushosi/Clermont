@@ -24,7 +24,7 @@ import {
 	SidebarTrigger,
 	useSidebar,
 } from "@/components/ui/sidebar";
-import { Home, Search, FileText, Settings, LogOut, User } from "lucide-react";
+import { Home, Search, FileText, Settings, LogOut, User, FileCheck } from "lucide-react";
 
 function SidebarHeaderContent({
 	organizationName,
@@ -69,6 +69,10 @@ function getPageTitle(pathname: string): string {
 		return "Search Address";
 	} else if (pathname === "/reports") {
 		return "Reports";
+	} else if (pathname === "/demo-report-list") {
+		return "Demo Reports";
+	} else if (pathname.startsWith("/demo-report")) {
+		return "Demo Report";
 	} else if (pathname === "/settings") {
 		return "Settings";
 	}
@@ -191,6 +195,21 @@ export default function WorkspaceLayout({
 										<Link href="/reports">
 											<FileText className="size-4" />
 											<span>Reports</span>
+										</Link>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										tooltip="Demo Reports"
+										isActive={
+											pathname === "/demo-report-list" ||
+											pathname.startsWith("/demo-report")
+										}
+										asChild
+									>
+										<Link href="/demo-report-list">
+											<FileCheck className="size-4" />
+											<span>Demo Reports</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>

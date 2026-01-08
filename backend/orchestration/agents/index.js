@@ -1,10 +1,12 @@
 // Agent registry - manages all available agents
+import { GeoserviceAgent } from "./geoservice.js";
 import { ZolaAgent } from "./zola.js";
 import { TaxLotFinderAgent } from "./tax-lot-finder.js";
 import { ZoningResolutionAgent } from "./zoning-resolution.js";
 
 // Initialize all agents
 const agents = {
+	geoservice: new GeoserviceAgent(),
 	zola: new ZolaAgent(),
 	taxLotFinder: new TaxLotFinderAgent(),
 	zoningResolution: new ZoningResolutionAgent(),

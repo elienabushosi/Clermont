@@ -88,8 +88,11 @@ CREATE TABLE IF NOT EXISTS reports (
     "Name" TEXT NOT NULL,
     "Address" TEXT NOT NULL,
     "AddressNormalized" TEXT,
+    "BBL" TEXT,
+    "Latitude" NUMERIC(10, 8),
+    "Longitude" NUMERIC(11, 8),
     "Description" TEXT,
-    "Status" report_status_enum NOT NULL DEFAULT 'ready',
+    "Status" report_status_enum NOT NULL DEFAULT 'pending',
     "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     "UpdatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     "Enabled" BOOLEAN NOT NULL DEFAULT TRUE
@@ -99,6 +102,8 @@ CREATE TABLE IF NOT EXISTS reports (
 CREATE INDEX IF NOT EXISTS idx_reports_organization ON reports("IdOrganization");
 CREATE INDEX IF NOT EXISTS idx_reports_client ON reports("IdClient");
 CREATE INDEX IF NOT EXISTS idx_reports_org_createdat ON reports("IdOrganization", "CreatedAt" DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_bbl ON reports("BBL");
+CREATE INDEX IF NOT EXISTS idx_reports_org_bbl ON reports("IdOrganization", "BBL");
 
 -- Trigger to auto-update UpdatedAt for reports
 DROP TRIGGER IF EXISTS update_reports_updated_at ON reports;
