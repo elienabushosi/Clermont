@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { getReportWithSources, type ReportWithSources } from "@/lib/reports";
+import { getBuildingClassDescriptionText } from "@/lib/building-class";
 import {
 	ArrowLeft,
 	MapPin,
@@ -454,9 +455,9 @@ export default function ViewReportPage() {
 													Building Class
 												</p>
 												<p className="text-[#37322F] font-medium">
-													{
+													{getBuildingClassDescriptionText(
 														formattedData.buildingClass
-													}
+													)}
 												</p>
 											</div>
 										)}
@@ -593,60 +594,58 @@ export default function ViewReportPage() {
 										</div>
 									)}
 								</div>
+							</CardContent>
+						</Card>
 
-								<Separator className="my-6" />
-
-								{/* Zoning Classification */}
-								<div>
-									<div className="mb-4">
-										<div className="flex items-center gap-2 mb-1">
-											<LandPlot className="size-5 text-[#4090C2]" />
-											<h3 className="text-lg font-semibold text-[#37322F]">
-												Zoning Classification
-											</h3>
-										</div>
-										<p className="text-sm text-[#605A57]">
-											Zoning district regulations and
-											requirements
-										</p>
+						{/* Zoning Classification Section */}
+						<Card className="mb-6">
+							<CardContent className="pt-6">
+								<div className="mb-4">
+									<div className="flex items-center gap-2 mb-1">
+										<LandPlot className="size-5 text-[#4090C2]" />
+										<h3 className="text-lg font-semibold text-[#37322F]">
+											Zoning Classification
+										</h3>
 									</div>
-									<div className="grid grid-cols-2 gap-4">
-										{formattedData.zoningDistricts && (
-											<div>
-												<p className="text-sm text-[#605A57] mb-2">
-													Zoning Districts
-												</p>
-												<Badge className="bg-blue-100 text-blue-700 border-blue-200">
-													{
-														formattedData.zoningDistricts
-													}
-												</Badge>
-											</div>
-										)}
+									<p className="text-sm text-[#605A57]">
+										Zoning district regulations and
+										requirements
+									</p>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
+									{formattedData.zoningDistricts && (
 										<div>
 											<p className="text-sm text-[#605A57] mb-2">
-												Floor Area Ratio (FAR)
+												Zoning Districts
 											</p>
-											<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-												Pending Zoning Agent
+											<Badge className="bg-blue-100 text-blue-700 border-blue-200">
+												{formattedData.zoningDistricts}
 											</Badge>
 										</div>
-										<div>
-											<p className="text-sm text-[#605A57] mb-2">
-												Max Building Height
-											</p>
-											<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-												Pending Zoning Agent
-											</Badge>
-										</div>
-										<div>
-											<p className="text-sm text-[#605A57] mb-2">
-												Required Yards
-											</p>
-											<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-												Pending Zoning Agent
-											</Badge>
-										</div>
+									)}
+									<div>
+										<p className="text-sm text-[#605A57] mb-2">
+											Floor Area Ratio (FAR)
+										</p>
+										<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
+											Pending Zoning Agent
+										</Badge>
+									</div>
+									<div>
+										<p className="text-sm text-[#605A57] mb-2">
+											Max Building Height
+										</p>
+										<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
+											Pending Zoning Agent
+										</Badge>
+									</div>
+									<div>
+										<p className="text-sm text-[#605A57] mb-2">
+											Required Yards
+										</p>
+										<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
+											Pending Zoning Agent
+										</Badge>
 									</div>
 								</div>
 							</CardContent>
