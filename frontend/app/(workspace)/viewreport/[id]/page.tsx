@@ -11,7 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { getReportWithSources, type ReportWithSources } from "@/lib/reports";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MapPin, Send } from "lucide-react";
+import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
 
 function getStatusColor(status: string) {
 	switch (status) {
@@ -182,209 +183,215 @@ export default function ViewReportPage() {
 				zolaData.sanitsub ||
 				geoserviceData.sanitationSubsection ||
 				null,
+			lat: zolaData.lat || geoserviceData.lat || null,
+			lng: zolaData.lon || zolaData.lng || geoserviceData.lng || null,
 		};
 	};
 
 	const formattedData = getFormattedData();
 
 	return (
-		<div className="p-8">
+		<div className="p-8 bg-[#F7F5F3] min-h-screen">
 			<div className="max-w-4xl mx-auto">
-				<Button
-					variant="ghost"
-					onClick={() => router.push("/reports")}
-					className="mb-6"
-				>
-					<ArrowLeft className="size-4 mr-2" />
-					Back to Reports
-				</Button>
+				{/* Top Navigation Bar */}
+				<div className="flex items-center justify-between mb-6">
+					<Button
+						variant="ghost"
+						onClick={() => router.push("/reports")}
+					>
+						<ArrowLeft className="size-4 mr-2" />
+						Back to Your Reports
+					</Button>
+					<Button variant="outline">
+						<Send className="size-4 mr-2" />
+						Share
+					</Button>
+				</div>
 
 				{/* Report Header */}
-				<Card className="mb-6">
-					<CardHeader>
-						<div className="flex items-start justify-between">
-							<div>
-								<CardTitle className="text-2xl mb-2">
-									{report.Name}
-								</CardTitle>
-								<p className="text-[#605A57] text-sm">
-									{report.Address}
-								</p>
-							</div>
-							<div className="flex items-center gap-4">
-								<div className="flex items-center gap-2">
-									<Label
-										htmlFor="debug-toggle"
-										className="text-sm text-[#605A57] cursor-pointer"
-									>
-										{showDebugMode ? "Debug" : "Pretty"}
-									</Label>
-									<Switch
-										id="debug-toggle"
-										checked={showDebugMode}
-										onCheckedChange={setShowDebugMode}
-										className={
-											showDebugMode
-												? "data-[state=checked]:bg-blue-600"
-												: "data-[state=unchecked]:bg-[#37322F] data-[state=unchecked]:border-[#37322F]"
-										}
-									/>
-								</div>
-								<Badge
-									variant="outline"
-									className={`${getStatusColor(
-										report.Status
-									)}`}
-								>
-									{report.Status}
-								</Badge>
-							</div>
+				<div className="mb-6">
+					<h1 className="text-3xl font-semibold text-[#37322F] mb-3">
+						{report.Name}
+					</h1>
+					<div className="flex items-center gap-2 mb-4">
+						<MapPin className="size-4 text-[#605A57]" />
+						<p className="text-[#37322F] text-base">
+							{report.Address}
+						</p>
+					</div>
+					<div className="flex items-center justify-between">
+						<Badge className="bg-green-100 text-green-700 border-green-200">
+							Report Generated:{" "}
+							{format(new Date(report.CreatedAt), "M/d/yyyy")}
+						</Badge>
+						<div className="flex items-center gap-2">
+							<Label
+								htmlFor="debug-toggle"
+								className="text-sm text-[#605A57] cursor-pointer"
+							>
+								{showDebugMode ? "Debug" : "Pretty"}
+							</Label>
+							<Switch
+								id="debug-toggle"
+								checked={showDebugMode}
+								onCheckedChange={setShowDebugMode}
+								className={
+									showDebugMode
+										? "data-[state=checked]:bg-blue-600"
+										: "data-[state=unchecked]:bg-[#37322F] data-[state=unchecked]:border-[#37322F]"
+								}
+							/>
 						</div>
-					</CardHeader>
-					<CardContent>
-						<div className="grid grid-cols-2 gap-4 text-sm">
-							<div>
-								<p className="text-[#605A57] mb-1">
-									Created At
-								</p>
-								<p className="text-[#37322F] font-medium">
-									{format(
-										new Date(report.CreatedAt),
-										"MMM d, yyyy 'at' h:mm a"
-									)}
-								</p>
-							</div>
-							{client && (
-								<div>
-									<p className="text-[#605A57] mb-1">
-										Client
+					</div>
+				</div>
+
+				{/* Report Sources - Only show in Debug mode */}
+				{showDebugMode && (
+					<div className="space-y-4">
+						<h2 className="text-xl font-semibold text-[#37322F]">
+							Report Sources
+						</h2>
+
+						{sources.length === 0 ? (
+							<Card>
+								<CardContent className="pt-6">
+									<p className="text-[#605A57] text-center">
+										No sources found for this report
 									</p>
-									<p className="text-[#37322F] font-medium">
-										{client.Name}
-									</p>
-								</div>
-							)}
-						</div>
-					</CardContent>
-				</Card>
-
-				{/* Report Sources */}
-				<div className="space-y-4">
-					<h2 className="text-xl font-semibold text-[#37322F]">
-						Report Sources
-					</h2>
-
-					{sources.length === 0 ? (
-						<Card>
-							<CardContent className="pt-6">
-								<p className="text-[#605A57] text-center">
-									No sources found for this report
-								</p>
-							</CardContent>
-						</Card>
-					) : showDebugMode ? (
-						// Debug Mode: Show raw JSON
-						sources.map((source) => (
-							<Card key={source.IdReportSource}>
-								<CardHeader>
-									<div className="flex items-center justify-between">
-										<CardTitle className="text-lg">
-											{source.SourceKey}
-										</CardTitle>
-										<Badge
-											variant="outline"
-											className={`text-xs ${getStatusColor(
-												source.Status
-											)}`}
-										>
-											{source.Status}
-										</Badge>
-									</div>
-								</CardHeader>
-								<CardContent className="space-y-4">
-									<div className="grid grid-cols-2 gap-4 text-sm">
-										<div>
-											<p className="text-[#605A57] mb-1">
-												Created At
-											</p>
-											<p className="text-[#37322F]">
-												{format(
-													new Date(source.CreatedAt),
-													"MMM d, yyyy 'at' h:mm a"
-												)}
-											</p>
-										</div>
-										{source.SourceUrl && (
-											<div>
-												<p className="text-[#605A57] mb-1">
-													Source URL
-												</p>
-												<a
-													href={source.SourceUrl}
-													target="_blank"
-													rel="noopener noreferrer"
-													className="text-[#4090C2] hover:underline"
-												>
-													{source.SourceUrl}
-												</a>
-											</div>
-										)}
-									</div>
-
-									{source.ErrorMessage && (
-										<div className="bg-red-50 border border-red-200 rounded-lg p-3">
-											<p className="text-red-700 text-sm">
-												<strong>Error:</strong>{" "}
-												{source.ErrorMessage}
-											</p>
-										</div>
-									)}
-
-									{source.ContentText && (
-										<div>
-											<p className="text-[#605A57] text-sm mb-2 font-medium">
-												Content Text:
-											</p>
-											<div className="bg-[#F7F5F3] rounded-lg p-4 border border-[rgba(55,50,47,0.12)]">
-												<pre className="text-sm text-[#37322F] whitespace-pre-wrap">
-													{source.ContentText}
-												</pre>
-											</div>
-										</div>
-									)}
-
-									{source.ContentJson && (
-										<div>
-											<p className="text-[#605A57] text-sm mb-2 font-medium">
-												Content JSON:
-											</p>
-											<div className="bg-[#F7F5F3] rounded-lg p-4 border border-[rgba(55,50,47,0.12)]">
-												<pre className="text-sm text-[#37322F] overflow-x-auto">
-													{JSON.stringify(
-														source.ContentJson,
-														null,
-														2
-													)}
-												</pre>
-											</div>
-										</div>
-									)}
 								</CardContent>
 							</Card>
-						))
-					) : (
-						// Pretty Mode: Show formatted data
+						) : (
+							// Debug Mode: Show raw JSON
+							sources.map((source) => (
+								<Card key={source.IdReportSource}>
+									<CardHeader>
+										<div className="flex items-center justify-between">
+											<CardTitle className="text-lg">
+												{source.SourceKey}
+											</CardTitle>
+											<Badge
+												variant="outline"
+												className={`text-xs ${getStatusColor(
+													source.Status
+												)}`}
+											>
+												{source.Status}
+											</Badge>
+										</div>
+									</CardHeader>
+									<CardContent className="space-y-4">
+										<div className="grid grid-cols-2 gap-4 text-sm">
+											<div>
+												<p className="text-[#605A57] mb-1">
+													Created At
+												</p>
+												<p className="text-[#37322F]">
+													{format(
+														new Date(
+															source.CreatedAt
+														),
+														"MMM d, yyyy 'at' h:mm a"
+													)}
+												</p>
+											</div>
+											{source.SourceUrl && (
+												<div>
+													<p className="text-[#605A57] mb-1">
+														Source URL
+													</p>
+													<a
+														href={source.SourceUrl}
+														target="_blank"
+														rel="noopener noreferrer"
+														className="text-[#4090C2] hover:underline"
+													>
+														{source.SourceUrl}
+													</a>
+												</div>
+											)}
+										</div>
+
+										{source.ErrorMessage && (
+											<div className="bg-red-50 border border-red-200 rounded-lg p-3">
+												<p className="text-red-700 text-sm">
+													<strong>Error:</strong>{" "}
+													{source.ErrorMessage}
+												</p>
+											</div>
+										)}
+
+										{source.ContentText && (
+											<div>
+												<p className="text-[#605A57] text-sm mb-2 font-medium">
+													Content Text:
+												</p>
+												<div className="bg-[#F7F5F3] rounded-lg p-4 border border-[rgba(55,50,47,0.12)]">
+													<pre className="text-sm text-[#37322F] whitespace-pre-wrap">
+														{source.ContentText}
+													</pre>
+												</div>
+											</div>
+										)}
+
+										{source.ContentJson && (
+											<div>
+												<p className="text-[#605A57] text-sm mb-2 font-medium">
+													Content JSON:
+												</p>
+												<div className="bg-[#F7F5F3] rounded-lg p-4 border border-[rgba(55,50,47,0.12)]">
+													<pre className="text-sm text-[#37322F] overflow-x-auto">
+														{JSON.stringify(
+															source.ContentJson,
+															null,
+															2
+														)}
+													</pre>
+												</div>
+											</div>
+										)}
+									</CardContent>
+								</Card>
+							))
+						)}
+					</div>
+				)}
+
+				{/* Pretty Mode: Show formatted data - Only show when NOT in debug mode */}
+				{!showDebugMode && (
+					<>
+						{/* Property Location Map */}
+						{formattedData.lat && formattedData.lng && (
+							<Card className="mb-6">
+								<CardContent className="pt-6">
+									<div className="mb-4">
+										<div className="flex items-center gap-2 mb-1">
+											<MapPin className="size-5 text-[#4090C2]" />
+											<h3 className="text-lg font-semibold text-[#37322F]">
+												Property Location
+											</h3>
+										</div>
+										<p className="text-sm text-[#605A57]">
+											Map and location visualization
+										</p>
+									</div>
+									<PropertyMap
+										lat={formattedData.lat}
+										lng={formattedData.lng}
+										address={
+											formattedData.address ||
+											report.Address
+										}
+									/>
+								</CardContent>
+							</Card>
+						)}
+
 						<Card>
-							<CardHeader>
-								<CardTitle className="text-lg">
-									Property Details
-								</CardTitle>
-							</CardHeader>
-							<CardContent className="space-y-6">
+							<CardContent className="space-y-6 pt-6">
 								{/* Basic Property Information */}
 								<div>
 									<h3 className="text-lg font-semibold text-[#37322F] mb-4">
-										Property Information
+										Property Level Information
 									</h3>
 									<div className="grid grid-cols-2 gap-4">
 										{formattedData.address && (
@@ -681,9 +688,66 @@ export default function ViewReportPage() {
 								</div>
 							</CardContent>
 						</Card>
-					)}
-				</div>
+					</>
+				)}
 			</div>
+		</div>
+	);
+}
+
+// Property Map Component
+function PropertyMap({
+	lat,
+	lng,
+	address,
+}: {
+	lat: number;
+	lng: number;
+	address: string;
+}) {
+	const GOOGLE_MAPS_API_KEY =
+		process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+
+	const { isLoaded, loadError } = useLoadScript({
+		googleMapsApiKey: GOOGLE_MAPS_API_KEY || "",
+		libraries: ["places"],
+	});
+
+	const mapContainerStyle = {
+		width: "100%",
+		height: "400px",
+	};
+
+	if (loadError) {
+		return (
+			<div className="w-full h-[400px] bg-gray-100 rounded-lg flex items-center justify-center border border-[rgba(55,50,47,0.12)]">
+				<p className="text-[#605A57]">Error loading map</p>
+			</div>
+		);
+	}
+
+	if (!isLoaded) {
+		return (
+			<div className="w-full h-[400px] bg-gray-100 rounded-lg flex items-center justify-center border border-[rgba(55,50,47,0.12)]">
+				<p className="text-[#605A57]">Loading map...</p>
+			</div>
+		);
+	}
+
+	return (
+		<div className="w-full rounded-lg overflow-hidden border border-[rgba(55,50,47,0.12)] shadow-sm">
+			<GoogleMap
+				mapContainerStyle={mapContainerStyle}
+				center={{ lat, lng }}
+				zoom={15}
+				options={{
+					streetViewControl: false,
+					mapTypeControl: false,
+					fullscreenControl: true,
+				}}
+			>
+				<Marker position={{ lat, lng }} />
+			</GoogleMap>
 		</div>
 	);
 }
