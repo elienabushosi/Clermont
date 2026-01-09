@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { getReportWithSources, type ReportWithSources } from "@/lib/reports";
 import { ArrowLeft } from "lucide-react";
 
@@ -35,6 +38,7 @@ export default function ViewReportPage() {
 	);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [showDebugMode, setShowDebugMode] = useState(false); // false = pretty mode (default), true = debug mode
 
 	useEffect(() => {
 		const fetchReport = async () => {
@@ -95,6 +99,94 @@ export default function ViewReportPage() {
 
 	const { report, client, sources } = reportData;
 
+	// Extract formatted data from sources for pretty view
+	const getFormattedData = () => {
+		const geoserviceSource = sources.find(
+			(s) => s.SourceKey === "geoservice"
+		);
+		const zolaSource = sources.find((s) => s.SourceKey === "zola");
+
+		// Handle different possible structures
+		const geoserviceData =
+			geoserviceSource?.ContentJson?.extracted ||
+			geoserviceSource?.ContentJson ||
+			{};
+		const zolaData =
+			zolaSource?.ContentJson?.contentJson ||
+			zolaSource?.ContentJson ||
+			{};
+
+		// Merge data, with Zola taking precedence for overlapping fields
+		return {
+			address:
+				zolaData.address ||
+				geoserviceData.normalizedAddress ||
+				report.Address,
+			borough:
+				zolaData.borough ||
+				(geoserviceData.borough === "1"
+					? "Manhattan"
+					: geoserviceData.borough === "2"
+					? "Bronx"
+					: geoserviceData.borough === "3"
+					? "Brooklyn"
+					: geoserviceData.borough === "4"
+					? "Queens"
+					: geoserviceData.borough === "5"
+					? "Staten Island"
+					: geoserviceData.borough || null),
+			block: zolaData.block?.toString() || geoserviceData.block || null,
+			lot: zolaData.lot?.toString() || geoserviceData.lot || null,
+			owner: zolaData.ownername || null,
+			zoningDistricts:
+				[
+					zolaData.zonedist1,
+					zolaData.zonedist2,
+					zolaData.zonedist3,
+					zolaData.zonedist4,
+				]
+					.filter(Boolean)
+					.join(", ") || null,
+			landUse: zolaData.landuse || null,
+			lotArea: zolaData.lotarea
+				? `${zolaData.lotarea.toLocaleString()} sq ft`
+				: null,
+			lotFrontage: zolaData.lotfront ? `${zolaData.lotfront} ft` : null,
+			lotDepth: zolaData.lotdepth ? `${zolaData.lotdepth} ft` : null,
+			yearBuilt: zolaData.yearbuilt || null,
+			buildingClass:
+				zolaData.bldgclass || geoserviceData.buildingClass || null,
+			numberOfBuildings: zolaData.numbldgs || null,
+			numberOfFloors: zolaData.numfloors || null,
+			grossFloorArea: zolaData.bldgarea
+				? `${zolaData.bldgarea.toLocaleString()} sq ft`
+				: null,
+			totalUnits: zolaData.unitstotal || null,
+			residentialUnits: zolaData.unitsres || null,
+			communityDistrict:
+				zolaData.cd || geoserviceData.communityDistrict || null,
+			cityCouncilDistrict:
+				zolaData.council || geoserviceData.cityCouncilDistrict || null,
+			schoolDistrict:
+				zolaData.schooldist || geoserviceData.schoolDistrict || null,
+			policePrecinct:
+				zolaData.policeprct || geoserviceData.policePrecinct || null,
+			fireCompany:
+				zolaData.firecomp || geoserviceData.fireCompany || null,
+			sanitationBorough: geoserviceData.sanitationBorough || null,
+			sanitationDistrict:
+				zolaData.sanitdistr ||
+				geoserviceData.sanitationDistrict ||
+				null,
+			sanitationSubsection:
+				zolaData.sanitsub ||
+				geoserviceData.sanitationSubsection ||
+				null,
+		};
+	};
+
+	const formattedData = getFormattedData();
+
 	return (
 		<div className="p-8">
 			<div className="max-w-4xl mx-auto">
@@ -119,12 +211,34 @@ export default function ViewReportPage() {
 									{report.Address}
 								</p>
 							</div>
-							<Badge
-								variant="outline"
-								className={`${getStatusColor(report.Status)}`}
-							>
-								{report.Status}
-							</Badge>
+							<div className="flex items-center gap-4">
+								<div className="flex items-center gap-2">
+									<Label
+										htmlFor="debug-toggle"
+										className="text-sm text-[#605A57] cursor-pointer"
+									>
+										{showDebugMode ? "Debug" : "Pretty"}
+									</Label>
+									<Switch
+										id="debug-toggle"
+										checked={showDebugMode}
+										onCheckedChange={setShowDebugMode}
+										className={
+											showDebugMode
+												? "data-[state=checked]:bg-blue-600"
+												: "data-[state=unchecked]:bg-[#37322F] data-[state=unchecked]:border-[#37322F]"
+										}
+									/>
+								</div>
+								<Badge
+									variant="outline"
+									className={`${getStatusColor(
+										report.Status
+									)}`}
+								>
+									{report.Status}
+								</Badge>
+							</div>
 						</div>
 					</CardHeader>
 					<CardContent>
@@ -168,7 +282,8 @@ export default function ViewReportPage() {
 								</p>
 							</CardContent>
 						</Card>
-					) : (
+					) : showDebugMode ? (
+						// Debug Mode: Show raw JSON
 						sources.map((source) => (
 							<Card key={source.IdReportSource}>
 								<CardHeader>
@@ -257,6 +372,315 @@ export default function ViewReportPage() {
 								</CardContent>
 							</Card>
 						))
+					) : (
+						// Pretty Mode: Show formatted data
+						<Card>
+							<CardHeader>
+								<CardTitle className="text-lg">
+									Property Details
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-6">
+								{/* Basic Property Information */}
+								<div>
+									<h3 className="text-lg font-semibold text-[#37322F] mb-4">
+										Property Information
+									</h3>
+									<div className="grid grid-cols-2 gap-4">
+										{formattedData.address && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Address
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.address}
+												</p>
+											</div>
+										)}
+										{formattedData.borough && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Borough
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.borough}
+												</p>
+											</div>
+										)}
+										{formattedData.block && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Block
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.block}
+												</p>
+											</div>
+										)}
+										{formattedData.lot && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Lot
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.lot}
+												</p>
+											</div>
+										)}
+										{formattedData.owner && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Owner
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.owner}
+												</p>
+											</div>
+										)}
+										{formattedData.zoningDistricts && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Zoning Districts
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.zoningDistricts
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.landUse && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Land Use
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.landUse}
+												</p>
+											</div>
+										)}
+										{formattedData.lotArea && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Lot Area
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.lotArea}
+												</p>
+											</div>
+										)}
+										{formattedData.lotFrontage && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Lot Frontage
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.lotFrontage}
+												</p>
+											</div>
+										)}
+										{formattedData.lotDepth && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Lot Depth
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.lotDepth}
+												</p>
+											</div>
+										)}
+										{formattedData.yearBuilt && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Year Built
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.yearBuilt}
+												</p>
+											</div>
+										)}
+										{formattedData.buildingClass && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Building Class
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.buildingClass
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.numberOfBuildings !==
+											null && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Number of Buildings
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.numberOfBuildings
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.numberOfFloors !==
+											null && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Number of Floors
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.numberOfFloors
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.grossFloorArea && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Gross Floor Area
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.grossFloorArea
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.totalUnits !== null && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Total # of Units
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.totalUnits}
+												</p>
+											</div>
+										)}
+										{formattedData.residentialUnits !==
+											null && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Residential Units
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.residentialUnits
+													}
+												</p>
+											</div>
+										)}
+									</div>
+								</div>
+
+								<Separator className="my-6" />
+
+								{/* Neighborhood Information */}
+								<div>
+									<h3 className="text-lg font-semibold text-[#37322F] mb-4">
+										Neighborhood Information
+									</h3>
+									<div className="grid grid-cols-2 gap-4">
+										{formattedData.communityDistrict && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Community District
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.communityDistrict
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.cityCouncilDistrict && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													City Council District
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.cityCouncilDistrict
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.schoolDistrict && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													School District
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.schoolDistrict
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.policePrecinct && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Police Precinct
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.policePrecinct
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.fireCompany && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Fire Company
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{formattedData.fireCompany}
+												</p>
+											</div>
+										)}
+										{formattedData.sanitationBorough && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Sanitation Borough
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.sanitationBorough
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.sanitationDistrict && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Sanitation District
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.sanitationDistrict
+													}
+												</p>
+											</div>
+										)}
+										{formattedData.sanitationSubsection && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-1">
+													Sanitation Subsection
+												</p>
+												<p className="text-[#37322F] font-medium">
+													{
+														formattedData.sanitationSubsection
+													}
+												</p>
+											</div>
+										)}
+									</div>
+								</div>
+							</CardContent>
+						</Card>
 					)}
 				</div>
 			</div>

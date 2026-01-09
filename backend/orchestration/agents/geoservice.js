@@ -239,10 +239,11 @@ export class GeoserviceAgent extends BaseAgent {
 		}
 
 		// Extract normalized address
-		if (rawResponse.root?.wa2F1b?.wa2f1ax?.wa2f1ex?.boe_preferred_stname) {
-			const streetName = rawResponse.root.wa2F1b.wa2f1ax.wa2f1ex.boe_preferred_stname.trim();
+		// Try wa2f1ex first (sibling of wa2f1ax)
+		if (rawResponse.root?.wa2F1b?.wa2f1ex?.boe_preferred_stname) {
+			const streetName = rawResponse.root.wa2F1b.wa2f1ex.boe_preferred_stname.trim();
 			const houseNumber = rawResponse.root.wa1?.out_hnd?.trim() || 
-			                    rawResponse.root.wa2F1b?.wa2f1ax?.wa2f1ex?.hi_hns?.substring(0, 3)?.trim();
+			                    rawResponse.root.wa2F1b?.wa2f1ex?.hi_hns?.substring(0, 3)?.trim();
 			if (streetName && houseNumber) {
 				normalizedAddress = `${houseNumber} ${streetName}`.trim();
 			}
@@ -316,7 +317,7 @@ export class GeoserviceAgent extends BaseAgent {
 
 		// Extract additional structured data from Geoservice response
 		const wa2f1ax = rawResponse.root?.wa2F1b?.wa2f1ax;
-		const wa2f1ex = rawResponse.root?.wa2F1b?.wa2f1ax?.wa2f1ex;
+		const wa2f1ex = rawResponse.root?.wa2F1b?.wa2f1ex; // Fixed: wa2f1ex is a sibling of wa2f1ax, not a child
 
 		// Extract building class
 		const buildingClass = wa2f1ax?.rpad_bldg_class?.trim() || null;
@@ -328,7 +329,9 @@ export class GeoserviceAgent extends BaseAgent {
 		const policePrecinct = wa2f1ex?.police_pct?.trim() || null;
 		const fireCompany = wa2f1ex?.fire_co_num?.trim() || null;
 		const fireDivision = wa2f1ex?.fire_div?.trim() || null;
-		const sanitationBorough = wa2f1ex?.sanitboro?.trim() || null;
+		// Sanitation borough: use sanitboro if available, otherwise fallback to borough code
+		// (sanitation is organized by borough, so borough code serves as sanitation borough)
+		const sanitationBorough = wa2f1ex?.sanitboro?.trim() || extractedBorough || rawResponse.root?.wa1?.in_boro1?.trim() || inputBorough || null;
 		const sanitationDistrict = wa2f1ex?.san_dist?.trim() || null;
 		const sanitationSubsection = wa2f1ex?.san_commercial_waste_zone?.trim() || null;
 
