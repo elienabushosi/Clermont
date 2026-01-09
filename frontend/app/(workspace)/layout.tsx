@@ -24,7 +24,15 @@ import {
 	SidebarTrigger,
 	useSidebar,
 } from "@/components/ui/sidebar";
-import { Home, Search, FileText, Settings, LogOut, User, FileCheck } from "lucide-react";
+import {
+	Home,
+	Search,
+	FileText,
+	Settings,
+	LogOut,
+	User,
+	FileCheck,
+} from "lucide-react";
 
 function SidebarHeaderContent({
 	organizationName,
@@ -43,8 +51,8 @@ function SidebarHeaderContent({
 				}`}
 			>
 				<img
-					src="/logos/ArcNoma_Logo.png"
-					alt="Arcnoma, LLC Logo"
+					src="/logos/logoipsum-348.png"
+					alt="Logo"
 					className={`object-contain ${
 						isCollapsed ? "h-8" : "h-auto w-full"
 					}`}
@@ -70,9 +78,9 @@ function getPageTitle(pathname: string): string {
 	} else if (pathname === "/reports") {
 		return "Reports";
 	} else if (pathname === "/demo-report-list") {
-		return "Demo Reports";
+		return "Reports";
 	} else if (pathname.startsWith("/demo-report")) {
-		return "Demo Report";
+		return "Report Details";
 	} else if (pathname === "/settings") {
 		return "Settings";
 	}
@@ -194,7 +202,7 @@ export default function WorkspaceLayout({
 									>
 										<Link href="/reports">
 											<FileText className="size-4" />
-											<span>Reports</span>
+											<span>Clients</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>
@@ -209,7 +217,7 @@ export default function WorkspaceLayout({
 									>
 										<Link href="/demo-report-list">
 											<FileCheck className="size-4" />
-											<span>Demo Reports</span>
+											<span>Your Reports</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>

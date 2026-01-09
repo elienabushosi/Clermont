@@ -11,8 +11,18 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "date-fns";
-import { FileText, Eye } from "lucide-react";
+import {
+	FileText,
+	Eye,
+	TrendingUp,
+	AlertCircle,
+	XCircle,
+	MapPin,
+	Building2,
+	Sparkles,
+} from "lucide-react";
 
 // Dummy data for demo reports
 const demoReports = [
@@ -85,11 +95,124 @@ export default function DemoReportListPage() {
 	return (
 		<div className="p-8">
 			<div className="max-w-6xl mx-auto">
+				{/* Greeting */}
+				<div className="mb-6">
+					<h1 className="text-2xl font-semibold text-[#37322F]">
+						Hi Elie
+					</h1>
+				</div>
+
+				{/* Dashboard Section 1: Report Complexity */}
+				<div className="mb-6">
+					<h2 className="text-lg font-semibold text-[#37322F] mb-4">
+						Report Dashboard
+					</h2>
+					<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+						<Card className="bg-[#FEE2A9]/20 border-[#4090C2]/30">
+							<CardHeader className="pb-0 pt-1.5 px-4">
+								<CardTitle className="text-xs font-medium text-[#605A57] flex items-center gap-1.5">
+									<TrendingUp className="size-3 text-[#4090C2]" />
+									Low Effort
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="pt-0 pb-1.5 px-4">
+								<p className="text-xl font-semibold text-[#37322F]">
+									23
+								</p>
+								<p className="text-xs text-[#605A57] mt-0">
+									addresses appear to be low effort
+								</p>
+							</CardContent>
+						</Card>
+						<Card className="bg-[#FEE2A9]/20 border-[#D59285]/30">
+							<CardHeader className="pb-0 pt-1.5 px-4">
+								<CardTitle className="text-xs font-medium text-[#605A57] flex items-center gap-1.5">
+									<AlertCircle className="size-3 text-[#D59285]" />
+									High Complexity
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="pt-0 pb-1.5 px-4">
+								<p className="text-xl font-semibold text-[#37322F]">
+									15
+								</p>
+								<p className="text-xs text-[#605A57] mt-0">
+									addresses with high complexity
+								</p>
+							</CardContent>
+						</Card>
+						<Card className="bg-[#FEE2A9]/20 border-[#D59285]/40">
+							<CardHeader className="pb-0 pt-1.5 px-4">
+								<CardTitle className="text-xs font-medium text-[#605A57] flex items-center gap-1.5">
+									<XCircle className="size-3 text-[#D59285]" />
+									Not Feasible
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="pt-0 pb-1.5 px-4">
+								<p className="text-xl font-semibold text-[#37322F]">
+									3
+								</p>
+								<p className="text-xs text-[#605A57] mt-0">
+									addresses that aren't feasible
+								</p>
+							</CardContent>
+						</Card>
+					</div>
+				</div>
+
+				{/* Dashboard Section 2: Insights */}
+				<div className="mb-6">
+					<h2 className="text-lg font-semibold text-[#37322F] mb-4">
+						Insights
+					</h2>
+					<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+						<Card className="bg-[#ADCCD3]/15 border-[#ADCCD3]/30">
+							<CardHeader className="pb-0 pt-1.5 px-4">
+								<CardTitle className="text-xs font-medium text-[#605A57] flex items-center gap-1.5">
+									<MapPin className="size-3 text-[#4090C2]" />
+									Most Popular Borough
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="pt-0 pb-1.5 px-4">
+								<p className="text-base font-semibold text-[#37322F]">
+									Manhattan
+								</p>
+							</CardContent>
+						</Card>
+						<Card className="bg-[#ADCCD3]/15 border-[#ADCCD3]/30">
+							<CardHeader className="pb-0 pt-1.5 px-4">
+								<CardTitle className="text-xs font-medium text-[#605A57] flex items-center gap-1.5">
+									<Building2 className="size-3 text-[#4090C2]" />
+									Most Common Zones
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="pt-0 pb-1.5 px-4">
+								<p className="text-base font-semibold text-[#37322F]">
+									R7-2
+								</p>
+							</CardContent>
+						</Card>
+						<Card className="bg-[#ADCCD3]/15 border-[#ADCCD3]/30">
+							<CardHeader className="pb-0 pt-1.5 px-4">
+								<CardTitle className="text-xs font-medium text-[#605A57] flex items-center gap-1.5">
+									<Sparkles className="size-3 text-[#4090C2]" />
+									Summarize Inquiries
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="pt-0 pb-1.5 px-4">
+								<p className="text-xs text-[#37322F]">
+									Converting Single Family to Multi family
+								</p>
+							</CardContent>
+						</Card>
+					</div>
+				</div>
+
+				{/* Table Section */}
 				<div className="flex items-center gap-2 mb-6">
 					<FileText className="size-6 text-[#4090C2]" />
-					<h1 className="text-2xl font-semibold text-[#37322F]">
-						Demo Reports
-					</h1>
+					<h2 className="text-xl font-semibold text-[#37322F]">
+						Reports
+					</h2>
 				</div>
 
 				{demoReports.length === 0 ? (
@@ -179,4 +302,3 @@ export default function DemoReportListPage() {
 		</div>
 	);
 }
-

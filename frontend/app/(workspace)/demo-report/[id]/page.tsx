@@ -50,7 +50,8 @@ export default function DemoReportPage() {
 		},
 		zoningDetails: {
 			maximumFAR: "3.44",
-			densityRequirements: "Maximum 1 dwelling unit per 400 sq ft of lot area",
+			densityRequirements:
+				"Maximum 1 dwelling unit per 400 sq ft of lot area",
 			minimumBaseHeight: "40 ft",
 			maximumBaseHeight: "60 ft",
 			maximumBuildingHeight: "70 ft",
@@ -59,7 +60,8 @@ export default function DemoReportPage() {
 				side: "0 ft (interior lot)",
 				rear: "30 ft minimum",
 			},
-			parkingRequirements: "1 space per 2 dwelling units (if parking provided)",
+			parkingRequirements:
+				"1 space per 2 dwelling units (if parking provided)",
 			streetTreeRequirements: "1 tree per 25 ft of street frontage",
 		},
 		buildingInfo: {
@@ -162,7 +164,7 @@ export default function DemoReportPage() {
 							className="mb-4"
 						>
 							<ArrowLeft className="size-4 mr-2" />
-							Back to Demo Reports
+							Back to Your Reports
 						</Button>
 						<div>
 							<h1 className="text-3xl font-semibold text-[#37322F] mb-2">
@@ -170,13 +172,16 @@ export default function DemoReportPage() {
 							</h1>
 							<div className="flex items-center gap-2 text-[#605A57]">
 								<MapPin className="size-4" />
-								<span className="text-lg">{propertyData.address}</span>
+								<span className="text-lg">
+									{propertyData.address}
+								</span>
 							</div>
 							<Badge
 								variant="outline"
 								className="mt-3 bg-green-100 text-green-700 border-green-200"
 							>
-								Report Generated: {new Date().toLocaleDateString()}
+								Report Generated:{" "}
+								{new Date().toLocaleDateString()}
 							</Badge>
 						</div>
 					</div>
@@ -193,7 +198,9 @@ export default function DemoReportPage() {
 								});
 							} else {
 								// Fallback: copy to clipboard
-								navigator.clipboard.writeText(window.location.href);
+								navigator.clipboard.writeText(
+									window.location.href
+								);
 								alert("Report link copied to clipboard!");
 							}
 						}}
@@ -224,7 +231,8 @@ export default function DemoReportPage() {
 									className="w-full h-auto object-contain"
 									onError={(e) => {
 										// Fallback if image doesn't exist
-										const target = e.target as HTMLImageElement;
+										const target =
+											e.target as HTMLImageElement;
 										target.style.display = "none";
 										if (target.parentElement) {
 											target.parentElement.innerHTML =
@@ -251,13 +259,17 @@ export default function DemoReportPage() {
 					<CardContent>
 						<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
 							<div>
-								<p className="text-sm text-[#605A57] mb-1">Block</p>
+								<p className="text-sm text-[#605A57] mb-1">
+									Block
+								</p>
 								<p className="font-medium text-[#37322F]">
 									{propertyData.lotDetails.block}
 								</p>
 							</div>
 							<div>
-								<p className="text-sm text-[#605A57] mb-1">Lot</p>
+								<p className="text-sm text-[#605A57] mb-1">
+									Lot
+								</p>
 								<p className="font-medium text-[#37322F]">
 									{propertyData.lotDetails.lot}
 								</p>
@@ -344,7 +356,10 @@ export default function DemoReportPage() {
 										Max Building Height
 									</p>
 									<p className="font-medium text-[#37322F]">
-										{propertyData.zoning.maximumBuildingHeight}
+										{
+											propertyData.zoning
+												.maximumBuildingHeight
+										}
 									</p>
 								</div>
 								<div className="md:col-span-2">
@@ -410,7 +425,10 @@ export default function DemoReportPage() {
 									Total Building Area
 								</p>
 								<p className="font-medium text-[#37322F]">
-									{propertyData.buildingInfo.totalBuildingArea}
+									{
+										propertyData.buildingInfo
+											.totalBuildingArea
+									}
 								</p>
 							</div>
 							<div>
@@ -459,7 +477,8 @@ export default function DemoReportPage() {
 									Secondary Use
 								</p>
 								<p className="font-medium text-[#37322F]">
-									{propertyData.landUse.secondaryUse || "None"}
+									{propertyData.landUse.secondaryUse ||
+										"None"}
 								</p>
 							</div>
 							<div>
@@ -479,10 +498,13 @@ export default function DemoReportPage() {
 					<CardHeader>
 						<div className="flex items-center gap-2">
 							<FileText className="size-5 text-[#4090C2]" />
-							<CardTitle>Zoning Constraints & Requirements</CardTitle>
+							<CardTitle>
+								Zoning Constraints & Requirements
+							</CardTitle>
 						</div>
 						<CardDescription>
-							Detailed zoning regulations affecting development feasibility
+							Detailed zoning regulations affecting development
+							feasibility
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
@@ -496,8 +518,8 @@ export default function DemoReportPage() {
 									{propertyData.zoningDetails.maximumFAR}
 								</p>
 								<p className="text-xs text-[#605A57] mt-1">
-									Limits total buildable floor area — often the primary
-									economic constraint.
+									Limits total buildable floor area — often
+									the primary economic constraint.
 								</p>
 							</div>
 
@@ -509,11 +531,14 @@ export default function DemoReportPage() {
 									Density Requirements
 								</p>
 								<p className="text-base text-[#37322F] font-semibold">
-									{propertyData.zoningDetails.densityRequirements}
+									{
+										propertyData.zoningDetails
+											.densityRequirements
+									}
 								</p>
 								<p className="text-xs text-[#605A57] mt-1">
-									Controls number of dwelling units, affecting layout,
-									circulation, and feasibility.
+									Controls number of dwelling units, affecting
+									layout, circulation, and feasibility.
 								</p>
 							</div>
 
@@ -526,11 +551,14 @@ export default function DemoReportPage() {
 										Minimum Base Height
 									</p>
 									<p className="text-base text-[#37322F] font-semibold">
-										{propertyData.zoningDetails.minimumBaseHeight}
+										{
+											propertyData.zoningDetails
+												.minimumBaseHeight
+										}
 									</p>
 									<p className="text-xs text-[#605A57] mt-1">
-										Defines required streetwall height for contextual
-										zoning districts.
+										Defines required streetwall height for
+										contextual zoning districts.
 									</p>
 								</div>
 								<div>
@@ -538,10 +566,14 @@ export default function DemoReportPage() {
 										Maximum Base Height
 									</p>
 									<p className="text-base text-[#37322F] font-semibold">
-										{propertyData.zoningDetails.maximumBaseHeight}
+										{
+											propertyData.zoningDetails
+												.maximumBaseHeight
+										}
 									</p>
 									<p className="text-xs text-[#605A57] mt-1">
-										Caps the streetwall before setbacks are required.
+										Caps the streetwall before setbacks are
+										required.
 									</p>
 								</div>
 								<div>
@@ -549,11 +581,14 @@ export default function DemoReportPage() {
 										Maximum Building Height
 									</p>
 									<p className="text-base text-[#37322F] font-semibold">
-										{propertyData.zoningDetails.maximumBuildingHeight}
+										{
+											propertyData.zoningDetails
+												.maximumBuildingHeight
+										}
 									</p>
 									<p className="text-xs text-[#605A57] mt-1">
-										Absolute vertical limit; often the final constraint on
-										massing.
+										Absolute vertical limit; often the final
+										constraint on massing.
 									</p>
 								</div>
 							</div>
@@ -567,27 +602,42 @@ export default function DemoReportPage() {
 								</p>
 								<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 									<div>
-										<p className="text-xs text-[#605A57] mb-1">Front</p>
+										<p className="text-xs text-[#605A57] mb-1">
+											Front
+										</p>
 										<p className="text-base text-[#37322F] font-semibold">
-											{propertyData.zoningDetails.yardRequirements.front}
+											{
+												propertyData.zoningDetails
+													.yardRequirements.front
+											}
 										</p>
 									</div>
 									<div>
-										<p className="text-xs text-[#605A57] mb-1">Side</p>
+										<p className="text-xs text-[#605A57] mb-1">
+											Side
+										</p>
 										<p className="text-base text-[#37322F] font-semibold">
-											{propertyData.zoningDetails.yardRequirements.side}
+											{
+												propertyData.zoningDetails
+													.yardRequirements.side
+											}
 										</p>
 									</div>
 									<div>
-										<p className="text-xs text-[#605A57] mb-1">Rear</p>
+										<p className="text-xs text-[#605A57] mb-1">
+											Rear
+										</p>
 										<p className="text-base text-[#37322F] font-semibold">
-											{propertyData.zoningDetails.yardRequirements.rear}
+											{
+												propertyData.zoningDetails
+													.yardRequirements.rear
+											}
 										</p>
 									</div>
 								</div>
 								<p className="text-xs text-[#605A57] mt-3">
-									Controls setbacks, light, air, and spatial relationships
-									to neighbors.
+									Controls setbacks, light, air, and spatial
+									relationships to neighbors.
 								</p>
 							</div>
 
@@ -599,11 +649,14 @@ export default function DemoReportPage() {
 									Parking Requirements
 								</p>
 								<p className="text-base text-[#37322F] font-semibold">
-									{propertyData.zoningDetails.parkingRequirements}
+									{
+										propertyData.zoningDetails
+											.parkingRequirements
+									}
 								</p>
 								<p className="text-xs text-[#605A57] mt-1">
-									May affect site planning, building footprint, and overall
-									development costs.
+									May affect site planning, building
+									footprint, and overall development costs.
 								</p>
 							</div>
 
@@ -615,10 +668,14 @@ export default function DemoReportPage() {
 									Street Tree Requirements
 								</p>
 								<p className="text-base text-[#37322F] font-semibold">
-									{propertyData.zoningDetails.streetTreeRequirements}
+									{
+										propertyData.zoningDetails
+											.streetTreeRequirements
+									}
 								</p>
 								<p className="text-xs text-[#605A57] mt-1">
-									Affects site planning, sidewalk design, and DOB approval.
+									Affects site planning, sidewalk design, and
+									DOB approval.
 								</p>
 							</div>
 						</div>
@@ -664,15 +721,17 @@ export default function DemoReportPage() {
 						</CardHeader>
 						<CardContent>
 							<ul className="space-y-2">
-								{propertyData.restrictedUses.map((use, index) => (
-									<li
-										key={index}
-										className="flex items-start gap-2 text-[#37322F]"
-									>
-										<XCircle className="size-4 text-red-600 mt-0.5 flex-shrink-0" />
-										<span>{use}</span>
-									</li>
-								))}
+								{propertyData.restrictedUses.map(
+									(use, index) => (
+										<li
+											key={index}
+											className="flex items-start gap-2 text-[#37322F]"
+										>
+											<XCircle className="size-4 text-red-600 mt-0.5 flex-shrink-0" />
+											<span>{use}</span>
+										</li>
+									)
+								)}
 							</ul>
 						</CardContent>
 					</Card>
@@ -691,62 +750,72 @@ export default function DemoReportPage() {
 					</CardHeader>
 					<CardContent>
 						<div className="space-y-6">
-							{propertyData.feasibleOptions.map((option, index) => (
-								<div key={index}>
-									<div className="flex items-start justify-between mb-2">
-										<h3 className="text-lg font-semibold text-[#37322F]">
-											{option.title}
-										</h3>
-										{option.feasibility !== "N/A" && (
-											<Badge
-												variant="outline"
-												className={
-													option.feasibility === "High"
-														? "bg-green-100 text-green-700 border-green-200"
-														: option.feasibility ===
-														  "Moderate"
-														? "bg-yellow-100 text-yellow-700 border-yellow-200"
-														: "bg-red-100 text-red-700 border-red-200"
-												}
-											>
-												{option.feasibility} Feasibility
-											</Badge>
+							{propertyData.feasibleOptions.map(
+								(option, index) => (
+									<div key={index}>
+										<div className="flex items-start justify-between mb-2">
+											<h3 className="text-lg font-semibold text-[#37322F]">
+												{option.title}
+											</h3>
+											{option.feasibility !== "N/A" && (
+												<Badge
+													variant="outline"
+													className={
+														option.feasibility ===
+														"High"
+															? "bg-green-100 text-green-700 border-green-200"
+															: option.feasibility ===
+															  "Moderate"
+															? "bg-yellow-100 text-yellow-700 border-yellow-200"
+															: "bg-red-100 text-red-700 border-red-200"
+													}
+												>
+													{option.feasibility}{" "}
+													Feasibility
+												</Badge>
+											)}
+										</div>
+										<p className="text-[#605A57] mb-3">
+											{option.description}
+										</p>
+										{option.considerations.length > 0 && (
+											<div className="bg-[#F7F5F3] rounded-lg p-4 border border-[rgba(55,50,47,0.12)]">
+												<p className="text-sm font-medium text-[#37322F] mb-2">
+													Key Considerations:
+												</p>
+												<ul className="space-y-1">
+													{option.considerations.map(
+														(
+															consideration,
+															idx
+														) => (
+															<li
+																key={idx}
+																className="text-sm text-[#605A57] flex items-start gap-2"
+															>
+																<span className="text-[#4090C2] mt-1">
+																	•
+																</span>
+																<span>
+																	{
+																		consideration
+																	}
+																</span>
+															</li>
+														)
+													)}
+												</ul>
+											</div>
+										)}
+										{index <
+											propertyData.feasibleOptions
+												.length -
+												1 && (
+											<Separator className="mt-6" />
 										)}
 									</div>
-									<p className="text-[#605A57] mb-3">
-										{option.description}
-									</p>
-									{option.considerations.length > 0 && (
-										<div className="bg-[#F7F5F3] rounded-lg p-4 border border-[rgba(55,50,47,0.12)]">
-											<p className="text-sm font-medium text-[#37322F] mb-2">
-												Key Considerations:
-											</p>
-											<ul className="space-y-1">
-												{option.considerations.map(
-													(consideration, idx) => (
-														<li
-															key={idx}
-															className="text-sm text-[#605A57] flex items-start gap-2"
-														>
-															<span className="text-[#4090C2] mt-1">
-																•
-															</span>
-															<span>
-																{consideration}
-															</span>
-														</li>
-													)
-												)}
-											</ul>
-										</div>
-									)}
-									{index <
-										propertyData.feasibleOptions.length -
-											1 && (
-										<Separator className="mt-6" />
-									)}
-								</div>
-							))}
+								)
+							)}
 						</div>
 					</CardContent>
 				</Card>
@@ -754,4 +823,3 @@ export default function DemoReportPage() {
 		</div>
 	);
 }
-

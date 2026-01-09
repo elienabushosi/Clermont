@@ -1,4 +1,4 @@
-# Lindero — Feasibility Assignment for Architects
+# Lindero — Feasibility Assignment for Developors & Architects
 
 ## Context
 
@@ -22,7 +22,7 @@ There is no single source of truth for early feasibility analysis.
 
 ## Proposed Solution
 
-Lindero is a client-intake and asset-analysis tool for architects that automatically generates a property feasibility snapshot using only a client's address.
+Lindero is a client-intake and asset-analysis tool for developers & architects that automatically generates a property feasibility snapshot using only a client's address.
 
 The goal is to provide clear, architect-friendly insight before the first meeting.
 

@@ -1,6 +1,6 @@
 # Lindero Monorepo
 
-A client-intake and asset-analysis tool for architects that automatically generates property feasibility snapshots using just a client's address.
+A client-intake and asset-analysis tool for developers & architects that automatically generates property feasibility snapshots using just a client's address.
 
 ## Project Structure
 

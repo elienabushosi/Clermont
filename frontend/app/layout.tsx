@@ -20,10 +20,13 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-	title: "Lindero - Property Feasibility Analysis for Architects",
+	title: "Lindero - Property Feasibility Analysis for Developers & Architects",
 	description:
-		"Client-intake and asset-analysis tool for architects that automatically generates property feasibility snapshots using just a client's address.",
+		"Client-intake and asset-analysis tool for developers & architects that automatically generates property feasibility snapshots using just a client's address.",
 	generator: "v0.app",
+	icons: {
+		icon: "/favicon.ico",
+	},
 };
 
 export default function RootLayout({

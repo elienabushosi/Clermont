@@ -10,7 +10,7 @@ interface FAQItem {
 const faqData: FAQItem[] = [
 	{
 		question: "What is Lindero and who is it for?",
-		answer: "Lindero is a feasibility and site-intelligence tool built for architects. It helps architects quickly understand what is possible on a property by generating a zoning and land-use feasibility summary from a client’s address. Lindero is designed for architects who want clarity before design begins.",
+		answer: "Lindero is a feasibility and site-intelligence tool built for developers & architects. It helps developers & architects quickly understand what is possible on a property by generating a zoning and land-use feasibility summary from a client’s address. Lindero is designed for developers & architects who want clarity before design begins.",
 	},
 	{
 		question: "How does Lindero work?",
