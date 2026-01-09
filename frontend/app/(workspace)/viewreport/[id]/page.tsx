@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { getReportWithSources, type ReportWithSources } from "@/lib/reports";
-import { ArrowLeft, MapPin, Send } from "lucide-react";
+import { ArrowLeft, MapPin, Send, Home, Grid2x2Check } from "lucide-react";
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
 
 function getStatusColor(status: string) {
@@ -213,12 +213,6 @@ export default function ViewReportPage() {
 					<h1 className="text-3xl font-semibold text-[#37322F] mb-3">
 						{report.Name}
 					</h1>
-					<div className="flex items-center gap-2 mb-4">
-						<MapPin className="size-4 text-[#605A57]" />
-						<p className="text-[#37322F] text-base">
-							{report.Address}
-						</p>
-					</div>
 					<div className="flex items-center justify-between">
 						<Badge className="bg-green-100 text-green-700 border-green-200">
 							Report Generated:{" "}
@@ -386,13 +380,16 @@ export default function ViewReportPage() {
 							</Card>
 						)}
 
-						<Card>
+						<Card className="mb-6">
 							<CardContent className="space-y-6 pt-6">
 								{/* Basic Property Information */}
 								<div>
-									<h3 className="text-lg font-semibold text-[#37322F] mb-4">
-										Property Level Information
-									</h3>
+									<div className="flex items-center gap-2 mb-4">
+										<Home className="size-5 text-[#4090C2]" />
+										<h3 className="text-lg font-semibold text-[#37322F]">
+											Property Level Information
+										</h3>
+									</div>
 									<div className="grid grid-cols-2 gap-4">
 										{formattedData.address && (
 											<div>
@@ -411,26 +408,6 @@ export default function ViewReportPage() {
 												</p>
 												<p className="text-[#37322F] font-medium">
 													{formattedData.borough}
-												</p>
-											</div>
-										)}
-										{formattedData.block && (
-											<div>
-												<p className="text-sm text-[#605A57] mb-1">
-													Block
-												</p>
-												<p className="text-[#37322F] font-medium">
-													{formattedData.block}
-												</p>
-											</div>
-										)}
-										{formattedData.lot && (
-											<div>
-												<p className="text-sm text-[#605A57] mb-1">
-													Lot
-												</p>
-												<p className="text-[#37322F] font-medium">
-													{formattedData.lot}
 												</p>
 											</div>
 										)}
@@ -463,36 +440,6 @@ export default function ViewReportPage() {
 												</p>
 												<p className="text-[#37322F] font-medium">
 													{formattedData.landUse}
-												</p>
-											</div>
-										)}
-										{formattedData.lotArea && (
-											<div>
-												<p className="text-sm text-[#605A57] mb-1">
-													Lot Area
-												</p>
-												<p className="text-[#37322F] font-medium">
-													{formattedData.lotArea}
-												</p>
-											</div>
-										)}
-										{formattedData.lotFrontage && (
-											<div>
-												<p className="text-sm text-[#605A57] mb-1">
-													Lot Frontage
-												</p>
-												<p className="text-[#37322F] font-medium">
-													{formattedData.lotFrontage}
-												</p>
-											</div>
-										)}
-										{formattedData.lotDepth && (
-											<div>
-												<p className="text-sm text-[#605A57] mb-1">
-													Lot Depth
-												</p>
-												<p className="text-[#37322F] font-medium">
-													{formattedData.lotDepth}
 												</p>
 											</div>
 										)}
@@ -581,10 +528,82 @@ export default function ViewReportPage() {
 										)}
 									</div>
 								</div>
+							</CardContent>
+						</Card>
 
-								<Separator className="my-6" />
+						{/* Lot Details Section */}
+						<Card className="mb-6">
+							<CardContent className="pt-6">
+								<div className="mb-4">
+									<div className="flex items-center gap-2 mb-1">
+										<Grid2x2Check className="size-5 text-[#4090C2]" />
+										<h3 className="text-lg font-semibold text-[#37322F]">
+											Lot Details
+										</h3>
+									</div>
+									<p className="text-sm text-[#605A57]">
+										Property identification and lot
+										specifications
+									</p>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
+									{formattedData.block && (
+										<div>
+											<p className="text-sm text-[#605A57] mb-1">
+												Block
+											</p>
+											<p className="text-[#37322F] font-medium">
+												{formattedData.block}
+											</p>
+										</div>
+									)}
+									{formattedData.lot && (
+										<div>
+											<p className="text-sm text-[#605A57] mb-1">
+												Lot
+											</p>
+											<p className="text-[#37322F] font-medium">
+												{formattedData.lot}
+											</p>
+										</div>
+									)}
+									{formattedData.lotArea && (
+										<div>
+											<p className="text-sm text-[#605A57] mb-1">
+												Lot Area
+											</p>
+											<p className="text-[#37322F] font-medium">
+												{formattedData.lotArea}
+											</p>
+										</div>
+									)}
+									{formattedData.lotFrontage && (
+										<div>
+											<p className="text-sm text-[#605A57] mb-1">
+												Lot Frontage
+											</p>
+											<p className="text-[#37322F] font-medium">
+												{formattedData.lotFrontage}
+											</p>
+										</div>
+									)}
+									{formattedData.lotDepth && (
+										<div>
+											<p className="text-sm text-[#605A57] mb-1">
+												Lot Depth
+											</p>
+											<p className="text-[#37322F] font-medium">
+												{formattedData.lotDepth}
+											</p>
+										</div>
+									)}
+								</div>
+							</CardContent>
+						</Card>
 
-								{/* Neighborhood Information */}
+						{/* Neighborhood Information */}
+						<Card>
+							<CardContent className="pt-6">
 								<div>
 									<h3 className="text-lg font-semibold text-[#37322F] mb-4">
 										Neighborhood Information
