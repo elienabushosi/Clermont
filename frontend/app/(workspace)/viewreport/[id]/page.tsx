@@ -20,6 +20,7 @@ import {
 	Home,
 	Grid2x2Check,
 	LandPlot,
+	Building2,
 } from "lucide-react";
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
 
@@ -658,7 +659,8 @@ export default function ViewReportPage() {
 						<Card>
 							<CardContent className="pt-6">
 								<div>
-									<h3 className="text-lg font-semibold text-[#37322F] mb-4">
+									<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
+										<Building2 className="w-5 h-5 text-[#4090C2]" />
 										Neighborhood Information
 									</h3>
 									<div className="grid grid-cols-2 gap-4">
