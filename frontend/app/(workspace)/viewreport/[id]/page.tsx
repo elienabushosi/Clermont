@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { getReportWithSources, type ReportWithSources } from "@/lib/reports";
 import { getBuildingClassDescriptionText } from "@/lib/building-class";
+import { getLandUseDescriptionText } from "@/lib/land-use";
 import {
 	ArrowLeft,
 	MapPin,
@@ -435,7 +436,9 @@ export default function ViewReportPage() {
 													Land Use
 												</p>
 												<p className="text-[#37322F] font-medium">
-													{formattedData.landUse}
+													{getLandUseDescriptionText(
+														formattedData.landUse
+													)}
 												</p>
 											</div>
 										)}
