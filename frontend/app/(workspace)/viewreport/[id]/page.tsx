@@ -116,6 +116,9 @@ export default function ViewReportPage() {
 			(s) => s.SourceKey === "geoservice"
 		);
 		const zolaSource = sources.find((s) => s.SourceKey === "zola");
+		const zoningSource = sources.find(
+			(s) => s.SourceKey === "zoning_resolution"
+		);
 
 		// Handle different possible structures
 		const geoserviceData =
@@ -125,6 +128,12 @@ export default function ViewReportPage() {
 		const zolaData =
 			zolaSource?.ContentJson?.contentJson ||
 			zolaSource?.ContentJson ||
+			{};
+		// ZoningResolutionAgent returns { contentJson: result, sourceUrl: null }
+		// So we need to access ContentJson.contentJson to get the actual data
+		const zoningData =
+			zoningSource?.ContentJson?.contentJson ||
+			zoningSource?.ContentJson ||
 			{};
 
 		// Merge data, with Zola taking precedence for overlapping fields
@@ -195,6 +204,8 @@ export default function ViewReportPage() {
 				null,
 			lat: zolaData.lat || geoserviceData.lat || null,
 			lng: zolaData.lon || zolaData.lng || geoserviceData.lng || null,
+			// Zoning Resolution data
+			zoningResolution: zoningData,
 		};
 	};
 
@@ -631,9 +642,19 @@ export default function ViewReportPage() {
 										<p className="text-sm text-[#605A57] mb-2">
 											Floor Area Ratio (FAR)
 										</p>
-										<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-											Pending Zoning Agent
-										</Badge>
+										{formattedData.zoningResolution
+											?.maxFar != null ? (
+											<Badge className="bg-blue-100 text-blue-700 border-blue-200">
+												{
+													formattedData
+														.zoningResolution.maxFar
+												}
+											</Badge>
+										) : (
+											<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
+												Pending Zoning Agent
+											</Badge>
+										)}
 									</div>
 									<div>
 										<p className="text-sm text-[#605A57] mb-2">
@@ -654,6 +675,290 @@ export default function ViewReportPage() {
 								</div>
 							</CardContent>
 						</Card>
+
+						{/* Zoning Constraints Section */}
+						{formattedData.zoningResolution &&
+							formattedData.zoningResolution.maxFar != null && (
+								<Card className="mb-6">
+									<CardContent className="pt-6">
+										<div className="mb-4">
+											<div className="flex items-center gap-2 mb-1">
+												<LandPlot className="size-5 text-[#4090C2]" />
+												<h3 className="text-lg font-semibold text-[#37322F]">
+													Zoning Constraints
+												</h3>
+											</div>
+											<p className="text-sm text-[#605A57]">
+												Maximum FAR and lot coverage
+												calculations
+											</p>
+										</div>
+										<div className="space-y-4">
+											{/* Max FAR */}
+											{formattedData.zoningResolution
+												.maxFar != null && (
+												<div>
+													<p className="text-sm text-[#605A57] mb-2">
+														Maximum Floor Area Ratio
+														(FAR)
+													</p>
+													<p className="text-[#37322F] font-medium text-lg">
+														{
+															formattedData
+																.zoningResolution
+																.maxFar
+														}
+													</p>
+													{formattedData
+														.zoningResolution
+														.district && (
+														<p className="text-xs text-[#605A57] mt-1">
+															District:{" "}
+															{
+																formattedData
+																	.zoningResolution
+																	.district
+															}
+															{formattedData
+																.zoningResolution
+																.contextual && (
+																<span className="ml-2">
+																	(Contextual)
+																</span>
+															)}
+														</p>
+													)}
+												</div>
+											)}
+
+											{/* Max Lot Coverage */}
+											{formattedData.zoningResolution
+												.maxLotCoverage != null && (
+												<div>
+													<p className="text-sm text-[#605A57] mb-2">
+														Maximum Lot Coverage
+													</p>
+													<p className="text-[#37322F] font-medium text-lg">
+														{(
+															formattedData
+																.zoningResolution
+																.maxLotCoverage *
+															100
+														).toFixed(0)}
+														%
+													</p>
+													<div className="flex items-center gap-4 mt-2">
+														<div>
+															<p className="text-xs text-[#605A57] mb-1">
+																Lot Type
+															</p>
+															<Badge className="bg-gray-100 text-gray-700 border-gray-200">
+																{formattedData.zoningResolution.lotType
+																	?.replace(
+																		/_/g,
+																		" "
+																	)
+																	.replace(
+																		/\b\w/g,
+																		(
+																			l: string
+																		) =>
+																			l.toUpperCase()
+																	) ||
+																	"Unknown"}
+															</Badge>
+														</div>
+														<div>
+															<p className="text-xs text-[#605A57] mb-1">
+																Building Type
+															</p>
+															<Badge className="bg-gray-100 text-gray-700 border-gray-200">
+																{formattedData.zoningResolution.buildingType
+																	?.replace(
+																		/_/g,
+																		" "
+																	)
+																	.replace(
+																		/\b\w/g,
+																		(
+																			l: string
+																		) =>
+																			l.toUpperCase()
+																	) ||
+																	"Unknown"}
+															</Badge>
+														</div>
+													</div>
+												</div>
+											)}
+
+											{/* Derived Calculations */}
+											{formattedData.zoningResolution
+												.derived && (
+												<div className="pt-4 border-t border-[rgba(55,50,47,0.12)]">
+													<p className="text-sm font-semibold text-[#37322F] mb-3">
+														Derived Calculations
+													</p>
+													<div className="grid grid-cols-2 gap-4">
+														{formattedData
+															.zoningResolution
+															.derived
+															.maxBuildableFloorAreaSqft !==
+															undefined && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">
+																	Max
+																	Buildable
+																	Floor Area
+																</p>
+																<p className="text-[#37322F] font-medium">
+																	{formattedData.zoningResolution.derived.maxBuildableFloorAreaSqft.toLocaleString()}{" "}
+																	sq ft
+																</p>
+															</div>
+														)}
+														{formattedData
+															.zoningResolution
+															.derived
+															.remainingBuildableFloorAreaSqft !==
+															undefined && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">
+																	Remaining
+																	Buildable
+																	Floor Area
+																</p>
+																<p className="text-[#37322F] font-medium">
+																	{formattedData.zoningResolution.derived.remainingBuildableFloorAreaSqft.toLocaleString()}{" "}
+																	sq ft
+																	{formattedData
+																		.zoningResolution
+																		.derived
+																		.remainingFloorAreaMessage && (
+																		<span className="text-xs text-yellow-700 ml-2">
+																			(
+																			{
+																				formattedData
+																					.zoningResolution
+																					.derived
+																					.remainingFloorAreaMessage
+																			}
+																			)
+																		</span>
+																	)}
+																</p>
+															</div>
+														)}
+														{formattedData
+															.zoningResolution
+															.derived
+															.maxBuildingFootprintSqft !==
+															undefined && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">
+																	Max Building
+																	Footprint
+																</p>
+																<p className="text-[#37322F] font-medium">
+																	{formattedData.zoningResolution.derived.maxBuildingFootprintSqft.toLocaleString()}{" "}
+																	sq ft
+																</p>
+															</div>
+														)}
+													</div>
+												</div>
+											)}
+
+											{/* Assumptions */}
+											{formattedData.zoningResolution
+												.assumptions &&
+												formattedData.zoningResolution
+													.assumptions.length > 0 && (
+													<div className="pt-4 border-t border-[rgba(55,50,47,0.12)]">
+														<p className="text-sm font-semibold text-[#37322F] mb-2">
+															Assumptions
+														</p>
+														<ul className="list-disc list-inside space-y-1">
+															{formattedData.zoningResolution.assumptions.map(
+																(
+																	assumption: string,
+																	index: number
+																) => (
+																	<li
+																		key={
+																			index
+																		}
+																		className="text-sm text-[#605A57]"
+																	>
+																		{
+																			assumption
+																		}
+																	</li>
+																)
+															)}
+														</ul>
+													</div>
+												)}
+
+											{/* Flags */}
+											{formattedData.zoningResolution
+												.flags && (
+												<div className="pt-4 border-t border-[rgba(55,50,47,0.12)]">
+													<p className="text-sm font-semibold text-[#37322F] mb-2">
+														Flags
+													</p>
+													<div className="flex flex-wrap gap-2">
+														{formattedData
+															.zoningResolution
+															.flags
+															.hasOverlay && (
+															<Badge className="bg-purple-100 text-purple-700 border-purple-200">
+																Has Overlay
+															</Badge>
+														)}
+														{formattedData
+															.zoningResolution
+															.flags
+															.hasSpecialDistrict && (
+															<Badge className="bg-orange-100 text-orange-700 border-orange-200">
+																Has Special
+																District
+															</Badge>
+														)}
+														{formattedData
+															.zoningResolution
+															.flags
+															.multiDistrictLot && (
+															<Badge className="bg-indigo-100 text-indigo-700 border-indigo-200">
+																Multi-District
+																Lot
+															</Badge>
+														)}
+														{formattedData
+															.zoningResolution
+															.flags
+															.lotTypeInferred && (
+															<Badge className="bg-gray-100 text-gray-700 border-gray-200">
+																Lot Type
+																Inferred
+															</Badge>
+														)}
+														{formattedData
+															.zoningResolution
+															.flags
+															.buildingTypeInferred && (
+															<Badge className="bg-gray-100 text-gray-700 border-gray-200">
+																Building Type
+																Inferred
+															</Badge>
+														)}
+													</div>
+												</div>
+											)}
+										</div>
+									</CardContent>
+								</Card>
+							)}
 
 						{/* Neighborhood Information */}
 						<Card>
