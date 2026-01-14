@@ -21,6 +21,9 @@ import {
 	Grid2x2Check,
 	LandPlot,
 	Building2,
+	ExternalLink,
+	Ruler,
+	MapPinCheck,
 } from "lucide-react";
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
 
@@ -638,40 +641,6 @@ export default function ViewReportPage() {
 											</Badge>
 										</div>
 									)}
-									<div>
-										<p className="text-sm text-[#605A57] mb-2">
-											Floor Area Ratio (FAR)
-										</p>
-										{formattedData.zoningResolution
-											?.maxFar != null ? (
-											<Badge className="bg-blue-100 text-blue-700 border-blue-200">
-												{
-													formattedData
-														.zoningResolution.maxFar
-												}
-											</Badge>
-										) : (
-											<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-												Pending Zoning Agent
-											</Badge>
-										)}
-									</div>
-									<div>
-										<p className="text-sm text-[#605A57] mb-2">
-											Max Building Height
-										</p>
-										<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-											Pending Zoning Agent
-										</Badge>
-									</div>
-									<div>
-										<p className="text-sm text-[#605A57] mb-2">
-											Required Yards
-										</p>
-										<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-											Pending Zoning Agent
-										</Badge>
-									</div>
 								</div>
 							</CardContent>
 						</Card>
@@ -683,7 +652,7 @@ export default function ViewReportPage() {
 									<CardContent className="pt-6">
 										<div className="mb-4">
 											<div className="flex items-center gap-2 mb-1">
-												<LandPlot className="size-5 text-[#4090C2]" />
+												<MapPinCheck className="size-5 text-[#4090C2]" />
 												<h3 className="text-lg font-semibold text-[#37322F]">
 													Zoning Constraints
 												</h3>
@@ -791,6 +760,8 @@ export default function ViewReportPage() {
 													</div>
 												</div>
 											)}
+
+											{/* Height Constraints removed - moved to separate section */}
 
 											{/* Derived Calculations */}
 											{formattedData.zoningResolution
@@ -959,6 +930,427 @@ export default function ViewReportPage() {
 									</CardContent>
 								</Card>
 							)}
+
+						{/* Zoning Constraints (Height) */}
+						{formattedData.zoningResolution?.height && (
+							<Card className="mb-6">
+								<CardContent className="pt-6">
+									<div className="mb-4">
+										<div className="flex items-center gap-2 mb-1">
+											<Ruler className="size-5 text-[#4090C2]" />
+											<h3 className="text-lg font-semibold text-[#37322F]">
+												Zoning Constraints (Height)
+											</h3>
+										</div>
+										<p className="text-sm text-[#605A57]">
+											Height regulations and constraints
+										</p>
+									</div>
+									<div className="grid grid-cols-3 gap-4">
+										{/* Minimum Base Height */}
+										{formattedData.zoningResolution.height
+											.min_base_height && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-2">
+													Minimum Base Height
+												</p>
+												{formattedData.zoningResolution
+													.height.min_base_height
+													.kind === "fixed" &&
+												formattedData.zoningResolution
+													.height.min_base_height
+													.value_ft != null ? (
+													<>
+														<p className="text-[#37322F] font-medium text-lg">
+															{
+																formattedData
+																	.zoningResolution
+																	.height
+																	.min_base_height
+																	.value_ft
+															}{" "}
+															ft
+														</p>
+														{formattedData
+															.zoningResolution
+															.height
+															.min_base_height
+															.source_section && (
+															<p className="text-xs text-[#605A57] mt-1">
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_section
+																}
+															</p>
+														)}
+													</>
+												) : formattedData
+														.zoningResolution.height
+														.min_base_height
+														.kind ===
+														"conditional" &&
+												  formattedData.zoningResolution
+														.height.min_base_height
+														.candidates ? (
+													<div>
+														<p className="text-[#37322F] font-medium text-lg">
+															{Math.min(
+																...formattedData.zoningResolution.height.min_base_height.candidates.map(
+																	(c: any) =>
+																		c.value_ft
+																)
+															)}
+															{" - "}
+															{Math.max(
+																...formattedData.zoningResolution.height.min_base_height.candidates.map(
+																	(c: any) =>
+																		c.value_ft
+																)
+															)}{" "}
+															ft
+														</p>
+														<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-1">
+															Conditional
+														</Badge>
+														{formattedData
+															.zoningResolution
+															.height
+															.min_base_height
+															.source_url && (
+															<a
+																href={
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_url
+																}
+																target="_blank"
+																rel="noopener noreferrer"
+																className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-2"
+															>
+																See citation
+																<ExternalLink className="size-3" />
+															</a>
+														)}
+														{formattedData
+															.zoningResolution
+															.height
+															.min_base_height
+															.source_section && (
+															<p className="text-xs text-[#605A57] mt-1">
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_section
+																}
+															</p>
+														)}
+													</div>
+												) : formattedData
+														.zoningResolution.height
+														.min_base_height
+														.kind ===
+												  "see_section" ? (
+													<div>
+														<p className="text-[#37322F] font-medium text-sm">
+															See Section
+														</p>
+														{formattedData
+															.zoningResolution
+															.height
+															.min_base_height
+															.source_url && (
+															<a
+																href={
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_url
+																}
+																target="_blank"
+																rel="noopener noreferrer"
+																className="text-xs text-[#4090C2] hover:underline mt-1 block"
+															>
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_section
+																}
+															</a>
+														)}
+													</div>
+												) : (
+													<p className="text-sm text-[#605A57]">
+														Not available
+													</p>
+												)}
+											</div>
+										)}
+
+										{/* Maximum Base Height */}
+										{formattedData.zoningResolution.height
+											.envelope &&
+											formattedData.zoningResolution
+												.height.envelope.candidates &&
+											formattedData.zoningResolution
+												.height.envelope.candidates
+												.length > 0 && (
+												<div>
+													<p className="text-sm text-[#605A57] mb-2">
+														Maximum Base Height
+													</p>
+													{formattedData
+														.zoningResolution.height
+														.envelope.kind ===
+													"fixed" ? (
+														<>
+															<p className="text-[#37322F] font-medium text-lg">
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.envelope
+																		.candidates[0]
+																		.max_base_height_ft
+																}{" "}
+																ft
+															</p>
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_section && (
+																<p className="text-xs text-[#605A57] mt-1">
+																	{
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_section
+																	}
+																</p>
+															)}
+														</>
+													) : formattedData
+															.zoningResolution
+															.height.envelope
+															.kind ===
+													  "conditional" ? (
+														<div>
+															<p className="text-[#37322F] font-medium text-lg">
+																{Math.min(
+																	...formattedData.zoningResolution.height.envelope.candidates.map(
+																		(
+																			c: any
+																		) =>
+																			c.max_base_height_ft
+																	)
+																)}
+																{" - "}
+																{Math.max(
+																	...formattedData.zoningResolution.height.envelope.candidates.map(
+																		(
+																			c: any
+																		) =>
+																			c.max_base_height_ft
+																	)
+																)}{" "}
+																ft
+															</p>
+															<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-1">
+																Conditional
+															</Badge>
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_url && (
+																<a
+																	href={
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_url
+																	}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-2"
+																>
+																	See citation
+																	<ExternalLink className="size-3" />
+																</a>
+															)}
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_section && (
+																<p className="text-xs text-[#605A57] mt-1">
+																	{
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_section
+																	}
+																</p>
+															)}
+														</div>
+													) : (
+														<p className="text-sm text-[#605A57]">
+															Not available
+														</p>
+													)}
+												</div>
+											)}
+
+										{/* Maximum Building Height */}
+										{formattedData.zoningResolution.height
+											.envelope &&
+											formattedData.zoningResolution
+												.height.envelope.candidates &&
+											formattedData.zoningResolution
+												.height.envelope.candidates
+												.length > 0 && (
+												<div>
+													<p className="text-sm text-[#605A57] mb-2">
+														Maximum Building Height
+													</p>
+													{formattedData
+														.zoningResolution.height
+														.envelope.kind ===
+													"fixed" ? (
+														<>
+															<p className="text-[#37322F] font-medium text-lg">
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.envelope
+																		.candidates[0]
+																		.max_building_height_ft
+																}{" "}
+																ft
+															</p>
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_section && (
+																<p className="text-xs text-[#605A57] mt-1">
+																	{
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_section
+																	}
+																</p>
+															)}
+														</>
+													) : formattedData
+															.zoningResolution
+															.height.envelope
+															.kind ===
+													  "conditional" ? (
+														<div>
+															<p className="text-[#37322F] font-medium text-lg">
+																{Math.min(
+																	...formattedData.zoningResolution.height.envelope.candidates.map(
+																		(
+																			c: any
+																		) =>
+																			c.max_building_height_ft
+																	)
+																)}
+																{" - "}
+																{Math.max(
+																	...formattedData.zoningResolution.height.envelope.candidates.map(
+																		(
+																			c: any
+																		) =>
+																			c.max_building_height_ft
+																	)
+																)}{" "}
+																ft
+															</p>
+															<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-1">
+																Conditional
+															</Badge>
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_url && (
+																<a
+																	href={
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_url
+																	}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-2"
+																>
+																	See citation
+																	<ExternalLink className="size-3" />
+																</a>
+															)}
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_section && (
+																<p className="text-xs text-[#605A57] mt-1">
+																	{
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_section
+																	}
+																</p>
+															)}
+														</div>
+													) : (
+														<p className="text-sm text-[#605A57]">
+															Not available
+														</p>
+													)}
+												</div>
+											)}
+
+										{/* Required Yards */}
+										<div>
+											<p className="text-sm text-[#605A57] mb-2">
+												Required Yards
+											</p>
+											<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
+												Pending Zoning Agent
+											</Badge>
+										</div>
+									</div>
+								</CardContent>
+							</Card>
+						)}
 
 						{/* Neighborhood Information */}
 						<Card>

@@ -309,6 +309,691 @@ export class ZoningResolutionAgent extends BaseAgent {
 	}
 
 	/**
+	 * Normalize district for height lookups (keep hyphens intact)
+	 * @param {string} district - Zoning district code
+	 * @returns {string} Normalized district
+	 */
+	normalizeDistrictForHeights(district) {
+		if (!district || typeof district !== "string") {
+			return null;
+		}
+		return district.trim().toUpperCase();
+	}
+
+	/**
+	 * Get minimum base height for residential district (R6-R12 only, ZR §23-432)
+	 * @param {string} district - Zoning district code
+	 * @returns {Object} Minimum base height data
+	 */
+	getMinBaseHeight(district) {
+		const normalized = this.normalizeDistrictForHeights(district);
+		if (!normalized) {
+			return {
+				kind: "unsupported",
+				value_ft: null,
+				candidates: null,
+				source_url: null,
+				source_section: null,
+				notes: "District not provided",
+				requires_manual_review: false,
+			};
+		}
+
+		// Check if R1-R5 (URL-only, no numeric values)
+		const r1r5Match = normalized.match(/^R[1-5]/);
+		if (r1r5Match) {
+			// R3-2, R4, R4B, R5, R5B, R5D use 23-422
+			if (
+				normalized === "R3-2" ||
+				normalized === "R4" ||
+				normalized === "R4B" ||
+				normalized === "R5" ||
+				normalized === "R5B" ||
+				normalized === "R5D"
+			) {
+				return {
+					kind: "see_section",
+					value_ft: null,
+					candidates: null,
+					source_url:
+						"https://zr.planning.nyc.gov/article-ii/chapter-3/23-422",
+					source_section: "ZR §23-422",
+					notes: "Min base height not a single value for this district; see ZR section.",
+					requires_manual_review: true,
+				};
+			}
+			// Other R1-R5 use 23-421
+			return {
+				kind: "see_section",
+				value_ft: null,
+				candidates: null,
+				source_url:
+					"https://zr.planning.nyc.gov/article-ii/chapter-3/23-421",
+				source_section: "ZR §23-421",
+				notes: "Min base height not a single value for this district; see ZR section.",
+				requires_manual_review: true,
+			};
+		}
+
+		// R6-R12 minimum base height mapping (ZR §23-432)
+		// Special case: R6 has conflicting values (40 vs 30), so handle it separately
+		if (normalized === "R6") {
+			return {
+				kind: "conditional",
+				value_ft: null,
+				candidates: [
+					{
+						value_ft: 40,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+					{
+						value_ft: 30,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				source_url:
+					"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+				source_section: "ZR §23-432",
+				notes: "Multiple values apply; manual review required.",
+				requires_manual_review: true,
+			};
+		}
+
+		const minBaseHeightLookup = {
+			// R6 districts (excluding base R6 which is handled above)
+			R6A: 40,
+			"R6-1": 40,
+			R6B: 30,
+			R6D: 30,
+			"R6-2": 30,
+			// R7 districts
+			R7A: 40,
+			"R7-1": 40,
+			"R7-21": 40,
+			"R7-2": 40,
+			R7B: 40,
+			R7D: 60,
+			R7X: 60,
+			"R7-3": 60,
+			// R8 districts
+			R8: 60,
+			R8A: 60,
+			R8B: 55,
+			R8X: 60,
+			// R9 districts
+			R9: 60,
+			R9A: 60,
+			R9D: 60,
+			"R9-1": 60,
+			R9X: 105,
+			// R10 districts
+			R10: 60,
+			R10X: 60,
+			R10A: 125,
+			// R11 districts
+			R11: 60,
+			R11A: 60,
+			// R12 districts
+			R12: 60,
+		};
+
+		// Check for exact match
+		if (minBaseHeightLookup[normalized] !== undefined) {
+			return {
+				kind: "fixed",
+				value_ft: minBaseHeightLookup[normalized],
+				candidates: null,
+				source_url:
+					"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+				source_section: "ZR §23-432",
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+
+		// Not found in R6-R12 lookup
+		return {
+			kind: "unsupported",
+			value_ft: null,
+			candidates: null,
+			source_url: null,
+			source_section: null,
+			notes: `District ${normalized} not supported for minimum base height lookup.`,
+			requires_manual_review: false,
+		};
+	}
+
+	/**
+	 * Get height envelope (max base height + max building height paired)
+	 * @param {string} district - Zoning district code
+	 * @returns {Object} Height envelope data
+	 */
+	getHeightEnvelope(district) {
+		const normalized = this.normalizeDistrictForHeights(district);
+		if (!normalized) {
+			return {
+				kind: "unsupported",
+				candidates: null,
+				notes: "District not provided",
+				requires_manual_review: false,
+			};
+		}
+
+		// R1-R3 districts (ZR §23-424)
+		const r1r3Districts = [
+			"R1-1",
+			"R1-2",
+			"R1-2A",
+			"R2",
+			"R2A",
+			"R2X",
+			"R3-1",
+			"R3-2",
+			"R3A",
+			"R3X",
+		];
+		if (r1r3Districts.includes(normalized)) {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 35,
+						max_building_height_ft: 35,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-424",
+						source_section: "ZR §23-424",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+
+		// R4 districts (ZR §23-424)
+		const r4Districts = ["R4", "R4-1", "R4A", "R4B"];
+		if (r4Districts.includes(normalized)) {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 35,
+						max_building_height_ft: 45,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-424",
+						source_section: "ZR §23-424",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+
+		// R5 districts (ZR §23-424)
+		const r5Districts = ["R5", "R5A", "R5B", "R5D"];
+		if (r5Districts.includes(normalized)) {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 45,
+						max_building_height_ft: 55,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-424",
+						source_section: "ZR §23-424",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+
+		// R6 districts (ZR §23-432) - CONDITIONAL for base R6
+		if (normalized === "R6A" || normalized === "R6-1") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 65,
+						max_building_height_ft: 75,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R6") {
+			return {
+				kind: "conditional",
+				candidates: [
+					{
+						max_base_height_ft: 65,
+						max_building_height_ft: 75,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+					{
+						max_base_height_ft: 45,
+						max_building_height_ft: 55,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: "Multiple values apply; manual review required.",
+				requires_manual_review: true,
+			};
+		}
+		if (normalized === "R6B") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 45,
+						max_building_height_ft: 55,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R6D" || normalized === "R6-2") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 45,
+						max_building_height_ft: 65,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+
+		// R7 districts (ZR §23-432)
+		if (normalized === "R7A" || normalized === "R7-21") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 75,
+						max_building_height_ft: 85,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R7-1") {
+			// R7-1 appears in multiple mappings, so it's conditional
+			return {
+				kind: "conditional",
+				candidates: [
+					{
+						max_base_height_ft: 75,
+						max_building_height_ft: 85,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+					{
+						max_base_height_ft: 65,
+						max_building_height_ft: 75,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: "Multiple values apply; manual review required.",
+				requires_manual_review: true,
+			};
+		}
+		if (normalized === "R7-2") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 65,
+						max_building_height_ft: 75,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R7B") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 65,
+						max_building_height_ft: 75,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R7D") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 85,
+						max_building_height_ft: 105,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R7X" || normalized === "R7-3") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 95,
+						max_building_height_ft: 125,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+
+		// R8 districts (ZR §23-432) - CONDITIONAL for base R8
+		if (normalized === "R8A") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 95,
+						max_building_height_ft: 125,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R8B") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 65,
+						max_building_height_ft: 75,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R8X") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 95,
+						max_building_height_ft: 155,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R8") {
+			return {
+				kind: "conditional",
+				candidates: [
+					{
+						max_base_height_ft: 85,
+						max_building_height_ft: 115,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+					{
+						max_base_height_ft: 95,
+						max_building_height_ft: 135,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: "Multiple values apply; manual review required.",
+				requires_manual_review: true,
+			};
+		}
+
+		// R9 districts (ZR §23-432) - CONDITIONAL
+		if (normalized === "R9" || normalized === "R9A") {
+			return {
+				kind: "conditional",
+				candidates: [
+					{
+						max_base_height_ft: 105,
+						max_building_height_ft: 145,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+					{
+						max_base_height_ft: 95,
+						max_building_height_ft: 135,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: "Multiple values apply; manual review required.",
+				requires_manual_review: true,
+			};
+		}
+		if (normalized === "R9D" || normalized === "R9-1") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 125,
+						max_building_height_ft: 175,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+		if (normalized === "R9X") {
+			return {
+				kind: "conditional",
+				candidates: [
+					{
+						max_base_height_ft: 125,
+						max_building_height_ft: 175,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+					{
+						max_base_height_ft: 125,
+						max_building_height_ft: 165,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: "Multiple values apply; manual review required.",
+				requires_manual_review: true,
+			};
+		}
+
+		// R10 districts (ZR §23-432) - CONDITIONAL
+		if (normalized === "R10" || normalized === "R10X") {
+			return {
+				kind: "conditional",
+				candidates: [
+					{
+						max_base_height_ft: 155,
+						max_building_height_ft: 215,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+					{
+						max_base_height_ft: 125,
+						max_building_height_ft: 185,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: "Multiple values apply; manual review required.",
+				requires_manual_review: true,
+			};
+		}
+		if (normalized === "R10A") {
+			return {
+				kind: "conditional",
+				candidates: [
+					{
+						max_base_height_ft: 155,
+						max_building_height_ft: 215,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+					{
+						max_base_height_ft: 125,
+						max_building_height_ft: 185,
+						when: "Depends on applicable zoning conditions; see citation.",
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: "Multiple values apply; manual review required.",
+				requires_manual_review: true,
+			};
+		}
+
+		// R11 districts (ZR §23-432)
+		if (normalized === "R11" || normalized === "R11A") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 155,
+						max_building_height_ft: 255,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+
+		// R12 districts (ZR §23-432)
+		if (normalized === "R12") {
+			return {
+				kind: "fixed",
+				candidates: [
+					{
+						max_base_height_ft: 155,
+						max_building_height_ft: 325,
+						when: null,
+						source_url:
+							"https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+						source_section: "ZR §23-432",
+					},
+				],
+				notes: null,
+				requires_manual_review: false,
+			};
+		}
+
+		// Not found
+		return {
+			kind: "unsupported",
+			candidates: null,
+			notes: `District ${normalized} not supported for height envelope lookup.`,
+			requires_manual_review: false,
+		};
+	}
+
+	/**
 	 * Calculate derived values (max buildable floor area, remaining, etc.)
 	 * @param {number} maxFAR - Maximum FAR
 	 * @param {number} lotArea - Lot area in square feet
@@ -502,6 +1187,16 @@ export class ZoningResolutionAgent extends BaseAgent {
 				maxLotCoverage
 			);
 
+			// Get height constraints
+			const minBaseHeight = this.getMinBaseHeight(districtUpper);
+			const heightEnvelope = this.getHeightEnvelope(districtUpper);
+
+			console.log("ZoningResolutionAgent - Height calculations:", {
+				district: districtUpper,
+				minBaseHeight: minBaseHeight,
+				heightEnvelope: heightEnvelope,
+			});
+
 			// Build assumptions array
 			const assumptions = [];
 			if (farResult && farResult.assumption) {
@@ -515,6 +1210,32 @@ export class ZoningResolutionAgent extends BaseAgent {
 			}
 			if (lotCoverageResult.assumption) {
 				assumptions.push(lotCoverageResult.assumption);
+			}
+			// Add height assumptions
+			if (minBaseHeight.kind === "see_section") {
+				assumptions.push(
+					"Min base height not a single value for this district; see ZR section."
+				);
+			}
+			if (minBaseHeight.kind === "conditional") {
+				assumptions.push(
+					"Multiple minimum base height values possible; depends on zoning conditions; see citation."
+				);
+			}
+			if (minBaseHeight.kind === "unsupported") {
+				assumptions.push(
+					`Height lookup not implemented for district ${districtUpper}.`
+				);
+			}
+			if (heightEnvelope.kind === "conditional") {
+				assumptions.push(
+					"Multiple height limits possible; depends on zoning conditions; see citation."
+				);
+			}
+			if (heightEnvelope.kind === "unsupported") {
+				assumptions.push(
+					`Height envelope lookup not implemented for district ${districtUpper}.`
+				);
 			}
 
 			// Build flags
@@ -543,6 +1264,10 @@ export class ZoningResolutionAgent extends BaseAgent {
 				maxFar: maxFAR,
 				maxLotCoverage: maxLotCoverage,
 				derived: derived,
+				height: {
+					min_base_height: minBaseHeight,
+					envelope: heightEnvelope,
+				},
 				assumptions: assumptions,
 				flags: flags,
 			};

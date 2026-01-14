@@ -166,7 +166,7 @@ The agent stores results in `report_sources` with the following structure:
 
 -   **Zola source not found**: Returns error - "Zola source data not found. ZolaAgent must run before ZoningResolutionAgent."
 -   **District not found**: Returns `null` for maxFar/maxLotCoverage with assumption explaining why
--   **Non-residential district**: Returns `null` with assumption: "District X is not residential; V1 supports R* districts only"
+-   **Non-residential district**: Returns `null` with assumption: "District X is not residential; V1 supports R\* districts only"
 -   **Agent failure**: Stored in `report_sources` with `Status: "failed"` and `ErrorMessage`, but does not fail the report
 
 ## Limitations (V1)
@@ -175,9 +175,9 @@ The agent stores results in `report_sources` with the following structure:
 2. **Hardcoded FAR lookup**: Limited set of districts; unknown districts return `null`
 3. **Lot type inference**: Defaults to interior/through (no corner lot detection)
 4. **Special rules not implemented**:
-    -   Yard-based lot coverage (R2X, R3A, R3X)
-    -   Eligible site rules (Section 23-434)
-    -   Shallow lot rules (Section 23-363)
+    - Yard-based lot coverage (R2X, R3A, R3X)
+    - Eligible site rules (Section 23-434)
+    - Shallow lot rules (Section 23-363)
 5. **No AI or web scraping**: All calculations are deterministic and rule-based
 
 ## Testing
@@ -206,6 +206,7 @@ LIMIT 1;
 ## Example Output
 
 For a property in R8 district with:
+
 -   Lot area: 3,125 sq ft
 -   Building area: 11,150 sq ft
 -   Building class: C7 (multiple dwelling)
@@ -246,4 +247,3 @@ For a property in R8 district with:
 -   Section 23-362 - Maximum lot coverage in R6 through R12 Districts
 -   Section 23-363 - Special rules for certain interior or through lots
 -   NYC Department of City Planning - Zoning Handbook
-
