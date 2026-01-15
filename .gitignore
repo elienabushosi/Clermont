@@ -47,3 +47,6 @@ Thumbs.db
 # Logs
 logs
 *.log
+
+# Temporary exports
+cursor_chat_history_*.txt

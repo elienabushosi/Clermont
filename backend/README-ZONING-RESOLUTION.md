@@ -2,7 +2,7 @@
 
 ## Overview
 
-The ZoningResolutionAgent computes maximum Floor Area Ratio (FAR) and maximum lot coverage constraints for residential zoning districts in NYC. It implements hardcoded lookup tables and rule-based calculations based on the NYC Zoning Resolution (Article II - Residential Districts).
+The ZoningResolutionAgent computes maximum Floor Area Ratio (FAR), maximum lot coverage, and height constraints (minimum base height, maximum base height, and maximum building height) for residential zoning districts in NYC. It implements hardcoded lookup tables and rule-based calculations based on the NYC Zoning Resolution (Article II - Residential Districts).
 
 ## Architecture
 
@@ -18,10 +18,10 @@ The ZoningResolutionAgent computes maximum Floor Area Ratio (FAR) and maximum lo
 
 #### ZoningResolutionAgent (`zoning_resolution`)
 
--   **Purpose**: Compute maximum FAR and maximum lot coverage for residential districts
+-   **Purpose**: Compute maximum FAR, maximum lot coverage, and height constraints for residential districts
 -   **Data Source**: Reads from stored Zola source data (no external API calls)
 -   **Input**: Reads from `report_sources` where `SourceKey = "zola"`
--   **Output**: Computed zoning constraints (max FAR, max lot coverage, derived calculations)
+-   **Output**: Computed zoning constraints (max FAR, max lot coverage, height constraints, derived calculations)
 -   **Status**: Non-critical - failure does not fail the report
 -   **Scope**: Residential districts only (R1-R12) - Article II
 
@@ -114,6 +114,84 @@ If `maxLotCoverage` and `lotArea` exist:
 
 -   `maxBuildingFootprintSqft = maxLotCoverage × lotArea`
 
+### Height Constraints
+
+The agent calculates three height-related metrics for residential districts:
+
+#### Minimum Base Height
+
+**Method**: Hardcoded lookup table based on NYC Zoning Resolution Section 23-432
+
+**Supported Districts**:
+
+-   **R1-R5**: Returns `"see_section"` kind with citation to ZR §23-421 or §23-422 (no single fixed value)
+-   **R6**: Conditional district with two possible values:
+    -   40 ft (depends on zoning conditions)
+    -   30 ft (depends on zoning conditions)
+-   **R6A, R6-1**: 40 ft
+-   **R6B, R6D, R6-2**: 30 ft
+-   **R7 districts**: 40-60 ft (varies by variant)
+-   **R8 districts**: 55-60 ft (varies by variant)
+-   **R9 districts**: 60-105 ft (varies by variant)
+-   **R10 districts**: 60-125 ft (varies by variant)
+-   **R11, R12**: 60 ft
+
+**Output Types**:
+
+-   `"fixed"`: Single value in feet (e.g., R8 → 60 ft)
+-   `"conditional"`: Multiple possible values with `candidates` array (e.g., R6 → 30-40 ft range)
+-   `"see_section"`: No single value; requires manual review of ZR section (R1-R5)
+-   `"unsupported"`: District not in lookup table
+
+#### Maximum Base Height and Maximum Building Height
+
+**Method**: Hardcoded lookup table based on NYC Zoning Resolution Section 23-432
+
+**Supported Districts**:
+
+-   **R1-R5**: Returns `"unsupported"` (height regulations vary by specific conditions)
+-   **R6**: Conditional - multiple candidate pairs:
+    -   Base: 40 ft, Building: 40 ft
+    -   Base: 30 ft, Building: 45 ft
+-   **R7-1**: Conditional - multiple candidate pairs:
+    -   Base: 35 ft, Building: 35 ft
+    -   Base: 35 ft, Building: 45 ft
+-   **R7-2, R7-21**: Fixed - Base: 35 ft, Building: 35 ft
+-   **R7A, R7B**: Fixed - Base: 35 ft, Building: 45 ft
+-   **R7D, R7X, R7-3**: Fixed - Base: 60 ft, Building: 80 ft
+-   **R8**: Conditional - multiple candidate pairs:
+    -   Base: 85 ft, Building: 115 ft
+    -   Base: 95 ft, Building: 135 ft
+-   **R8A**: Fixed - Base: 95 ft, Building: 135 ft
+-   **R8B**: Fixed - Base: 55 ft, Building: 75 ft
+-   **R8X**: Fixed - Base: 85 ft, Building: 115 ft
+-   **R9, R9A**: Conditional - multiple candidate pairs:
+    -   Base: 105 ft, Building: 145 ft
+    -   Base: 95 ft, Building: 135 ft
+-   **R9D, R9-1**: Fixed - Base: 125 ft, Building: 175 ft
+-   **R9X**: Conditional - multiple candidate pairs:
+    -   Base: 125 ft, Building: 175 ft
+    -   Base: 125 ft, Building: 165 ft
+-   **R10, R10X**: Conditional - multiple candidate pairs:
+    -   Base: 125 ft, Building: 175 ft
+    -   Base: 125 ft, Building: 165 ft
+-   **R10A**: Fixed - Base: 125 ft, Building: 175 ft
+-   **R11, R11A**: Fixed - Base: 125 ft, Building: 175 ft
+-   **R12**: Fixed - Base: 125 ft, Building: 175 ft
+
+**Output Structure**:
+
+-   `"fixed"`: Single candidate with `max_base_height_ft` and `max_building_height_ft`
+-   `"conditional"`: Array of candidates, each with:
+    -   `max_base_height_ft`: Maximum base height in feet
+    -   `max_building_height_ft`: Maximum building height in feet
+    -   `when`: Description of conditions (if applicable)
+    -   `source_url`: Link to ZR section
+    -   `source_section`: ZR section reference (e.g., "ZR §23-432")
+-   `"unsupported"`: District not supported
+
+**Citations**: All height values include source URLs and section references to the NYC Zoning Resolution.
+
 ### Inferences
 
 **Lot Type**:
@@ -145,6 +223,38 @@ The agent stores results in `report_sources` with the following structure:
 		"maxBuildableFloorAreaSqft": 18812.5,
 		"remainingBuildableFloorAreaSqft": 7662.5,
 		"maxBuildingFootprintSqft": 2500
+	},
+	"height": {
+		"min_base_height": {
+			"kind": "fixed",
+			"value_ft": 60,
+			"candidates": null,
+			"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+			"source_section": "ZR §23-432",
+			"notes": null,
+			"requires_manual_review": false
+		},
+		"envelope": {
+			"kind": "conditional",
+			"candidates": [
+				{
+					"max_base_height_ft": 85,
+					"max_building_height_ft": 115,
+					"when": "Depends on applicable zoning conditions; see citation.",
+					"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+					"source_section": "ZR §23-432"
+				},
+				{
+					"max_base_height_ft": 95,
+					"max_building_height_ft": 135,
+					"when": "Depends on applicable zoning conditions; see citation.",
+					"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+					"source_section": "ZR §23-432"
+				}
+			],
+			"notes": "Multiple values apply; manual review required.",
+			"requires_manual_review": true
+		}
 	},
 	"assumptions": [
 		"Lot type unknown; assumed interior/through",
@@ -178,7 +288,12 @@ The agent stores results in `report_sources` with the following structure:
     - Yard-based lot coverage (R2X, R3A, R3X)
     - Eligible site rules (Section 23-434)
     - Shallow lot rules (Section 23-363)
-5. **No AI or web scraping**: All calculations are deterministic and rule-based
+5. **Height constraints limitations**:
+    - R1-R5 minimum base height returns `"see_section"` (no fixed values)
+    - R1-R5 maximum base/building heights return `"unsupported"` (not implemented)
+    - Conditional districts require manual review to determine which candidate applies
+    - Some district variants may not be in lookup tables
+6. **No AI or web scraping**: All calculations are deterministic and rule-based
 
 ## Testing
 
@@ -224,6 +339,32 @@ For a property in R8 district with:
 		"maxBuildableFloorAreaSqft": 18812.5,
 		"remainingBuildableFloorAreaSqft": 7662.5,
 		"maxBuildingFootprintSqft": 2500
+	},
+	"height": {
+		"min_base_height": {
+			"kind": "fixed",
+			"value_ft": 60,
+			"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+			"source_section": "ZR §23-432"
+		},
+		"envelope": {
+			"kind": "conditional",
+			"candidates": [
+				{
+					"max_base_height_ft": 85,
+					"max_building_height_ft": 115,
+					"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+					"source_section": "ZR §23-432"
+				},
+				{
+					"max_base_height_ft": 95,
+					"max_building_height_ft": 135,
+					"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3/23-432",
+					"source_section": "ZR §23-432"
+				}
+			],
+			"requires_manual_review": true
+		}
 	}
 }
 ```
@@ -236,8 +377,9 @@ For a property in R8 district with:
 -   [ ] Implement eligible site rules (Section 23-434)
 -   [ ] Add shallow lot rules (Section 23-363)
 -   [ ] Support commercial districts (Article III)
--   [ ] Add maximum building height calculations
 -   [ ] Add required yards calculations
+-   [ ] Expand height constraints to R1-R5 districts (currently returns "see_section" or "unsupported")
+-   [ ] Add logic to automatically determine which candidate applies for conditional height districts
 -   [ ] Cache calculations by district + lot type + building type
 
 ## References
@@ -246,4 +388,7 @@ For a property in R8 district with:
 -   Section 23-361 - Maximum lot coverage in R1 through R5 Districts
 -   Section 23-362 - Maximum lot coverage in R6 through R12 Districts
 -   Section 23-363 - Special rules for certain interior or through lots
+-   Section 23-421 - Minimum base height in R1 through R3 Districts
+-   Section 23-422 - Minimum base height in R4 and R5 Districts
+-   Section 23-432 - Height and setback regulations in R6 through R12 Districts
 -   NYC Department of City Planning - Zoning Handbook
