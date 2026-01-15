@@ -1031,6 +1031,141 @@ export class ZoningResolutionAgent extends BaseAgent {
 	}
 
 	/**
+	 * Calculate density requirements (DUF-based max dwelling units)
+	 * @param {string} buildingType - Building type ("multiple_dwelling" or "single_or_two_family")
+	 * @param {number} unitsres - Number of residential units (optional, for fallback check)
+	 * @param {number} maxBuildableFloorAreaSqft - Maximum residential floor area permitted
+	 * @param {boolean} hasOverlay - Whether overlays are present
+	 * @param {boolean} hasSpecialDistrict - Whether special districts are present
+	 * @returns {Object} Density requirements with toggle candidates
+	 */
+	calculateDensityRequirements(
+		buildingType,
+		unitsres,
+		maxBuildableFloorAreaSqft,
+		hasOverlay,
+		hasSpecialDistrict
+	) {
+		const DEFAULT_DUF = 680;
+		const ROUNDING_THRESHOLD = 0.75;
+
+		// Determine if multiple dwelling
+		const isMultipleDwelling =
+			buildingType === "multiple_dwelling" ||
+			(unitsres !== null && unitsres !== undefined && unitsres > 2);
+
+		// If not multiple dwelling, return not applicable
+		if (!isMultipleDwelling) {
+			return {
+				kind: "toggle",
+				candidates: [
+					{
+						id: "duf_applies",
+						label: "Standard (DUF applies)",
+						duf_applicable: false,
+						duf_value: DEFAULT_DUF,
+						max_dwelling_units: null,
+						max_res_floor_area_sqft: null,
+						rounding_rule: "Fractions >= 0.75 round up; otherwise round down",
+						source_url: "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+						source_section: "ZR §23-52",
+						notes: "DUF not applicable to single- or two-family residences",
+						requires_manual_review: false,
+					},
+					{
+						id: "duf_not_applicable",
+						label: "Affordable/Senior/Conversion (DUF not applicable)",
+						duf_applicable: false,
+						duf_value: null,
+						max_dwelling_units: null,
+						notes: "No DUF-based unit cap; unit count governed by other constraints.",
+						source_url: "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+						source_section: "ZR §23-52",
+						requires_manual_review: false,
+					},
+				],
+			};
+		}
+
+		// If multiple dwelling but missing required inputs
+		if (
+			maxBuildableFloorAreaSqft === null ||
+			maxBuildableFloorAreaSqft === undefined
+		) {
+			return {
+				kind: "toggle",
+				candidates: [
+					{
+						id: "duf_applies",
+						label: "Standard (DUF applies)",
+						duf_applicable: true,
+						duf_value: DEFAULT_DUF,
+						max_dwelling_units: null,
+						max_res_floor_area_sqft: null,
+						rounding_rule: "Fractions >= 0.75 round up; otherwise round down",
+						source_url: "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+						source_section: "ZR §23-52",
+						notes: "Missing required inputs (max FAR or lot area) for DUF calculation",
+						requires_manual_review: true,
+					},
+					{
+						id: "duf_not_applicable",
+						label: "Affordable/Senior/Conversion (DUF not applicable)",
+						duf_applicable: false,
+						duf_value: null,
+						max_dwelling_units: null,
+						notes: "No DUF-based unit cap; unit count governed by other constraints.",
+						source_url: "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+						source_section: "ZR §23-52",
+						requires_manual_review: true,
+					},
+				],
+			};
+		}
+
+		// Calculate max units: maxBuildableFloorAreaSqft / DUF
+		const maxUnitsRaw = maxBuildableFloorAreaSqft / DEFAULT_DUF;
+		const fractionalPart = maxUnitsRaw - Math.floor(maxUnitsRaw);
+		const maxUnits =
+			fractionalPart >= ROUNDING_THRESHOLD
+				? Math.ceil(maxUnitsRaw)
+				: Math.floor(maxUnitsRaw);
+
+		// Determine if manual review needed
+		const requiresManualReview = hasOverlay || hasSpecialDistrict;
+
+		return {
+			kind: "toggle",
+			candidates: [
+				{
+					id: "duf_applies",
+					label: "Standard (DUF applies)",
+					duf_applicable: true,
+					duf_value: DEFAULT_DUF,
+					max_dwelling_units: maxUnits,
+					max_res_floor_area_sqft: maxBuildableFloorAreaSqft,
+					rounding_rule: "Fractions >= 0.75 round up; otherwise round down",
+					source_url: "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+					source_section: "ZR §23-52",
+					notes: null,
+					requires_manual_review: requiresManualReview,
+				},
+				{
+					id: "duf_not_applicable",
+					label: "Affordable/Senior/Conversion (DUF not applicable)",
+					duf_applicable: false,
+					duf_value: null,
+					max_dwelling_units: null,
+					notes: "No DUF-based unit cap; unit count governed by other constraints.",
+					source_url: "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+					source_section: "ZR §23-52",
+					requires_manual_review: true,
+				},
+			],
+		};
+	}
+
+	/**
 	 * Fetch data from stored Zola source and compute zoning constraints
 	 * @param {Object} addressData - Address information
 	 * @param {string} reportId - Report ID
@@ -1089,11 +1224,22 @@ export class ZoningResolutionAgent extends BaseAgent {
 				console.error(
 					"ZoningResolutionAgent - District is null or undefined"
 				);
+				// Calculate density even without district (will be not applicable)
+				const buildingTypeResult = this.determineBuildingType(bldgclass);
+				const unitsres = zolaData.unitsres || null;
+				const densityRequirements = this.calculateDensityRequirements(
+					buildingTypeResult.buildingType,
+					unitsres,
+					null, // No maxBuildableFloorAreaSqft without district/FAR
+					!!(overlay1 || overlay2),
+					!!(spdist1 || spdist2 || spdist3)
+				);
 				return {
 					contentJson: {
 						district: null,
 						maxFar: null,
 						maxLotCoverage: null,
+						density: densityRequirements,
 						assumptions: [
 							"District not found in Zola data. Zonedist1 field is missing or null.",
 						],
@@ -1110,6 +1256,11 @@ export class ZoningResolutionAgent extends BaseAgent {
 								zolaData?.zonedist4
 							),
 							districtNotFound: true,
+							densityComputed: false,
+							densityMultipleDwelling:
+								buildingTypeResult.buildingType === "multiple_dwelling" ||
+								(unitsres !== null && unitsres !== undefined && unitsres > 2),
+							densityMissingInputs: true,
 						},
 					},
 					sourceUrl: null,
@@ -1118,11 +1269,22 @@ export class ZoningResolutionAgent extends BaseAgent {
 
 			const districtUpper = district.toString().trim().toUpperCase();
 			if (!districtUpper.startsWith("R")) {
+				// Calculate density even for non-residential (will be not applicable)
+				const buildingTypeResult = this.determineBuildingType(bldgclass);
+				const unitsres = zolaData.unitsres || null;
+				const densityRequirements = this.calculateDensityRequirements(
+					buildingTypeResult.buildingType,
+					unitsres,
+					null, // No maxBuildableFloorAreaSqft without residential district
+					!!(overlay1 || overlay2),
+					!!(spdist1 || spdist2 || spdist3)
+				);
 				return {
 					contentJson: {
 						district: district,
 						maxFar: null,
 						maxLotCoverage: null,
+						density: densityRequirements,
 						assumptions: [
 							`District ${
 								district || "unknown"
@@ -1141,6 +1303,11 @@ export class ZoningResolutionAgent extends BaseAgent {
 								zolaData?.zonedist4
 							),
 							nonResidential: true,
+							densityComputed: false,
+							densityMultipleDwelling:
+								buildingTypeResult.buildingType === "multiple_dwelling" ||
+								(unitsres !== null && unitsres !== undefined && unitsres > 2),
+							densityMissingInputs: true,
 						},
 					},
 					sourceUrl: null,
@@ -1191,6 +1358,16 @@ export class ZoningResolutionAgent extends BaseAgent {
 			const minBaseHeight = this.getMinBaseHeight(districtUpper);
 			const heightEnvelope = this.getHeightEnvelope(districtUpper);
 
+			// Calculate density requirements (DUF-based)
+			const unitsres = zolaData.unitsres || null;
+			const densityRequirements = this.calculateDensityRequirements(
+				buildingTypeResult.buildingType,
+				unitsres,
+				derived.maxBuildableFloorAreaSqft,
+				!!(overlay1 || overlay2),
+				!!(spdist1 || spdist2 || spdist3)
+			);
+
 			console.log("ZoningResolutionAgent - Height calculations:", {
 				district: districtUpper,
 				minBaseHeight: minBaseHeight,
@@ -1237,6 +1414,37 @@ export class ZoningResolutionAgent extends BaseAgent {
 					`Height envelope lookup not implemented for district ${districtUpper}.`
 				);
 			}
+			// Add density assumptions
+			if (densityRequirements && densityRequirements.candidates) {
+				const dufAppliesCandidate = densityRequirements.candidates.find(
+					(c) => c.id === "duf_applies"
+				);
+				if (
+					dufAppliesCandidate &&
+					dufAppliesCandidate.duf_applicable &&
+					dufAppliesCandidate.max_dwelling_units !== null
+				) {
+					assumptions.push(
+						"Density requirements computed using DUF=680 scenario; alternate scenario provided for DUF-not-applicable cases."
+					);
+				} else if (
+					dufAppliesCandidate &&
+					dufAppliesCandidate.notes &&
+					dufAppliesCandidate.notes.includes("Missing required inputs")
+				) {
+					assumptions.push(
+						"Density requirements cannot be computed due to missing inputs (max FAR or lot area)."
+					);
+				} else if (
+					dufAppliesCandidate &&
+					dufAppliesCandidate.notes &&
+					dufAppliesCandidate.notes.includes("not applicable to single")
+				) {
+					assumptions.push(
+						"Density requirements (DUF) not applicable to single- or two-family residences."
+					);
+				}
+			}
 
 			// Build flags
 			const flags = {
@@ -1254,6 +1462,22 @@ export class ZoningResolutionAgent extends BaseAgent {
 				specialLotCoverageRulesNotEvaluated: true, // V1: Section 23-363 not implemented
 			};
 
+			// Add density flags (append-only)
+			if (densityRequirements && densityRequirements.candidates) {
+				const dufAppliesCandidate = densityRequirements.candidates.find(
+					(c) => c.id === "duf_applies"
+				);
+				flags.densityComputed =
+					dufAppliesCandidate?.duf_applicable &&
+					dufAppliesCandidate?.max_dwelling_units !== null;
+				flags.densityMultipleDwelling =
+					buildingTypeResult.buildingType === "multiple_dwelling" ||
+					(unitsres !== null && unitsres !== undefined && unitsres > 2);
+				flags.densityMissingInputs =
+					dufAppliesCandidate?.notes?.includes("Missing required inputs") ||
+					false;
+			}
+
 			// Build result object
 			const result = {
 				district: district,
@@ -1268,6 +1492,7 @@ export class ZoningResolutionAgent extends BaseAgent {
 					min_base_height: minBaseHeight,
 					envelope: heightEnvelope,
 				},
+				density: densityRequirements,
 				assumptions: assumptions,
 				flags: flags,
 			};

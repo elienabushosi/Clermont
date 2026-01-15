@@ -53,6 +53,7 @@ export default function ViewReportPage() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [showDebugMode, setShowDebugMode] = useState(false); // false = pretty mode (default), true = debug mode
+	const [densityCandidateId, setDensityCandidateId] = useState<string>("duf_applies"); // Default to "DUF applies"
 
 	useEffect(() => {
 		const fetchReport = async () => {
@@ -63,6 +64,8 @@ export default function ViewReportPage() {
 				setError(null);
 				const data = await getReportWithSources(reportId);
 				setReportData(data);
+				// Reset density toggle to default when report changes
+				setDensityCandidateId("duf_applies");
 			} catch (err) {
 				console.error("Error fetching report:", err);
 				setError(
@@ -924,6 +927,155 @@ export default function ViewReportPage() {
 															</Badge>
 														)}
 													</div>
+												</div>
+											)}
+
+											{/* Density Requirements */}
+											{formattedData.zoningResolution
+												?.density &&
+												formattedData.zoningResolution.density
+													.candidates &&
+												formattedData.zoningResolution.density
+													.candidates.length > 0 && (
+												<div className="pt-4 border-t border-[rgba(55,50,47,0.12)]">
+													<div className="flex items-center justify-between mb-3">
+														<p className="text-sm font-semibold text-[#37322F]">
+															Density Requirements
+														</p>
+														<Badge className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+															Assumption
+														</Badge>
+													</div>
+													<div className="mb-3">
+														<div className="flex items-center gap-2 mb-2">
+															<Label
+																htmlFor="density-toggle"
+																className="text-sm text-[#605A57] cursor-pointer"
+															>
+																{
+																	formattedData.zoningResolution
+																		.density.candidates.find(
+																			(c: any) =>
+																				c.id ===
+																				densityCandidateId
+																		)?.label ||
+																	"Standard (DUF applies)"
+																}
+															</Label>
+															<Switch
+																id="density-toggle"
+																checked={
+																	densityCandidateId ===
+																	"duf_not_applicable"
+																}
+																onCheckedChange={(checked) => {
+																	setDensityCandidateId(
+																		checked
+																			? "duf_not_applicable"
+																			: "duf_applies"
+																	);
+																}}
+																className="data-[state=checked]:bg-blue-600"
+															/>
+														</div>
+														<p className="text-xs text-[#605A57] italic">
+															Toggle between DUF-applicable and
+															DUF-not-applicable scenarios
+														</p>
+													</div>
+													{(() => {
+														const selectedCandidate =
+															formattedData.zoningResolution.density.candidates.find(
+																(c: any) =>
+																	c.id === densityCandidateId
+															) ||
+															formattedData.zoningResolution.density
+																.candidates[0];
+														return (
+															<div className="space-y-3">
+																{selectedCandidate
+																	.max_dwelling_units !==
+																	null ? (
+																	<div>
+																		<p className="text-sm text-[#605A57] mb-2">
+																			Maximum Dwelling Units
+																		</p>
+																		<p className="text-[#37322F] font-medium text-lg">
+																			{
+																				selectedCandidate.max_dwelling_units
+																			}{" "}
+																			units
+																		</p>
+																		{selectedCandidate
+																			.max_res_floor_area_sqft && (
+																			<p className="text-xs text-[#605A57] mt-1">
+																				Based on max residential floor
+																				area:{" "}
+																				{selectedCandidate.max_res_floor_area_sqft.toLocaleString()}{" "}
+																				sq ft
+																			</p>
+																		)}
+																		{selectedCandidate.duf_value && (
+																			<p className="text-xs text-[#605A57] mt-1">
+																				DUF: {selectedCandidate.duf_value}
+																				{" • "}
+																				{
+																					selectedCandidate.rounding_rule
+																				}
+																			</p>
+																		)}
+																	</div>
+																) : (
+																	<div>
+																		<p className="text-sm text-[#605A57] mb-2">
+																			Maximum Dwelling Units
+																		</p>
+																		<p className="text-[#37322F] font-medium text-sm">
+																			Not determined by DUF
+																		</p>
+																		{selectedCandidate.notes && (
+																			<p className="text-xs text-[#605A57] mt-2">
+																				{selectedCandidate.notes}
+																			</p>
+																		)}
+																	</div>
+																)}
+																{selectedCandidate.notes &&
+																	selectedCandidate
+																		.max_dwelling_units !==
+																		null && (
+																		<p className="text-xs text-[#605A57]">
+																			{selectedCandidate.notes}
+																		</p>
+																	)}
+																{selectedCandidate.source_section && (
+																	<div className="flex items-center gap-2">
+																		<p className="text-xs text-[#605A57] mt-1">
+																			{selectedCandidate.source_section}
+																		</p>
+																		{selectedCandidate.source_url && (
+																			<a
+																				href={
+																					selectedCandidate.source_url
+																				}
+																				target="_blank"
+																				rel="noopener noreferrer"
+																				className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline"
+																			>
+																				See citation
+																				<ExternalLink className="size-3" />
+																			</a>
+																		)}
+																	</div>
+																)}
+																{selectedCandidate.requires_manual_review && (
+																	<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-2">
+																		Requires Manual Review
+																	</Badge>
+																)}
+															</div>
+														);
+													})()}
 												</div>
 											)}
 										</div>
