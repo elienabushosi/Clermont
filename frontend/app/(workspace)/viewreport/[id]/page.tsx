@@ -938,13 +938,10 @@ export default function ViewReportPage() {
 												formattedData.zoningResolution.density
 													.candidates.length > 0 && (
 												<div className="pt-4 border-t border-[rgba(55,50,47,0.12)]">
-													<div className="flex items-center justify-between mb-3">
+													<div className="mb-3">
 														<p className="text-sm font-semibold text-[#37322F]">
 															Density Requirements
 														</p>
-														<Badge className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
-															Assumption
-														</Badge>
 													</div>
 													<div className="mb-3">
 														<div className="flex items-center gap-2 mb-2">

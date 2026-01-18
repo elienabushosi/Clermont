@@ -14,7 +14,7 @@ backend/
 │       ├── geoservice.js        # Geoservice agent (NYC Planning Geoservice API)
 │       ├── zola.js             # Zola agent (CARTO MapPLUTO API)
 │       ├── tax-lot-finder.js   # Tax lot finder (placeholder/disabled)
-│       └── zoning-resolution.js # Zoning resolution (placeholder/disabled)
+│       └── zoning-resolution.js # Zoning resolution
 └── services/
     └── report-service.js       # Database operations for reports
 ```

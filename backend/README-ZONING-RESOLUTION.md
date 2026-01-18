@@ -2,7 +2,7 @@
 
 ## Overview
 
-The ZoningResolutionAgent computes maximum Floor Area Ratio (FAR), maximum lot coverage, and height constraints (minimum base height, maximum base height, and maximum building height) for residential zoning districts in NYC. It implements hardcoded lookup tables and rule-based calculations based on the NYC Zoning Resolution (Article II - Residential Districts).
+The ZoningResolutionAgent computes maximum Floor Area Ratio (FAR), maximum lot coverage, height constraints (minimum base height, maximum base height, and maximum building height), and density requirements (Dwelling Unit Factor / DUF) for residential zoning districts in NYC. It implements hardcoded lookup tables and rule-based calculations based on the NYC Zoning Resolution (Article II - Residential Districts).
 
 ## Architecture
 
@@ -10,7 +10,7 @@ The ZoningResolutionAgent computes maximum Floor Area Ratio (FAR), maximum lot c
 
 1. **GeoserviceAgent** resolves address → BBL + normalized address + coordinates
 2. **ZolaAgent** uses BBL → fetches MapPLUTO parcel data from CARTO
-3. **ZoningResolutionAgent** reads Zola data → computes max FAR and max lot coverage
+3. **ZoningResolutionAgent** reads Zola data → computes max FAR, max lot coverage, height constraints, and density requirements (DUF)
 4. Results stored in `report_sources` table with `SourceKey: "zoning_resolution"`
 5. Report status remains 'ready' (ZoningResolutionAgent is non-critical)
 
@@ -18,10 +18,10 @@ The ZoningResolutionAgent computes maximum Floor Area Ratio (FAR), maximum lot c
 
 #### ZoningResolutionAgent (`zoning_resolution`)
 
--   **Purpose**: Compute maximum FAR, maximum lot coverage, and height constraints for residential districts
+-   **Purpose**: Compute maximum FAR, maximum lot coverage, height constraints, and density requirements (DUF) for residential districts
 -   **Data Source**: Reads from stored Zola source data (no external API calls)
 -   **Input**: Reads from `report_sources` where `SourceKey = "zola"`
--   **Output**: Computed zoning constraints (max FAR, max lot coverage, height constraints, derived calculations)
+-   **Output**: Computed zoning constraints (max FAR, max lot coverage, height constraints, density requirements, derived calculations)
 -   **Status**: Non-critical - failure does not fail the report
 -   **Scope**: Residential districts only (R1-R12) - Article II
 
@@ -42,6 +42,7 @@ The agent reads the following fields from the Zola source data:
 -   `overlay1`, `overlay2` - Zoning overlays
 -   `spdist1`, `spdist2`, `spdist3` - Special purpose districts
 -   `lotdepth`, `lotfront` - Lot dimensions (for future special rules)
+-   `unitsres` - Number of residential units (for density requirements calculation)
 
 ## Calculations
 
@@ -192,6 +193,71 @@ The agent calculates three height-related metrics for residential districts:
 
 **Citations**: All height values include source URLs and section references to the NYC Zoning Resolution.
 
+### Density Requirements (Dwelling Unit Factor / DUF)
+
+**Method**: Rule-based calculation using NYC Zoning Resolution Section 23-52
+
+**Purpose**: Calculate maximum number of dwelling units for multiple dwelling residences based on the Dwelling Unit Factor (DUF) rule.
+
+**Calculation Formula**:
+
+-   Maximum dwelling units = (Maximum residential floor area permitted) / DUF
+-   Default DUF value: 680 square feet per unit
+-   Uses `maxBuildableFloorAreaSqft` (derived from `maxFAR × lotArea`) as the maximum residential floor area permitted
+
+**Rounding Rule**:
+
+-   Fractions >= 0.75 → round up to next unit
+-   Fractions < 0.75 → round down
+
+**Applicability**:
+
+-   Only applies to multiple dwelling residences
+-   Determined by: `buildingType === "multiple_dwelling"` OR `unitsres > 2`
+-   Single- or two-family residences: DUF not applicable (returns null with explanatory note)
+
+**Output Structure**:
+The density requirements are returned as a toggle with two candidates:
+
+1. **"DUF applies" (default)**:
+
+    - `duf_applicable: true`
+    - `duf_value: 680`
+    - `max_dwelling_units`: Calculated integer (or null if missing inputs)
+    - `max_res_floor_area_sqft`: The maxBuildableFloorAreaSqft used in calculation
+    - `rounding_rule`: "Fractions >= 0.75 round up; otherwise round down"
+    - `source_url`: "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52"
+    - `source_section`: "ZR §23-52"
+    - `requires_manual_review`: true if overlays/special districts present
+
+2. **"DUF not applicable"**:
+    - `duf_applicable: false`
+    - `duf_value: null`
+    - `max_dwelling_units: null`
+    - `notes`: "No DUF-based unit cap; unit count governed by other constraints."
+    - `source_url`: "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52"
+    - `source_section`: "ZR §23-52"
+    - `requires_manual_review: true`
+
+**Exception Cases** (V1 approach):
+
+-   V1 does NOT automatically determine senior/affordable/conversion eligibility
+-   Instead, provides both scenarios as toggle candidates
+-   Frontend allows users to switch between "DUF applies" and "DUF not applicable" scenarios
+-   Manual review required for special cases (overlays, special districts, conversions, etc.)
+
+**Missing Inputs**:
+
+-   If `maxFAR` or `lotArea` is missing → `max_dwelling_units` returns `null` with note: "Missing required inputs (max FAR or lot area) for DUF calculation"
+
+**Frontend Display**:
+
+-   Toggle switch between the two candidates
+-   Default selection: "DUF applies"
+-   Displays max dwelling units when DUF applies
+-   Shows explanatory notes when DUF not applicable
+-   Citation link to ZR §23-52
+
 ### Inferences
 
 **Lot Type**:
@@ -256,9 +322,39 @@ The agent stores results in `report_sources` with the following structure:
 			"requires_manual_review": true
 		}
 	},
+	"density": {
+		"kind": "toggle",
+		"candidates": [
+			{
+				"id": "duf_applies",
+				"label": "Standard (DUF applies)",
+				"duf_applicable": true,
+				"duf_value": 680,
+				"max_dwelling_units": 27,
+				"max_res_floor_area_sqft": 18812.5,
+				"rounding_rule": "Fractions >= 0.75 round up; otherwise round down",
+				"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+				"source_section": "ZR §23-52",
+				"notes": null,
+				"requires_manual_review": false
+			},
+			{
+				"id": "duf_not_applicable",
+				"label": "Affordable/Senior/Conversion (DUF not applicable)",
+				"duf_applicable": false,
+				"duf_value": null,
+				"max_dwelling_units": null,
+				"notes": "No DUF-based unit cap; unit count governed by other constraints.",
+				"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+				"source_section": "ZR §23-52",
+				"requires_manual_review": true
+			}
+		]
+	},
 	"assumptions": [
 		"Lot type unknown; assumed interior/through",
-		"Single- or two-family in R1/R2 (Section 23-361(a))"
+		"Single- or two-family in R1/R2 (Section 23-361(a))",
+		"Density requirements computed using DUF=680 scenario; alternate scenario provided for DUF-not-applicable cases."
 	],
 	"flags": {
 		"hasOverlay": false,
@@ -267,7 +363,10 @@ The agent stores results in `report_sources` with the following structure:
 		"lotTypeInferred": true,
 		"buildingTypeInferred": false,
 		"eligibleSiteNotEvaluated": false,
-		"specialLotCoverageRulesNotEvaluated": true
+		"specialLotCoverageRulesNotEvaluated": true,
+		"densityComputed": true,
+		"densityMultipleDwelling": true,
+		"densityMissingInputs": false
 	}
 }
 ```
@@ -293,7 +392,12 @@ The agent stores results in `report_sources` with the following structure:
     - R1-R5 maximum base/building heights return `"unsupported"` (not implemented)
     - Conditional districts require manual review to determine which candidate applies
     - Some district variants may not be in lookup tables
-6. **No AI or web scraping**: All calculations are deterministic and rule-based
+6. **Density requirements limitations**:
+    - DUF exceptions (senior housing, affordable housing, conversions, special density areas) not automatically determined
+    - Provides toggle between "DUF applies" and "DUF not applicable" scenarios for user selection
+    - Requires manual review when overlays or special districts are present
+    - Single- or two-family residences return "not applicable" (DUF only applies to multiple dwellings)
+7. **No AI or web scraping**: All calculations are deterministic and rule-based
 
 ## Testing
 
@@ -365,9 +469,44 @@ For a property in R8 district with:
 			],
 			"requires_manual_review": true
 		}
+	},
+	"density": {
+		"kind": "toggle",
+		"candidates": [
+			{
+				"id": "duf_applies",
+				"label": "Standard (DUF applies)",
+				"duf_applicable": true,
+				"duf_value": 680,
+				"max_dwelling_units": 27,
+				"max_res_floor_area_sqft": 18812.5,
+				"rounding_rule": "Fractions >= 0.75 round up; otherwise round down",
+				"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+				"source_section": "ZR §23-52",
+				"notes": null,
+				"requires_manual_review": false
+			},
+			{
+				"id": "duf_not_applicable",
+				"label": "Affordable/Senior/Conversion (DUF not applicable)",
+				"duf_applicable": false,
+				"duf_value": null,
+				"max_dwelling_units": null,
+				"notes": "No DUF-based unit cap; unit count governed by other constraints.",
+				"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3#23-52",
+				"source_section": "ZR §23-52",
+				"requires_manual_review": true
+			}
+		]
 	}
 }
 ```
+
+**Density Calculation Details**:
+
+-   Max buildable floor area: 18,812.5 sq ft (6.02 FAR × 3,125 sq ft lot area)
+-   DUF calculation: 18,812.5 / 680 = 27.665 units
+-   Rounding: 0.665 < 0.75 → round down to **27 units**
 
 ## Future Enhancements
 
@@ -381,6 +520,9 @@ For a property in R8 district with:
 -   [ ] Expand height constraints to R1-R5 districts (currently returns "see_section" or "unsupported")
 -   [ ] Add logic to automatically determine which candidate applies for conditional height districts
 -   [ ] Cache calculations by district + lot type + building type
+-   [ ] Automatically determine DUF exception eligibility (senior housing, affordable housing, conversions)
+-   [ ] Add logic to detect special density areas for DUF exceptions
+-   [ ] Support variable DUF values (currently hardcoded to 680)
 
 ## References
 
@@ -391,4 +533,5 @@ For a property in R8 district with:
 -   Section 23-421 - Minimum base height in R1 through R3 Districts
 -   Section 23-422 - Minimum base height in R4 and R5 Districts
 -   Section 23-432 - Height and setback regulations in R6 through R12 Districts
+-   Section 23-52 - Maximum Number of Dwelling Units (Density Regulations) - [https://zr.planning.nyc.gov/article-ii/chapter-3#23-52](https://zr.planning.nyc.gov/article-ii/chapter-3#23-52)
 -   NYC Department of City Planning - Zoning Handbook
