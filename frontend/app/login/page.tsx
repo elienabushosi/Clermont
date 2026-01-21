@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { ArrowLeft } from "lucide-react";
 import {
 	Form,
 	FormControl,
@@ -85,6 +86,13 @@ export default function LoginPage() {
 	return (
 		<div className="w-full min-h-screen bg-[#F7F5F3] flex items-center justify-center p-4">
 			<div className="w-full max-w-md">
+				<button
+					onClick={() => router.push("/")}
+					className="mb-4 flex items-center gap-2 text-[#37322F] hover:text-[#4090C2] transition-colors text-sm font-medium"
+				>
+					<ArrowLeft className="w-4 h-4" />
+					Back
+				</button>
 				<div className="bg-white rounded-lg shadow-sm border border-[rgba(55,50,47,0.12)] p-8">
 					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
 						Log in to Lindero

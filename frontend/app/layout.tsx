@@ -25,10 +25,9 @@ export const metadata: Metadata = {
 		"Client-intake and asset-analysis tool for developers & architects that automatically generates property feasibility snapshots using just a client's address.",
 	generator: "v0.app",
 	icons: {
-		icon: [
-			{ url: "/icon.svg", type: "image/svg+xml", sizes: "32x32" },
-		],
-		apple: "/icon.svg",
+		icon: "/favicon-32x32.png",
+		apple: "/favicon-32x32.png",
+		shortcut: "/favicon-32x32.png",
 	},
 };
 

@@ -145,3 +145,25 @@ DROP TRIGGER IF EXISTS update_report_sources_updated_at ON report_sources;
 CREATE TRIGGER update_report_sources_updated_at
 BEFORE UPDATE ON report_sources
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+
+-- ----------------------------------------------------
+-- Join Codes table
+-- ----------------------------------------------------
+CREATE TABLE IF NOT EXISTS joincodes (
+    "IdJoinCode" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "Code" TEXT NOT NULL UNIQUE,
+    "IdOrganization" UUID NOT NULL REFERENCES organizations("IdOrganization") ON DELETE CASCADE,
+    "CreatedBy" UUID NOT NULL REFERENCES users("IdUser") ON DELETE CASCADE,
+    "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    "ExpiresAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+    "UsedAt" TIMESTAMP WITH TIME ZONE,
+    "UsedBy" UUID REFERENCES users("IdUser") ON DELETE SET NULL
+);
+
+-- Indexes for joincodes
+CREATE INDEX IF NOT EXISTS idx_joincodes_code ON joincodes("Code");
+CREATE INDEX IF NOT EXISTS idx_joincodes_organization ON joincodes("IdOrganization");
+CREATE INDEX IF NOT EXISTS idx_joincodes_createdby ON joincodes("CreatedBy");
+CREATE INDEX IF NOT EXISTS idx_joincodes_expiresat ON joincodes("ExpiresAt");
+CREATE INDEX IF NOT EXISTS idx_joincodes_usedat ON joincodes("UsedAt");

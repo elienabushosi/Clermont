@@ -13,8 +13,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Users, Shield, UserPlus } from "lucide-react";
-import { getTeamMembers, type TeamMember } from "@/lib/team";
+import { Users, Shield, UserPlus, Copy, Check } from "lucide-react";
+import {
+	getTeamMembers,
+	generateJoinCode,
+	getJoinCodes,
+	type TeamMember,
+	type JoinCode,
+} from "@/lib/team";
 import { getCurrentUser } from "@/lib/auth";
 
 export default function TeamPage() {
@@ -22,6 +28,14 @@ export default function TeamPage() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+	const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+	const [joinCodes, setJoinCodes] = useState<JoinCode[]>([]);
+	const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+	const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+	const [copiedCode, setCopiedCode] = useState<string | null>(null);
+	const [showJoinCodes, setShowJoinCodes] = useState(false);
+
+	const isOwner = currentUserRole === "Owner";
 
 	useEffect(() => {
 		const fetchData = async () => {
@@ -33,11 +47,22 @@ export default function TeamPage() {
 				const currentUser = await getCurrentUser();
 				if (currentUser) {
 					setCurrentUserId(currentUser.user.IdUser);
+					setCurrentUserRole(currentUser.user.Role);
 				}
 
 				// Fetch team members
 				const members = await getTeamMembers();
 				setTeamMembers(members);
+
+				// Fetch join codes if user is owner
+				if (currentUser?.user.Role === "Owner") {
+					try {
+						const codes = await getJoinCodes();
+						setJoinCodes(codes);
+					} catch (err) {
+						console.error("Error fetching join codes:", err);
+					}
+				}
 			} catch (err) {
 				console.error("Error fetching team data:", err);
 				setError(
@@ -52,6 +77,38 @@ export default function TeamPage() {
 
 		fetchData();
 	}, []);
+
+	const handleGenerateCode = async () => {
+		setIsGeneratingCode(true);
+		setError(null);
+		try {
+			const code = await generateJoinCode();
+			setGeneratedCode(code.Code);
+			setCopiedCode(null);
+			// Refresh join codes list
+			const codes = await getJoinCodes();
+			setJoinCodes(codes);
+			setShowJoinCodes(true);
+		} catch (err) {
+			setError(
+				err instanceof Error
+					? err.message
+					: "Failed to generate join code"
+			);
+		} finally {
+			setIsGeneratingCode(false);
+		}
+	};
+
+	const handleCopyCode = async (code: string) => {
+		try {
+			await navigator.clipboard.writeText(code);
+			setCopiedCode(code);
+			setTimeout(() => setCopiedCode(null), 2000);
+		} catch (err) {
+			console.error("Failed to copy code:", err);
+		}
+	};
 
 	function getRoleBadgeColor(role: string) {
 		if (role === "Owner" || role === "Admin") {
@@ -103,11 +160,122 @@ export default function TeamPage() {
 							View your team members and their roles
 						</p>
 					</div>
-					<Button>
-						<UserPlus className="size-4 mr-2" />
-						Invite Member
-					</Button>
+					{isOwner && (
+						<Button onClick={handleGenerateCode} disabled={isGeneratingCode}>
+							<UserPlus className="size-4 mr-2" />
+							{isGeneratingCode ? "Generating..." : "Invite Member"}
+						</Button>
+					)}
 				</div>
+
+				{/* Generated Code Display */}
+				{generatedCode && (
+					<div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+						<div className="flex items-center justify-between">
+							<div>
+								<p className="text-sm font-medium text-green-800 mb-1">
+									Join code generated!
+								</p>
+								<p className="text-sm text-green-700 mb-2">
+									Share this code with team members to invite them:
+								</p>
+								<div className="flex items-center gap-2">
+									<code className="px-3 py-1.5 bg-white border border-green-300 rounded text-sm font-mono text-green-900">
+										{generatedCode}
+									</code>
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => handleCopyCode(generatedCode)}
+										className="h-8"
+									>
+										{copiedCode === generatedCode ? (
+											<>
+												<Check className="size-3 mr-1" />
+												Copied!
+											</>
+										) : (
+											<>
+												<Copy className="size-3 mr-1" />
+												Copy
+											</>
+										)}
+									</Button>
+								</div>
+								<p className="text-xs text-green-600 mt-2">
+									This code expires in 7 days and can only be used once.
+								</p>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Active Join Codes (Owner only) */}
+				{isOwner && joinCodes.length > 0 && (
+					<div className="mb-6">
+						<div className="flex items-center justify-between mb-3">
+							<h2 className="text-lg font-semibold text-[#37322F]">
+								Active Join Codes
+							</h2>
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={() => setShowJoinCodes(!showJoinCodes)}
+							>
+								{showJoinCodes ? "Hide" : "Show"} ({joinCodes.length})
+							</Button>
+						</div>
+						{showJoinCodes && (
+							<div className="border border-[rgba(55,50,47,0.12)] rounded-md overflow-hidden">
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead className="text-[#37322F]">Code</TableHead>
+											<TableHead className="text-[#37322F]">Created</TableHead>
+											<TableHead className="text-[#37322F]">Expires</TableHead>
+											<TableHead className="text-[#37322F]">Actions</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{joinCodes.map((code) => (
+											<TableRow key={code.IdJoinCode}>
+												<TableCell className="font-mono text-sm">
+													{code.Code}
+												</TableCell>
+												<TableCell className="text-[#605A57]">
+													{format(new Date(code.CreatedAt), "MMM d, yyyy")}
+												</TableCell>
+												<TableCell className="text-[#605A57]">
+													{format(new Date(code.ExpiresAt), "MMM d, yyyy")}
+												</TableCell>
+												<TableCell>
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => handleCopyCode(code.Code)}
+														className="h-8"
+													>
+														{copiedCode === code.Code ? (
+															<>
+																<Check className="size-3 mr-1" />
+																Copied!
+															</>
+														) : (
+															<>
+																<Copy className="size-3 mr-1" />
+																Copy
+															</>
+														)}
+													</Button>
+												</TableCell>
+											</TableRow>
+										))}
+									</TableBody>
+								</Table>
+							</div>
+						)}
+					</div>
+				)}
 
 				{/* Team Members Table */}
 				<div className="border border-[rgba(55,50,47,0.12)] rounded-md overflow-hidden">
