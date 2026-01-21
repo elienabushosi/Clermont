@@ -9,6 +9,9 @@ export interface Report {
 	UpdatedAt: string;
 	ClientName: string | null;
 	ClientEmail: string | null;
+	CreatedBy: string | null;
+	CreatedByName: string | null;
+	CreatedByEmail: string | null;
 	District: string | null;
 }
 
@@ -62,12 +65,18 @@ export interface ReportWithSources {
 		Status: "pending" | "ready" | "failed";
 		CreatedAt: string;
 		UpdatedAt: string;
+		CreatedBy: string | null;
 	};
 	client: {
 		IdClient: string;
 		Name: string;
 		Email: string | null;
 		PhoneNumber: string | null;
+	} | null;
+	creator: {
+		IdUser: string;
+		Name: string;
+		Email: string | null;
 	} | null;
 	sources: ReportSource[];
 }
@@ -105,7 +114,8 @@ export async function getReportWithSources(
 	const data = await response.json();
 	return {
 		report: data.report,
-		client: data.client,
+		client: data.client || null,
+		creator: data.creator || null,
 		sources: data.sources || [],
 	};
 }

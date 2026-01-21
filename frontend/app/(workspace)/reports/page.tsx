@@ -113,6 +113,9 @@ export default function ReportsPage() {
 										Created At
 									</TableHead>
 									<TableHead className="text-[#37322F]">
+										Created By
+									</TableHead>
+									<TableHead className="text-[#37322F]">
 										Status
 									</TableHead>
 									<TableHead className="text-[#37322F]">
@@ -145,6 +148,9 @@ export default function ReportsPage() {
 												new Date(report.CreatedAt),
 												"MMM d, yyyy 'at' h:mm a"
 											)}
+										</TableCell>
+										<TableCell className="text-[#605A57]">
+											{report.CreatedByName || "—"}
 										</TableCell>
 										<TableCell>
 											<Badge

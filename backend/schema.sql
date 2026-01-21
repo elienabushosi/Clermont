@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS reports (
     "IdReport" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "IdOrganization" UUID NOT NULL REFERENCES organizations("IdOrganization") ON DELETE CASCADE,
     "IdClient" UUID NULL REFERENCES clients("IdClient") ON DELETE SET NULL,
+    "CreatedBy" UUID NULL REFERENCES users("IdUser") ON DELETE SET NULL,
     "Name" TEXT NOT NULL,
     "Address" TEXT NOT NULL,
     "AddressNormalized" TEXT,
@@ -101,6 +102,7 @@ CREATE TABLE IF NOT EXISTS reports (
 -- Indexes for reports
 CREATE INDEX IF NOT EXISTS idx_reports_organization ON reports("IdOrganization");
 CREATE INDEX IF NOT EXISTS idx_reports_client ON reports("IdClient");
+CREATE INDEX IF NOT EXISTS idx_reports_createdby ON reports("CreatedBy");
 CREATE INDEX IF NOT EXISTS idx_reports_org_createdat ON reports("IdOrganization", "CreatedAt" DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_bbl ON reports("BBL");
 CREATE INDEX IF NOT EXISTS idx_reports_org_bbl ON reports("IdOrganization", "BBL");

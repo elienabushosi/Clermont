@@ -8,6 +8,7 @@ import { supabase } from "../lib/supabase.js";
  * @param {string} reportData.normalizedAddress - Normalized address (optional)
  * @param {string} reportData.organizationId - Organization ID
  * @param {string} reportData.clientId - Client ID (optional)
+ * @param {string} reportData.createdBy - User ID who created the report (optional)
  * @param {string} reportData.name - Report name
  * @param {string} reportData.bbl - BBL identifier (optional, will be set by Geoservice)
  * @param {number} reportData.latitude - Latitude (optional)
@@ -20,6 +21,7 @@ export async function createReport(reportData) {
 		.insert({
 			IdOrganization: reportData.organizationId,
 			IdClient: reportData.clientId || null,
+			CreatedBy: reportData.createdBy || null,
 			Name: reportData.name || reportData.address,
 			Address: reportData.address,
 			AddressNormalized: reportData.normalizedAddress || null,
@@ -220,6 +222,20 @@ export async function getReportWithSources(reportId, organizationId) {
 		}
 	}
 
+	// Get creator information if report has a creator
+	let creatorData = null;
+	if (report.CreatedBy) {
+		const { data: creator, error: creatorError } = await supabase
+			.from("users")
+			.select("IdUser, Name, Email")
+			.eq("IdUser", report.CreatedBy)
+			.single();
+
+		if (!creatorError && creator) {
+			creatorData = creator;
+		}
+	}
+
 	// Get all report sources
 	const { data: sources, error: sourcesError } = await supabase
 		.from("report_sources")
@@ -244,8 +260,10 @@ export async function getReportWithSources(reportId, organizationId) {
 			Status: report.Status,
 			CreatedAt: report.CreatedAt,
 			UpdatedAt: report.UpdatedAt,
+			CreatedBy: report.CreatedBy || null,
 		},
 		client: clientData,
+		creator: creatorData,
 		sources: sources || [],
 	};
 }
@@ -260,7 +278,7 @@ export async function getReportsByOrganization(organizationId) {
 	const { data: reports, error: reportsError } = await supabase
 		.from("reports")
 		.select(
-			"IdReport, Address, AddressNormalized, Status, CreatedAt, UpdatedAt, IdClient"
+			"IdReport, Address, AddressNormalized, Status, CreatedAt, UpdatedAt, IdClient, CreatedBy"
 		)
 		.eq("IdOrganization", organizationId)
 		.eq("Enabled", true)
@@ -296,6 +314,27 @@ export async function getReportsByOrganization(organizationId) {
 		}
 	}
 
+	// Get user IDs that created reports
+	const userIds = reports
+		.map((r) => r.CreatedBy)
+		.filter((id) => id !== null);
+
+	// Fetch users if there are any
+	let usersMap = {};
+	if (userIds.length > 0) {
+		const { data: users, error: usersError } = await supabase
+			.from("users")
+			.select("IdUser, Name, Email")
+			.in("IdUser", userIds);
+
+		if (!usersError && users) {
+			usersMap = users.reduce((acc, user) => {
+				acc[user.IdUser] = user;
+				return acc;
+			}, {});
+		}
+	}
+
 	// Get report IDs to fetch district from zola sources
 	const reportIds = reports.map((r) => r.IdReport);
 
@@ -326,9 +365,10 @@ export async function getReportsByOrganization(organizationId) {
 		}
 	}
 
-	// Combine reports with client information and district
+	// Combine reports with client information, creator information, and district
 	return reports.map((report) => {
 		const client = report.IdClient ? clientsMap[report.IdClient] : null;
+		const creator = report.CreatedBy ? usersMap[report.CreatedBy] : null;
 
 		return {
 			IdReport: report.IdReport,
@@ -339,6 +379,9 @@ export async function getReportsByOrganization(organizationId) {
 			UpdatedAt: report.UpdatedAt,
 			ClientName: client?.Name || null,
 			ClientEmail: client?.Email || null,
+			CreatedBy: report.CreatedBy || null,
+			CreatedByName: creator?.Name || null,
+			CreatedByEmail: creator?.Email || null,
 			District: districtMap[report.IdReport] || null,
 		};
 	});

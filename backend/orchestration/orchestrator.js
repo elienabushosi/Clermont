@@ -36,6 +36,7 @@ export async function generateReport(
 			normalizedAddress: addressData.normalizedAddress || null, // Optional hint from frontend
 			organizationId: organizationId,
 			clientId: clientId,
+			createdBy: userId,
 			name: addressData.address,
 		});
 
