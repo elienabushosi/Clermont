@@ -354,4 +354,74 @@ router.get("/verify", async (req, res) => {
 	}
 });
 
+// Get team members (users in the same organization)
+router.get("/team", async (req, res) => {
+	try {
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+
+		// Verify token and get user
+		const {
+			data: { user },
+			error,
+		} = await supabase.auth.getUser(token);
+
+		if (error || !user) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		// Get user details from our custom users table
+		const { data: userData, error: userError } = await supabase
+			.from("users")
+			.select("IdUser, IdOrganization")
+			.eq("Email", user.email)
+			.single();
+
+		if (userError || !userData) {
+			return res.status(401).json({
+				status: "error",
+				message: "User not found",
+			});
+		}
+
+		// Get all users in the same organization
+		const { data: teamMembers, error: teamError } = await supabase
+			.from("users")
+			.select("IdUser, Name, Email, Role, CreatedAt")
+			.eq("IdOrganization", userData.IdOrganization)
+			.order("CreatedAt", { ascending: false });
+
+		if (teamError) {
+			return res.status(500).json({
+				status: "error",
+				message: "Failed to fetch team members",
+				error: teamError.message,
+			});
+		}
+
+		res.json({
+			status: "success",
+			teamMembers: teamMembers || [],
+		});
+	} catch (error) {
+		console.error("Error fetching team members:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error fetching team members",
+			error: error.message,
+		});
+	}
+});
+
 export default router;

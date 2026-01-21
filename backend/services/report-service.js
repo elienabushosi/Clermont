@@ -296,7 +296,37 @@ export async function getReportsByOrganization(organizationId) {
 		}
 	}
 
-	// Combine reports with client information
+	// Get report IDs to fetch district from zola sources
+	const reportIds = reports.map((r) => r.IdReport);
+
+	// Fetch zola sources to get district information
+	let districtMap = {};
+	if (reportIds.length > 0) {
+		const { data: zolaSources, error: zolaError } = await supabase
+			.from("report_sources")
+			.select("IdReport, ContentJson")
+			.eq("SourceKey", "zola")
+			.in("IdReport", reportIds)
+			.eq("Status", "succeeded");
+
+		if (!zolaError && zolaSources) {
+			zolaSources.forEach((source) => {
+				if (source.ContentJson) {
+					// Extract district from zola ContentJson
+					// ContentJson structure: { contentJson: { zonedist1: "R8", ... } } or { zonedist1: "R8", ... }
+					const zolaData =
+						source.ContentJson.contentJson ||
+						source.ContentJson;
+					const district = zolaData?.zonedist1 || null;
+					if (district) {
+						districtMap[source.IdReport] = district;
+					}
+				}
+			});
+		}
+	}
+
+	// Combine reports with client information and district
 	return reports.map((report) => {
 		const client = report.IdClient ? clientsMap[report.IdClient] : null;
 
@@ -309,6 +339,7 @@ export async function getReportsByOrganization(organizationId) {
 			UpdatedAt: report.UpdatedAt,
 			ClientName: client?.Name || null,
 			ClientEmail: client?.Email || null,
+			District: districtMap[report.IdReport] || null,
 		};
 	});
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,9 @@ export default function ViewReportPage() {
 	const params = useParams();
 	const router = useRouter();
 	const reportId = params.id as string;
+	const arcgisMapRef = useRef<HTMLDivElement>(null);
+	const [arcgisScriptLoaded, setArcgisScriptLoaded] = useState(false);
+	const [mapElementCreated, setMapElementCreated] = useState(false);
 
 	const [reportData, setReportData] = useState<ReportWithSources | null>(
 		null
@@ -78,6 +81,309 @@ export default function ViewReportPage() {
 
 		fetchReport();
 	}, [reportId]);
+
+	// Create map element in DOM first (before script loads) so custom element can upgrade it
+	// Check periodically until ref is available and we have coordinates
+	useEffect(() => {
+		if (!reportData) return; // Wait for report data to be loaded
+
+		const sources = reportData.sources || [];
+		const geoserviceSource = sources.find((s) => s.SourceKey === "geoservice");
+		const zolaSource = sources.find((s) => s.SourceKey === "zola");
+		
+		const geoserviceData = geoserviceSource?.ContentJson || {};
+		const zolaData = zolaSource?.ContentJson?.contentJson || zolaSource?.ContentJson || {};
+		
+		// Get coordinates (prefer Zola, fallback to Geoservice)
+		const lat = zolaData.lat || geoserviceData.lat || null;
+		const lng = zolaData.lon || zolaData.lng || geoserviceData.lng || null;
+		
+		// Default to NYC center if no coordinates available
+		const centerLat = lat || 40.696281660383654;
+		const centerLng = lng || -73.96328347161334;
+		const centerString = `${centerLng},${centerLat}`;
+
+		const checkAndCreate = () => {
+			if (arcgisMapRef.current && !arcgisMapRef.current.querySelector("arcgis-embedded-map")) {
+				console.log("Creating map element in DOM before script loads with center:", centerString);
+				arcgisMapRef.current.innerHTML = `<arcgis-embedded-map style="height:600px;width:100%;" item-id="51d6d85803264b2a81a95ec7b59b9ead" theme="light" heading-enabled legend-enabled share-enabled center="${centerString}" scale="144447.638572" portal-url="https://www.arcgis.com"></arcgis-embedded-map>`;
+				return true; // Element created
+			}
+			return false; // Ref not available yet
+		};
+
+		// Try immediately
+		if (checkAndCreate()) {
+			return;
+		}
+
+		// If ref not available, check periodically
+		const interval = setInterval(() => {
+			if (checkAndCreate()) {
+				clearInterval(interval);
+			}
+		}, 100);
+
+		// Cleanup after 5 seconds max
+		const timeout = setTimeout(() => {
+			clearInterval(interval);
+		}, 5000);
+
+		return () => {
+			clearInterval(interval);
+			clearTimeout(timeout);
+		};
+	}, [reportData]);
+
+	// Load ArcGIS embeddable components script and wait for custom element to be defined
+	useEffect(() => {
+		// Check if script is already loaded
+		const existingScript = document.querySelector(
+			'script[src="https://js.arcgis.com/4.34/embeddable-components/"]'
+		);
+
+		const initializeMap = () => {
+			if (customElements.get("arcgis-embedded-map")) {
+				console.log("arcgis-embedded-map custom element already defined");
+				setArcgisScriptLoaded(true);
+			} else {
+				customElements
+					.whenDefined("arcgis-embedded-map")
+					.then(() => {
+						console.log("arcgis-embedded-map custom element is now defined");
+						setArcgisScriptLoaded(true);
+					})
+					.catch((error) => {
+						console.log("Custom element not defined, retrying...", error);
+						setTimeout(() => {
+							if (customElements.get("arcgis-embedded-map")) {
+								setArcgisScriptLoaded(true);
+							} else {
+								// Force set loaded after delay
+								setTimeout(() => setArcgisScriptLoaded(true), 2000);
+							}
+						}, 2000);
+					});
+			}
+		};
+
+		if (existingScript) {
+			// Script already exists
+			setTimeout(initializeMap, 500);
+		} else {
+			// Create and load script
+			const script = document.createElement("script");
+			script.type = "module";
+			script.src = "https://js.arcgis.com/4.34/embeddable-components/";
+			script.onload = () => {
+				console.log("ArcGIS script loaded, waiting for custom element definition");
+				setTimeout(initializeMap, 1000);
+			};
+			script.onerror = () => {
+				console.error("Failed to load ArcGIS embeddable components");
+			};
+			document.head.appendChild(script);
+		}
+	}, []);
+
+	// Remove loading message when script is loaded and inspect element API
+	// This runs whenever arcgisScriptLoaded changes, and checks periodically for ref availability
+	useEffect(() => {
+		if (!arcgisScriptLoaded || !reportData) {
+			return;
+		}
+
+		// Get coordinates from report data
+		const sources = reportData.sources || [];
+		const geoserviceSource = sources.find((s) => s.SourceKey === "geoservice");
+		const zolaSource = sources.find((s) => s.SourceKey === "zola");
+		
+		const geoserviceData = geoserviceSource?.ContentJson || {};
+		const zolaData = zolaSource?.ContentJson?.contentJson || zolaSource?.ContentJson || {};
+		
+		const lat = zolaData.lat || geoserviceData.lat || null;
+		const lng = zolaData.lon || zolaData.lng || geoserviceData.lng || null;
+
+		const performInspection = () => {
+			if (!arcgisMapRef.current) {
+				return false; // Ref not available yet
+			}
+
+			const loadingDiv = arcgisMapRef.current.querySelector("div");
+			if (loadingDiv && loadingDiv.textContent?.includes("Loading transit zone map")) {
+				loadingDiv.remove();
+			}
+			
+			// Wait a bit for element to be fully upgraded
+			setTimeout(() => {
+				// Verify element exists and inspect its API
+				const mapElement = arcgisMapRef.current?.querySelector("arcgis-embedded-map");
+				
+				if (mapElement) {
+					// Update center property if we have coordinates
+					if (lat && lng && mapElement.center) {
+						try {
+							(mapElement as any).center = [lng, lat];
+							console.log("Updated map center to property coordinates:", [lng, lat]);
+						} catch (error) {
+							console.log("Could not update center property:", error);
+						}
+					}
+					console.log("=== ArcGIS Map Element Inspection ===");
+					console.log("Element:", mapElement);
+					console.log("Element tagName:", mapElement.tagName);
+					console.log("Element constructor:", mapElement.constructor.name);
+					
+					// Check for Shadow DOM
+					if (mapElement.shadowRoot) {
+						console.log("Shadow DOM found:", mapElement.shadowRoot);
+						
+						// Search for standard inputs
+						const shadowInputs = mapElement.shadowRoot.querySelectorAll("input");
+						console.log("Standard inputs in Shadow DOM:", shadowInputs.length, shadowInputs);
+						
+						// Search for custom elements that might be search inputs (ArcGIS/Calcite components)
+						const customSearchElements = mapElement.shadowRoot.querySelectorAll(
+							'calcite-input, calcite-search, calcite-combobox, esri-search, esri-search-widget, [role="search"], [aria-label*="search" i], [placeholder*="search" i]'
+						);
+						console.log("Custom search elements found:", customSearchElements.length, customSearchElements);
+						
+						// Look for any elements with search-related attributes
+						const allElements = mapElement.shadowRoot.querySelectorAll("*");
+						const searchRelatedElements: Element[] = [];
+						allElements.forEach((el) => {
+							const ariaLabel = el.getAttribute("aria-label")?.toLowerCase() || "";
+							const placeholder = el.getAttribute("placeholder")?.toLowerCase() || "";
+							const role = el.getAttribute("role")?.toLowerCase() || "";
+							const id = el.id?.toLowerCase() || "";
+							const className = el.className?.toString().toLowerCase() || "";
+							
+							if (
+								ariaLabel.includes("search") ||
+								placeholder.includes("search") ||
+								role.includes("search") ||
+								id.includes("search") ||
+								className.includes("search")
+							) {
+								searchRelatedElements.push(el);
+							}
+						});
+						console.log("Elements with search-related attributes:", searchRelatedElements.length, searchRelatedElements);
+						
+						// Log details of search-related elements
+						searchRelatedElements.forEach((el, idx) => {
+							console.log(`Search-related element ${idx}:`, {
+								tagName: el.tagName,
+								id: el.id,
+								className: el.className,
+								ariaLabel: el.getAttribute("aria-label"),
+								placeholder: el.getAttribute("placeholder"),
+								role: el.getAttribute("role"),
+								value: (el as any).value,
+								textContent: el.textContent?.substring(0, 50)
+							});
+						});
+						
+						// Try to find the ArcGIS Search widget specifically
+						const esriWidgets = mapElement.shadowRoot.querySelectorAll("[class*='esri'], [class*='search'], [id*='search']");
+						console.log("Potential ESRI widgets:", esriWidgets.length);
+						esriWidgets.forEach((widget, idx) => {
+							if (idx < 5) { // Limit to first 5
+								console.log(`Widget ${idx}:`, {
+									tagName: widget.tagName,
+									id: widget.id,
+									className: widget.className,
+									innerHTML: widget.innerHTML?.substring(0, 100)
+								});
+							}
+						});
+						
+						// Check if we can access nested Shadow DOMs
+						const allCustomElements = mapElement.shadowRoot.querySelectorAll("*");
+						allCustomElements.forEach((el) => {
+							if (el.shadowRoot) {
+								console.log(`Nested Shadow DOM found in ${el.tagName}:`, el.shadowRoot);
+								const nestedInputs = el.shadowRoot.querySelectorAll("input");
+								if (nestedInputs.length > 0) {
+									console.log(`Found ${nestedInputs.length} inputs in nested Shadow DOM of ${el.tagName}`);
+								}
+							}
+						});
+					} else {
+						console.log("No Shadow DOM found");
+					}
+					
+					// Check for properties
+					console.log("Element properties:", Object.getOwnPropertyNames(mapElement));
+					console.log("Element prototype:", Object.getOwnPropertyNames(Object.getPrototypeOf(mapElement)));
+					
+					// Check for common ArcGIS properties
+					const possibleProps = ['itemId', 'item-id', 'center', 'scale', 'address', 'searchAddress', 'currentAddress'];
+					possibleProps.forEach(prop => {
+						if (prop in mapElement) {
+							console.log(`Property "${prop}":`, (mapElement as any)[prop]);
+						}
+					});
+					
+					// Check for methods
+					const possibleMethods = ['search', 'searchAddress', 'getAddress', 'getCurrentAddress', 'setAddress'];
+					possibleMethods.forEach(method => {
+						if (typeof (mapElement as any)[method] === 'function') {
+							console.log(`Method "${method}" exists`);
+						}
+					});
+					
+					// Check for event listeners or events
+					console.log("Checking for events...");
+					const testEvents = ['addresschange', 'address-selected', 'search', 'search-complete'];
+					testEvents.forEach(eventName => {
+						mapElement.addEventListener(eventName, (e) => {
+							console.log(`Event "${eventName}" fired:`, e);
+						});
+					});
+					
+					// Try to access all attributes
+					console.log("All attributes:", Array.from(mapElement.attributes).map(attr => `${attr.name}="${attr.value}"`));
+					
+					// Check for internal properties (might be prefixed with _ or $)
+					const allKeys = Object.keys(mapElement);
+					const internalKeys = allKeys.filter(key => key.startsWith('_') || key.startsWith('$'));
+					if (internalKeys.length > 0) {
+						console.log("Internal properties found:", internalKeys);
+					}
+					
+					console.log("=== End Inspection ===");
+					return true; // Inspection completed
+				} else {
+					console.log("Map element not found yet, ref content:", arcgisMapRef.current?.innerHTML);
+					return false; // Element not found yet
+				}
+			}, 500); // Wait 500ms for element to be fully upgraded
+			return true; // Started inspection
+		};
+
+		// Try immediately
+		if (performInspection()) {
+			return;
+		}
+
+		// If ref not available, check periodically (ref is attached when parking section renders)
+		const interval = setInterval(() => {
+			if (performInspection()) {
+				clearInterval(interval);
+			}
+		}, 200);
+
+		// Stop checking after 10 seconds
+		const timeout = setTimeout(() => {
+			clearInterval(interval);
+		}, 10000);
+
+		return () => {
+			clearInterval(interval);
+			clearTimeout(timeout);
+		};
+	}, [arcgisScriptLoaded, reportData]);
 
 	if (isLoading) {
 		return (
@@ -628,10 +934,6 @@ export default function ViewReportPage() {
 											Zoning Classification
 										</h3>
 									</div>
-									<p className="text-sm text-[#605A57]">
-										Zoning district regulations and
-										requirements
-									</p>
 								</div>
 								<div className="grid grid-cols-2 gap-4">
 									{formattedData.zoningDistricts && (
@@ -644,9 +946,452 @@ export default function ViewReportPage() {
 											</Badge>
 										</div>
 									)}
+									{formattedData.zoningResolution?.parking?.transit_zone && (
+										<div>
+											<p className="text-sm text-[#605A57] mb-2">
+												Transit Zone
+											</p>
+											<Badge className="bg-blue-100 text-blue-700 border-blue-200">
+												{formattedData.zoningResolution.parking.transit_zone ===
+												"inner"
+													? "Inner Transit Zone"
+													: formattedData.zoningResolution.parking.transit_zone ===
+													  "outer"
+													? "Outer Transit Zone"
+													: formattedData.zoningResolution.parking.transit_zone ===
+													  "manhattan_core_lic"
+													? "Manhattan Core & LIC"
+													: formattedData.zoningResolution.parking.transit_zone ===
+													  "beyond_gtz"
+													? "Beyond Greater Transit Zone"
+													: "Unknown"}
+											</Badge>
+										</div>
+									)}
 								</div>
 							</CardContent>
 						</Card>
+
+						{/* Zoning Constraints (Height) */}
+						{formattedData.zoningResolution?.height && (
+							<Card className="mb-6">
+								<CardContent className="pt-6">
+									<div className="mb-4">
+										<div className="flex items-center gap-2 mb-1">
+											<Ruler className="size-5 text-[#4090C2]" />
+											<h3 className="text-lg font-semibold text-[#37322F]">
+												Zoning Constraints (Height)
+											</h3>
+										</div>
+										<p className="text-sm text-[#605A57]">
+											Height regulations and constraints
+										</p>
+									</div>
+									<div className="grid grid-cols-3 gap-4">
+										{/* Minimum Base Height */}
+										{formattedData.zoningResolution.height
+											.min_base_height && (
+											<div>
+												<p className="text-sm text-[#605A57] mb-2">
+													Minimum Base Height
+												</p>
+												{formattedData.zoningResolution
+													.height.min_base_height
+													.kind === "fixed" &&
+												formattedData.zoningResolution
+													.height.min_base_height
+													.value_ft != null ? (
+													<>
+														<p className="text-[#37322F] font-medium text-lg">
+															{
+																formattedData
+																	.zoningResolution
+																	.height
+																	.min_base_height
+																	.value_ft
+															}{" "}
+															ft
+														</p>
+														{formattedData
+															.zoningResolution
+															.height
+															.min_base_height
+															.source_section && (
+															<p className="text-xs text-[#605A57] mt-1">
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_section
+																}
+															</p>
+														)}
+													</>
+												) : formattedData
+														.zoningResolution.height
+														.min_base_height
+														.kind ===
+														"conditional" &&
+												  formattedData.zoningResolution
+														.height.min_base_height
+														.candidates ? (
+													<div>
+														<p className="text-[#37322F] font-medium text-lg">
+															{Math.min(
+																...formattedData.zoningResolution.height.min_base_height.candidates.map(
+																	(c: any) =>
+																		c.value_ft
+																)
+															)}
+															{" - "}
+															{Math.max(
+																...formattedData.zoningResolution.height.min_base_height.candidates.map(
+																	(c: any) =>
+																		c.value_ft
+																)
+															)}{" "}
+															ft
+														</p>
+														<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-1">
+															Conditional
+														</Badge>
+														{formattedData
+															.zoningResolution
+															.height
+															.min_base_height
+															.source_url && (
+															<a
+																href={
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_url
+																}
+																target="_blank"
+																rel="noopener noreferrer"
+																className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-2"
+															>
+																See citation
+																<ExternalLink className="size-3" />
+															</a>
+														)}
+														{formattedData
+															.zoningResolution
+															.height
+															.min_base_height
+															.source_section && (
+															<p className="text-xs text-[#605A57] mt-1">
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_section
+																}
+															</p>
+														)}
+													</div>
+												) : formattedData
+														.zoningResolution.height
+														.min_base_height
+														.kind ===
+												  "see_section" ? (
+													<div>
+														<p className="text-[#37322F] font-medium text-sm">
+															See Section
+														</p>
+														{formattedData
+															.zoningResolution
+															.height
+															.min_base_height
+															.source_url && (
+															<a
+																href={
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_url
+																}
+																target="_blank"
+																rel="noopener noreferrer"
+																className="text-xs text-[#4090C2] hover:underline mt-1 block"
+															>
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_section
+																}
+															</a>
+														)}
+													</div>
+												) : (
+													<p className="text-sm text-[#605A57]">
+														Not available
+													</p>
+												)}
+											</div>
+										)}
+
+										{/* Maximum Base Height */}
+										{formattedData.zoningResolution.height
+											.envelope &&
+											formattedData.zoningResolution
+												.height.envelope.candidates &&
+											formattedData.zoningResolution
+												.height.envelope.candidates
+												.length > 0 && (
+												<div>
+													<p className="text-sm text-[#605A57] mb-2">
+														Maximum Base Height
+													</p>
+													{formattedData
+														.zoningResolution.height
+														.envelope.kind ===
+													"fixed" ? (
+														<>
+															<p className="text-[#37322F] font-medium text-lg">
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.envelope
+																		.candidates[0]
+																		.max_base_height_ft
+																}{" "}
+																ft
+															</p>
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_section && (
+																<p className="text-xs text-[#605A57] mt-1">
+																	{
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_section
+																	}
+																</p>
+															)}
+														</>
+													) : formattedData
+															.zoningResolution
+															.height.envelope
+															.kind ===
+													  "conditional" ? (
+														<div>
+															<p className="text-[#37322F] font-medium text-lg">
+																{Math.min(
+																	...formattedData.zoningResolution.height.envelope.candidates.map(
+																		(
+																			c: any
+																		) =>
+																			c.max_base_height_ft
+																	)
+																)}
+																{" - "}
+																{Math.max(
+																	...formattedData.zoningResolution.height.envelope.candidates.map(
+																		(
+																			c: any
+																		) =>
+																			c.max_base_height_ft
+																	)
+																)}{" "}
+																ft
+															</p>
+															<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-1">
+																Conditional
+															</Badge>
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_url && (
+																<a
+																	href={
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_url
+																	}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-2"
+																>
+																	See citation
+																	<ExternalLink className="size-3" />
+																</a>
+															)}
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_section && (
+																<p className="text-xs text-[#605A57] mt-1">
+																	{
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_section
+																	}
+																</p>
+															)}
+														</div>
+													) : (
+														<p className="text-sm text-[#605A57]">
+															Not available
+														</p>
+													)}
+												</div>
+											)}
+
+										{/* Maximum Building Height */}
+										{formattedData.zoningResolution.height
+											.envelope &&
+											formattedData.zoningResolution
+												.height.envelope.candidates &&
+											formattedData.zoningResolution
+												.height.envelope.candidates
+												.length > 0 && (
+												<div>
+													<p className="text-sm text-[#605A57] mb-2">
+														Maximum Building Height
+													</p>
+													{formattedData
+														.zoningResolution.height
+														.envelope.kind ===
+													"fixed" ? (
+														<>
+															<p className="text-[#37322F] font-medium text-lg">
+																{
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.envelope
+																		.candidates[0]
+																		.max_building_height_ft
+																}{" "}
+																ft
+															</p>
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_section && (
+																<p className="text-xs text-[#605A57] mt-1">
+																	{
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_section
+																	}
+																</p>
+															)}
+														</>
+													) : formattedData
+															.zoningResolution
+															.height.envelope
+															.kind ===
+													  "conditional" ? (
+														<div>
+															<p className="text-[#37322F] font-medium text-lg">
+																{Math.min(
+																	...formattedData.zoningResolution.height.envelope.candidates.map(
+																		(
+																			c: any
+																		) =>
+																			c.max_building_height_ft
+																	)
+																)}
+																{" - "}
+																{Math.max(
+																	...formattedData.zoningResolution.height.envelope.candidates.map(
+																		(
+																			c: any
+																		) =>
+																			c.max_building_height_ft
+																	)
+																)}{" "}
+																ft
+															</p>
+															<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-1">
+																Conditional
+															</Badge>
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_url && (
+																<a
+																	href={
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_url
+																	}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-2"
+																>
+																	See citation
+																	<ExternalLink className="size-3" />
+																</a>
+															)}
+															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_section && (
+																<p className="text-xs text-[#605A57] mt-1">
+																	{
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_section
+																	}
+																</p>
+															)}
+														</div>
+													) : (
+														<p className="text-sm text-[#605A57]">
+															Not available
+														</p>
+													)}
+												</div>
+											)}
+
+										{/* Required Yards */}
+										<div>
+											<p className="text-sm text-[#605A57] mb-2">
+												Required Yards
+											</p>
+											<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
+												Pending Zoning Agent
+											</Badge>
+										</div>
+									</div>
+								</CardContent>
+							</Card>
+						)}
 
 						{/* Zoning Constraints Section */}
 						{formattedData.zoningResolution &&
@@ -1075,431 +1820,557 @@ export default function ViewReportPage() {
 													})()}
 												</div>
 											)}
+
+											{/* Parking Requirements */}
+											{formattedData.zoningResolution
+												?.parking &&
+												formattedData.zoningResolution.parking.kind !==
+													"not_applicable" &&
+												formattedData.zoningResolution.parking.kind !==
+													"unsupported" &&
+												formattedData.zoningResolution.parking.regimes &&
+												formattedData.zoningResolution.parking.regimes.length >
+													0 && (
+												<div className="pt-4 border-t border-[rgba(55,50,47,0.12)]">
+													<div className="mb-3">
+														<p className="text-sm font-semibold text-[#37322F]">
+															Parking Requirements
+														</p>
+														{formattedData.zoningResolution.parking
+															.transit_zone && (
+															<p className="text-xs text-[#605A57] mt-1">
+																Transit Zone:{" "}
+																{formattedData.zoningResolution.parking.transit_zone ===
+																"inner"
+																	? "Inner Transit Zone"
+																	: formattedData.zoningResolution.parking.transit_zone ===
+																	  "outer"
+																	? "Outer Transit Zone"
+																	: formattedData.zoningResolution.parking.transit_zone ===
+																	  "manhattan_core_lic"
+																	? "Manhattan Core & LIC"
+																	: formattedData.zoningResolution.parking.transit_zone ===
+																	  "beyond_gtz"
+																	? "Beyond Greater Transit Zone"
+																	: "Unknown"}
+															</p>
+														)}
+													</div>
+
+													<div className="space-y-4">
+														{formattedData.zoningResolution.parking.regimes.map(
+															(
+																regime: any,
+																regimeIndex: number
+															) => (
+																<div
+																	key={regimeIndex}
+																	className="border border-[rgba(55,50,47,0.12)] rounded-md p-3"
+																>
+																	<div className="mb-2">
+																		<p className="text-sm font-medium text-[#37322F]">
+																			{regime.regime_key ===
+																			"existing_inner_transit_25_21"
+																				? "Regime 25-21 (Inner Transit Zone)"
+																				: regime.regime_key ===
+																				  "outer_transit_25_22"
+																				? "Regime 25-22 (Outer Transit Zone)"
+																				: regime.regime_key ===
+																				  "beyond_gtz_25_23"
+																				? "Regime 25-23 (Beyond GTZ)"
+																				: regime.regime_key}
+																		</p>
+																		{regime.source_section && (
+																			<div className="flex items-center gap-2 mt-1">
+																				<p className="text-xs text-[#605A57]">
+																					{regime.source_section}
+																				</p>
+																				{regime.source_url && (
+																					<a
+																						href={regime.source_url}
+																						target="_blank"
+																						rel="noopener noreferrer"
+																						className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline"
+																					>
+																						See citation
+																						<ExternalLink className="size-3" />
+																					</a>
+																				)}
+																			</div>
+																		)}
+																	</div>
+
+																	<div className="space-y-3">
+																		{regime.scenarios.map(
+																			(
+																				scenario: any,
+																				scenarioIndex: number
+																			) => (
+																				<div
+																					key={scenarioIndex}
+																					className="bg-[rgba(55,50,47,0.03)] rounded p-2"
+																				>
+																					<p className="text-xs font-medium text-[#37322F] mb-2 capitalize">
+																						{scenario.scenario_key.replace(
+																							/_/g,
+																							" "
+																						)}
+																					</p>
+																					{scenario.computed
+																						.required_spaces_after_waiver !==
+																						undefined && (
+																						<div className="space-y-1">
+																							<div className="flex items-baseline gap-2">
+																								<p className="text-sm text-[#605A57]">
+																									Required Spaces:
+																								</p>
+																								<p className="text-[#37322F] font-medium text-lg">
+																									{
+																										scenario.computed
+																											.required_spaces_after_waiver
+																									}
+																								</p>
+																							</div>
+																							<p className="text-xs text-[#605A57]">
+																								{scenario.percent_per_dwelling_unit}% per
+																								dwelling unit
+																								{scenario.waiver_max_spaces > 0 && (
+																									<span>
+																										{" "}
+																										• Waiver max:{" "}
+																										{
+																											scenario.waiver_max_spaces
+																										}{" "}
+																										spaces
+																									</span>
+																								)}
+																							</p>
+																							{scenario.computed.units && (
+																								<p className="text-xs text-[#605A57]">
+																									Based on{" "}
+																									{
+																										scenario.computed.units
+																									}{" "}
+																									dwelling units
+																								</p>
+																							)}
+																						</div>
+																					)}
+																					{scenario.notes &&
+																						scenario.notes.length > 0 && (
+																							<div className="mt-2">
+																								{scenario.notes.map(
+																									(
+																										note: string,
+																										noteIndex: number
+																									) => (
+																										<p
+																											key={noteIndex}
+																											className="text-xs text-[#605A57] mt-1"
+																										>
+																											{note}
+																										</p>
+																									)
+																								)}
+																							</div>
+																						)}
+																					{scenario.requires_manual_review && (
+																						<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-2">
+																							Requires Manual Review
+																						</Badge>
+																					)}
+																				</div>
+																			)
+																		)}
+																	</div>
+																</div>
+															)
+														)}
+													</div>
+
+													{formattedData.zoningResolution.parking.flags
+														?.requires_manual_review && (
+														<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-3">
+															Overall Manual Review Required
+														</Badge>
+													)}
+
+													<div className="mt-3">
+														<p className="text-xs font-semibold text-[#37322F] mb-1">
+															Notes:
+														</p>
+														{formattedData.zoningResolution.parking
+															.assumptions &&
+															formattedData.zoningResolution.parking
+																.assumptions.length > 0 && (
+																<ul className="list-disc list-inside space-y-1 mb-3">
+																	{formattedData.zoningResolution.parking.assumptions.map(
+																		(
+																			assumption: string,
+																			index: number
+																		) => (
+																			<li
+																				key={index}
+																				className="text-xs text-[#605A57]"
+																			>
+																				{assumption}
+																			</li>
+																		)
+																	)}
+																</ul>
+															)}
+														<div className="mt-3">
+															<p className="text-xs text-[#605A57] mb-2">
+																View & open this page to verify transit zone information.
+															</p>
+															<div className="border border-[rgba(55,50,47,0.12)] rounded-md overflow-hidden">
+																<div ref={arcgisMapRef} style={{ minHeight: "600px", width: "100%" }}>
+																	{!arcgisScriptLoaded && (
+																		<div className="flex items-center justify-center h-[600px] text-[#605A57]">
+																			Loading transit zone map...
+																		</div>
+																	)}
+																</div>
+															</div>
+														</div>
+													</div>
+												</div>
+											)}
+
+											{/* Yard Requirements */}
+											{formattedData.zoningResolution?.yards && (
+												<div className="pt-4 border-t border-[rgba(55,50,47,0.12)]">
+													<div className="mb-3">
+														<p className="text-sm font-semibold text-[#37322F]">
+															Yard Requirements
+														</p>
+														<p className="text-xs text-[#605A57] mt-1">
+															Required front, side, and rear yard dimensions
+														</p>
+													</div>
+
+													<div className="space-y-4">
+														{/* Front Yard */}
+														{formattedData.zoningResolution.yards.front &&
+															formattedData.zoningResolution.yards.front.kind !==
+																"unsupported" && (
+																<div className="border border-[rgba(55,50,47,0.12)] rounded-md p-3">
+																	<div className="mb-2">
+																		<p className="text-sm font-medium text-[#37322F]">
+																			Front Yard
+																		</p>
+																		{formattedData.zoningResolution.yards.front
+																			.source_section && (
+																			<div className="flex items-center gap-2 mt-1">
+																				<p className="text-xs text-[#605A57]">
+																					{
+																						formattedData.zoningResolution.yards
+																							.front.source_section
+																					}
+																				</p>
+																				{formattedData.zoningResolution.yards.front
+																					.source_url && (
+																					<a
+																						href={
+																							formattedData.zoningResolution.yards
+																								.front.source_url
+																						}
+																						target="_blank"
+																						rel="noopener noreferrer"
+																						className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline"
+																					>
+																						See citation
+																						<ExternalLink className="size-3" />
+																					</a>
+																				)}
+																			</div>
+																		)}
+																	</div>
+																	{formattedData.zoningResolution.yards.front
+																		.value_ft !== null && (
+																		<div className="flex items-baseline gap-2 mb-2">
+																			<p className="text-sm text-[#605A57]">
+																				Required:
+																			</p>
+																			<p className="text-[#37322F] font-medium text-lg">
+																				{
+																					formattedData.zoningResolution.yards.front
+																						.value_ft
+																				}{" "}
+																				ft
+																			</p>
+																		</div>
+																	)}
+																	{formattedData.zoningResolution.yards.front
+																		.notes &&
+																		formattedData.zoningResolution.yards.front.notes
+																			.length > 0 && (
+																			<div className="mt-2">
+																				<p className="text-xs font-semibold text-[#37322F] mb-1">
+																					Possible Exceptions:
+																				</p>
+																				<ul className="list-disc list-inside space-y-1">
+																					{formattedData.zoningResolution.yards.front.notes.map(
+																						(
+																							note: string,
+																							noteIndex: number
+																						) => (
+																							<li
+																								key={noteIndex}
+																								className="text-xs text-[#605A57]"
+																							>
+																								{note}
+																							</li>
+																						)
+																					)}
+																				</ul>
+																			</div>
+																		)}
+																	{formattedData.zoningResolution.yards.front
+																		.requires_manual_review && (
+																		<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-2">
+																			Requires Manual Review
+																		</Badge>
+																	)}
+																</div>
+															)}
+
+														{/* Side Yard */}
+														{formattedData.zoningResolution.yards.side &&
+															formattedData.zoningResolution.yards.side.kind !==
+																"unsupported" && (
+																<div className="border border-[rgba(55,50,47,0.12)] rounded-md p-3">
+																	<div className="mb-2">
+																		<p className="text-sm font-medium text-[#37322F]">
+																			Side Yard
+																		</p>
+																		{formattedData.zoningResolution.yards.side
+																			.source_section && (
+																			<div className="flex items-center gap-2 mt-1">
+																				<p className="text-xs text-[#605A57]">
+																					{
+																						formattedData.zoningResolution.yards
+																							.side.source_section
+																					}
+																				</p>
+																				{formattedData.zoningResolution.yards.side
+																					.source_url && (
+																					<a
+																						href={
+																							formattedData.zoningResolution.yards
+																								.side.source_url
+																						}
+																						target="_blank"
+																						rel="noopener noreferrer"
+																						className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline"
+																					>
+																						See citation
+																						<ExternalLink className="size-3" />
+																					</a>
+																				)}
+																			</div>
+																		)}
+																	</div>
+																	{formattedData.zoningResolution.yards.side
+																		.value_ft !== null && (
+																		<div className="flex items-baseline gap-2 mb-2">
+																			<p className="text-sm text-[#605A57]">
+																				Required:
+																			</p>
+																			<p className="text-[#37322F] font-medium text-lg">
+																				{
+																					formattedData.zoningResolution.yards.side
+																						.value_ft
+																				}{" "}
+																				ft
+																			</p>
+																		</div>
+																	)}
+																	{formattedData.zoningResolution.yards.side.notes &&
+																		formattedData.zoningResolution.yards.side.notes
+																			.length > 0 && (
+																			<div className="mt-2">
+																				<p className="text-xs font-semibold text-[#37322F] mb-1">
+																					Possible Exceptions:
+																				</p>
+																				<ul className="list-disc list-inside space-y-1">
+																					{formattedData.zoningResolution.yards.side.notes.map(
+																						(
+																							note: string,
+																							noteIndex: number
+																						) => (
+																							<li
+																								key={noteIndex}
+																								className="text-xs text-[#605A57]"
+																							>
+																								{note}
+																							</li>
+																						)
+																					)}
+																				</ul>
+																			</div>
+																		)}
+																	{formattedData.zoningResolution.yards.side
+																		.requires_manual_review && (
+																		<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-2">
+																			Requires Manual Review
+																		</Badge>
+																	)}
+																</div>
+															)}
+
+														{/* Rear Yard */}
+														{formattedData.zoningResolution.yards.rear &&
+															formattedData.zoningResolution.yards.rear.kind !==
+																"unsupported" && (
+																<div className="border border-[rgba(55,50,47,0.12)] rounded-md p-3">
+																	<div className="mb-2">
+																		<p className="text-sm font-medium text-[#37322F]">
+																			Rear Yard
+																		</p>
+																		{formattedData.zoningResolution.yards.rear
+																			.source_section && (
+																			<div className="flex items-center gap-2 mt-1">
+																				<p className="text-xs text-[#605A57]">
+																					{
+																						formattedData.zoningResolution.yards
+																							.rear.source_section
+																					}
+																				</p>
+																				{formattedData.zoningResolution.yards.rear
+																					.source_url && (
+																					<a
+																						href={
+																							formattedData.zoningResolution.yards
+																								.rear.source_url
+																						}
+																						target="_blank"
+																						rel="noopener noreferrer"
+																						className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline"
+																					>
+																						See citation
+																						<ExternalLink className="size-3" />
+																					</a>
+																				)}
+																			</div>
+																		)}
+																	</div>
+																	{formattedData.zoningResolution.yards.rear
+																		.value_ft !== null && (
+																		<div className="flex items-baseline gap-2 mb-2">
+																			<p className="text-sm text-[#605A57]">
+																				Required:
+																			</p>
+																			<p className="text-[#37322F] font-medium text-lg">
+																				{
+																					formattedData.zoningResolution.yards.rear
+																						.value_ft
+																				}{" "}
+																				ft
+																			</p>
+																		</div>
+																	)}
+																	{formattedData.zoningResolution.yards.rear.notes &&
+																		formattedData.zoningResolution.yards.rear.notes
+																			.length > 0 && (
+																			<div className="mt-2">
+																				<p className="text-xs font-semibold text-[#37322F] mb-1">
+																					Possible Exceptions:
+																				</p>
+																				<ul className="list-disc list-inside space-y-1">
+																					{formattedData.zoningResolution.yards.rear.notes.map(
+																						(
+																							note: string,
+																							noteIndex: number
+																						) => (
+																							<li
+																								key={noteIndex}
+																								className="text-xs text-[#605A57]"
+																							>
+																								{note}
+																							</li>
+																						)
+																					)}
+																				</ul>
+																			</div>
+																		)}
+																	{formattedData.zoningResolution.yards.rear
+																		.requires_manual_review && (
+																		<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-2">
+																			Requires Manual Review
+																		</Badge>
+																	)}
+																</div>
+															)}
+													</div>
+
+													{/* Yard Flags */}
+													{formattedData.zoningResolution.yards.flags && (
+														<div className="mt-4 flex flex-wrap gap-2">
+															{formattedData.zoningResolution.yards.flags
+																.buildingTypeInferred && (
+																<Badge className="bg-gray-100 text-gray-700 border-gray-200">
+																	Building Type Inferred
+																</Badge>
+															)}
+															{formattedData.zoningResolution.yards.flags
+																.lotfrontMissing && (
+																<Badge className="bg-gray-100 text-gray-700 border-gray-200">
+																	Lot Frontage Missing
+																</Badge>
+															)}
+															{formattedData.zoningResolution.yards.flags
+																.lotdepthMissing && (
+																<Badge className="bg-gray-100 text-gray-700 border-gray-200">
+																	Lot Depth Missing
+																</Badge>
+															)}
+															{formattedData.zoningResolution.yards.flags
+																.shallowLotCandidate && (
+																<Badge className="bg-blue-100 text-blue-700 border-blue-200">
+																	Shallow Lot Candidate
+																</Badge>
+															)}
+															{formattedData.zoningResolution.yards.flags
+																.districtVariantUsed && (
+																<Badge className="bg-gray-100 text-gray-700 border-gray-200">
+																	District Variant Used
+																</Badge>
+															)}
+														</div>
+													)}
+												</div>
+											)}
+
+											{/* Parking Requirements - Not Applicable */}
+											{formattedData.zoningResolution
+												?.parking &&
+												formattedData.zoningResolution.parking.kind ===
+													"not_applicable" && (
+												<div className="pt-4 border-t border-[rgba(55,50,47,0.12)]">
+													<p className="text-sm font-semibold text-[#37322F] mb-2">
+														Parking Requirements
+													</p>
+													<p className="text-sm text-[#605A57]">
+														Not applicable
+													</p>
+													{formattedData.zoningResolution.parking
+														.assumptions &&
+														formattedData.zoningResolution.parking
+															.assumptions.length > 0 && (
+															<p className="text-xs text-[#605A57] mt-2">
+																{
+																	formattedData.zoningResolution.parking
+																		.assumptions[0]
+																}
+															</p>
+														)}
+												</div>
+											)}
 										</div>
 									</CardContent>
 								</Card>
 							)}
-
-						{/* Zoning Constraints (Height) */}
-						{formattedData.zoningResolution?.height && (
-							<Card className="mb-6">
-								<CardContent className="pt-6">
-									<div className="mb-4">
-										<div className="flex items-center gap-2 mb-1">
-											<Ruler className="size-5 text-[#4090C2]" />
-											<h3 className="text-lg font-semibold text-[#37322F]">
-												Zoning Constraints (Height)
-											</h3>
-										</div>
-										<p className="text-sm text-[#605A57]">
-											Height regulations and constraints
-										</p>
-									</div>
-									<div className="grid grid-cols-3 gap-4">
-										{/* Minimum Base Height */}
-										{formattedData.zoningResolution.height
-											.min_base_height && (
-											<div>
-												<p className="text-sm text-[#605A57] mb-2">
-													Minimum Base Height
-												</p>
-												{formattedData.zoningResolution
-													.height.min_base_height
-													.kind === "fixed" &&
-												formattedData.zoningResolution
-													.height.min_base_height
-													.value_ft != null ? (
-													<>
-														<p className="text-[#37322F] font-medium text-lg">
-															{
-																formattedData
-																	.zoningResolution
-																	.height
-																	.min_base_height
-																	.value_ft
-															}{" "}
-															ft
-														</p>
-														{formattedData
-															.zoningResolution
-															.height
-															.min_base_height
-															.source_section && (
-															<p className="text-xs text-[#605A57] mt-1">
-																{
-																	formattedData
-																		.zoningResolution
-																		.height
-																		.min_base_height
-																		.source_section
-																}
-															</p>
-														)}
-													</>
-												) : formattedData
-														.zoningResolution.height
-														.min_base_height
-														.kind ===
-														"conditional" &&
-												  formattedData.zoningResolution
-														.height.min_base_height
-														.candidates ? (
-													<div>
-														<p className="text-[#37322F] font-medium text-lg">
-															{Math.min(
-																...formattedData.zoningResolution.height.min_base_height.candidates.map(
-																	(c: any) =>
-																		c.value_ft
-																)
-															)}
-															{" - "}
-															{Math.max(
-																...formattedData.zoningResolution.height.min_base_height.candidates.map(
-																	(c: any) =>
-																		c.value_ft
-																)
-															)}{" "}
-															ft
-														</p>
-														<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-1">
-															Conditional
-														</Badge>
-														{formattedData
-															.zoningResolution
-															.height
-															.min_base_height
-															.source_url && (
-															<a
-																href={
-																	formattedData
-																		.zoningResolution
-																		.height
-																		.min_base_height
-																		.source_url
-																}
-																target="_blank"
-																rel="noopener noreferrer"
-																className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-2"
-															>
-																See citation
-																<ExternalLink className="size-3" />
-															</a>
-														)}
-														{formattedData
-															.zoningResolution
-															.height
-															.min_base_height
-															.source_section && (
-															<p className="text-xs text-[#605A57] mt-1">
-																{
-																	formattedData
-																		.zoningResolution
-																		.height
-																		.min_base_height
-																		.source_section
-																}
-															</p>
-														)}
-													</div>
-												) : formattedData
-														.zoningResolution.height
-														.min_base_height
-														.kind ===
-												  "see_section" ? (
-													<div>
-														<p className="text-[#37322F] font-medium text-sm">
-															See Section
-														</p>
-														{formattedData
-															.zoningResolution
-															.height
-															.min_base_height
-															.source_url && (
-															<a
-																href={
-																	formattedData
-																		.zoningResolution
-																		.height
-																		.min_base_height
-																		.source_url
-																}
-																target="_blank"
-																rel="noopener noreferrer"
-																className="text-xs text-[#4090C2] hover:underline mt-1 block"
-															>
-																{
-																	formattedData
-																		.zoningResolution
-																		.height
-																		.min_base_height
-																		.source_section
-																}
-															</a>
-														)}
-													</div>
-												) : (
-													<p className="text-sm text-[#605A57]">
-														Not available
-													</p>
-												)}
-											</div>
-										)}
-
-										{/* Maximum Base Height */}
-										{formattedData.zoningResolution.height
-											.envelope &&
-											formattedData.zoningResolution
-												.height.envelope.candidates &&
-											formattedData.zoningResolution
-												.height.envelope.candidates
-												.length > 0 && (
-												<div>
-													<p className="text-sm text-[#605A57] mb-2">
-														Maximum Base Height
-													</p>
-													{formattedData
-														.zoningResolution.height
-														.envelope.kind ===
-													"fixed" ? (
-														<>
-															<p className="text-[#37322F] font-medium text-lg">
-																{
-																	formattedData
-																		.zoningResolution
-																		.height
-																		.envelope
-																		.candidates[0]
-																		.max_base_height_ft
-																}{" "}
-																ft
-															</p>
-															{formattedData
-																.zoningResolution
-																.height.envelope
-																.candidates[0]
-																.source_section && (
-																<p className="text-xs text-[#605A57] mt-1">
-																	{
-																		formattedData
-																			.zoningResolution
-																			.height
-																			.envelope
-																			.candidates[0]
-																			.source_section
-																	}
-																</p>
-															)}
-														</>
-													) : formattedData
-															.zoningResolution
-															.height.envelope
-															.kind ===
-													  "conditional" ? (
-														<div>
-															<p className="text-[#37322F] font-medium text-lg">
-																{Math.min(
-																	...formattedData.zoningResolution.height.envelope.candidates.map(
-																		(
-																			c: any
-																		) =>
-																			c.max_base_height_ft
-																	)
-																)}
-																{" - "}
-																{Math.max(
-																	...formattedData.zoningResolution.height.envelope.candidates.map(
-																		(
-																			c: any
-																		) =>
-																			c.max_base_height_ft
-																	)
-																)}{" "}
-																ft
-															</p>
-															<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-1">
-																Conditional
-															</Badge>
-															{formattedData
-																.zoningResolution
-																.height.envelope
-																.candidates[0]
-																.source_url && (
-																<a
-																	href={
-																		formattedData
-																			.zoningResolution
-																			.height
-																			.envelope
-																			.candidates[0]
-																			.source_url
-																	}
-																	target="_blank"
-																	rel="noopener noreferrer"
-																	className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-2"
-																>
-																	See citation
-																	<ExternalLink className="size-3" />
-																</a>
-															)}
-															{formattedData
-																.zoningResolution
-																.height.envelope
-																.candidates[0]
-																.source_section && (
-																<p className="text-xs text-[#605A57] mt-1">
-																	{
-																		formattedData
-																			.zoningResolution
-																			.height
-																			.envelope
-																			.candidates[0]
-																			.source_section
-																	}
-																</p>
-															)}
-														</div>
-													) : (
-														<p className="text-sm text-[#605A57]">
-															Not available
-														</p>
-													)}
-												</div>
-											)}
-
-										{/* Maximum Building Height */}
-										{formattedData.zoningResolution.height
-											.envelope &&
-											formattedData.zoningResolution
-												.height.envelope.candidates &&
-											formattedData.zoningResolution
-												.height.envelope.candidates
-												.length > 0 && (
-												<div>
-													<p className="text-sm text-[#605A57] mb-2">
-														Maximum Building Height
-													</p>
-													{formattedData
-														.zoningResolution.height
-														.envelope.kind ===
-													"fixed" ? (
-														<>
-															<p className="text-[#37322F] font-medium text-lg">
-																{
-																	formattedData
-																		.zoningResolution
-																		.height
-																		.envelope
-																		.candidates[0]
-																		.max_building_height_ft
-																}{" "}
-																ft
-															</p>
-															{formattedData
-																.zoningResolution
-																.height.envelope
-																.candidates[0]
-																.source_section && (
-																<p className="text-xs text-[#605A57] mt-1">
-																	{
-																		formattedData
-																			.zoningResolution
-																			.height
-																			.envelope
-																			.candidates[0]
-																			.source_section
-																	}
-																</p>
-															)}
-														</>
-													) : formattedData
-															.zoningResolution
-															.height.envelope
-															.kind ===
-													  "conditional" ? (
-														<div>
-															<p className="text-[#37322F] font-medium text-lg">
-																{Math.min(
-																	...formattedData.zoningResolution.height.envelope.candidates.map(
-																		(
-																			c: any
-																		) =>
-																			c.max_building_height_ft
-																	)
-																)}
-																{" - "}
-																{Math.max(
-																	...formattedData.zoningResolution.height.envelope.candidates.map(
-																		(
-																			c: any
-																		) =>
-																			c.max_building_height_ft
-																	)
-																)}{" "}
-																ft
-															</p>
-															<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 mt-1">
-																Conditional
-															</Badge>
-															{formattedData
-																.zoningResolution
-																.height.envelope
-																.candidates[0]
-																.source_url && (
-																<a
-																	href={
-																		formattedData
-																			.zoningResolution
-																			.height
-																			.envelope
-																			.candidates[0]
-																			.source_url
-																	}
-																	target="_blank"
-																	rel="noopener noreferrer"
-																	className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-2"
-																>
-																	See citation
-																	<ExternalLink className="size-3" />
-																</a>
-															)}
-															{formattedData
-																.zoningResolution
-																.height.envelope
-																.candidates[0]
-																.source_section && (
-																<p className="text-xs text-[#605A57] mt-1">
-																	{
-																		formattedData
-																			.zoningResolution
-																			.height
-																			.envelope
-																			.candidates[0]
-																			.source_section
-																	}
-																</p>
-															)}
-														</div>
-													) : (
-														<p className="text-sm text-[#605A57]">
-															Not available
-														</p>
-													)}
-												</div>
-											)}
-
-										{/* Required Yards */}
-										<div>
-											<p className="text-sm text-[#605A57] mb-2">
-												Required Yards
-											</p>
-											<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-												Pending Zoning Agent
-											</Badge>
-										</div>
-									</div>
-								</CardContent>
-							</Card>
-						)}
 
 						{/* Neighborhood Information */}
 						<Card>

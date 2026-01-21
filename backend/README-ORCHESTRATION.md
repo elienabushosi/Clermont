@@ -12,6 +12,7 @@ backend/
 │       ├── index.js            # Agent registry/configuration
 │       ├── base-agent.js       # Abstract base class for all agents
 │       ├── geoservice.js        # Geoservice agent (NYC Planning Geoservice API)
+│       ├── transit-zones.js    # Transit Zones agent (ArcGIS Transit Zones API)
 │       ├── zola.js             # Zola agent (CARTO MapPLUTO API)
 │       ├── tax-lot-finder.js   # Tax lot finder (placeholder/disabled)
 │       └── zoning-resolution.js # Zoning resolution
@@ -72,7 +73,30 @@ backend/
     - **Critical**: If Geoservice fails, report status set to `'failed'` and process stops
     - **Update Report**: Extracts BBL, normalizedAddress, lat, lng and updates main `reports` record
 
-3. **Execute ZolaAgent (Sequential - Uses BBL from Geoservice)**
+3. **Execute TransitZonesAgent (Sequential - Uses lat/lng from Geoservice)**
+
+    - **Purpose**: Determine transit zone classification for parking requirements
+    - **API**: ArcGIS Transit Zones FeatureServer (point-in-polygon query)
+    - **Input**: `{ address, bbl, normalizedAddress, location: { lat, lng } }` (lat/lng from Geoservice)
+    - **Endpoint**: `https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/ArcGIS/rest/services/Transit_Zones/FeatureServer/0/query`
+    - **Query Method**: Point-in-polygon spatial query using lat/lng coordinates
+    - **Output**:
+        - `transitZone`: Normalized enum (`"inner"`, `"outer"`, `"manhattan_core_lic"`, `"beyond_gtz"`, `"unknown"`)
+        - `transitZoneLabel`: Human-readable label
+        - `matched`: Boolean indicating if polygon match was found
+        - `input`: Original lat/lng coordinates used
+        - `sourceUrl`: Full ArcGIS query URL
+        - `notes`: Error messages or special notes (if any)
+    - **Storage**: Result stored in `report_sources` table with SourceKey: `'transit_zones'`
+    - **Non-Critical**: TransitZonesAgent failure does not fail the report; returns `transitZone: "unknown"` on failure
+    - **Normalization**: Maps ArcGIS string values to internal enum:
+        - "Inner Transit Zone" → `"inner"`
+        - "Outer Transit Zone" → `"outer"`
+        - "Manhattan Core and Long Island City Parking Areas" → `"manhattan_core_lic"`
+        - No features found → `"beyond_gtz"`
+        - Error/timeout → `"unknown"`
+
+4. **Execute ZolaAgent (Sequential - Uses BBL from Geoservice)**
 
     - **Purpose**: Fetch property parcel data from NYC Planning Labs CARTO MapPLUTO
     - **API**: Planning Labs CARTO SQL API (`planninglabs.carto.com/api/v2/sql`)
@@ -90,7 +114,7 @@ backend/
     - **Storage**: Result stored in `report_sources` table with SourceKey: `'zola'`
     - **Non-Critical**: ZolaAgent failure does not fail the report (for V1)
 
-4. **Update Report Status**
+5. **Update Report Status**
     - If Geoservice succeeded: Status set to `'ready'`
     - If Geoservice failed: Status set to `'failed'`
 
@@ -139,6 +163,22 @@ backend/
 -   **Response Parsing**: Extracts nested response structure to get BBL, coordinates, and district information
 -   **API Key**: Stored in `process.env.GEOSERVICE_API_KEY`
 
+**TransitZonesAgent (transit-zones.js):**
+
+-   **Data Source**: ArcGIS Transit Zones FeatureServer
+-   **Endpoint**: `https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/ArcGIS/rest/services/Transit_Zones/FeatureServer/0/query`
+-   **Method**: GET request with point-in-polygon spatial query
+-   **Query Parameters**:
+    -   `geometryType`: `"esriGeometryPoint"`
+    -   `geometry`: JSON point with `{ x: lng, y: lat, spatialReference: { wkid: 4326 } }`
+    -   `inSR`: `"4326"` (WGS84)
+    -   `spatialRel`: `"esriSpatialRelIntersects"`
+    -   `outFields`: `"TranstZone"`
+    -   `returnGeometry`: `"false"`
+-   **Response Format**: GeoJSON with `features` array containing `attributes.TranstZone`
+-   **Lat/Lng Requirement**: Must receive `lat` and `lng` from GeoserviceAgent (cannot run without coordinates)
+-   **Normalization**: Converts ArcGIS string values to internal enum for consistent use by ZoningResolutionAgent
+
 **ZolaAgent (zola.js):**
 
 -   **Data Source**: Planning Labs CARTO MapPLUTO
@@ -148,10 +188,17 @@ backend/
 -   **Response Format**: GeoJSON
 -   **BBL Requirement**: Must receive BBL from GeoserviceAgent (cannot run without it)
 
+**ZoningResolutionAgent (zoning-resolution.js):**
+
+-   **Data Source**: Reads from stored `zola`, `transit_zones`, and `geoservice` sources (no external API calls)
+-   **Purpose**: Computes zoning constraints including FAR, lot coverage, height, density, and parking requirements
+-   **Input**: Reads from `report_sources` where `SourceKey` in `["zola", "transit_zones", "geoservice"]`
+-   **Output**: Computed zoning metrics stored in `report_sources` with `SourceKey: "zoning_resolution"`
+-   **Non-Critical**: Failure does not fail the report
+
 **Placeholder Agents:**
 
 -   `tax-lot-finder.js`: Returns "disabled" message
--   `zoning-resolution.js`: Returns "disabled" message
 
 ### Report Service (services/report-service.js)
 
@@ -201,18 +248,25 @@ backend/
 
 ## Key Design Decisions
 
-1. **Sequential Execution**: GeoserviceAgent must run first and succeed before ZolaAgent can execute (Zola requires BBL)
+1. **Sequential Execution**: 
+    - GeoserviceAgent must run first and succeed (provides BBL and coordinates)
+    - TransitZonesAgent runs after Geoservice (requires lat/lng)
+    - ZolaAgent runs after Geoservice (requires BBL)
+    - ZoningResolutionAgent runs after Zola, TransitZones, and Geoservice (reads stored sources)
 2. **Minimal Frontend Payload**: Frontend only sends address string; backend handles all normalization
 3. **BBL as Canonical Identifier**: BBL is extracted by Geoservice and used for all subsequent data lookups
-4. **Structured Data Extraction**: GeoserviceAgent extracts and structures all available data fields for future use
-5. **Non-Critical Agents**: ZolaAgent failure doesn't fail the report (for V1 - may change in future)
-6. **Database Storage**: All agent results stored in `report_sources` with full JSON payload for audit/debugging
+4. **Coordinates for Transit Zones**: lat/lng from Geoservice used for ArcGIS point-in-polygon queries
+5. **Structured Data Extraction**: GeoserviceAgent extracts and structures all available data fields for future use
+6. **Non-Critical Agents**: TransitZonesAgent, ZolaAgent, and ZoningResolutionAgent failures don't fail the report (for V1 - may change in future)
+7. **Database Storage**: All agent results stored in `report_sources` with full JSON payload for audit/debugging
+8. **Agent Independence**: ZoningResolutionAgent reads stored sources rather than calling external APIs directly, keeping it deterministic and testable
 
 ## Future Enhancements
 
--   Parallel execution of non-dependent agents after Geoservice
+-   Parallel execution of non-dependent agents after Geoservice (TransitZonesAgent and ZolaAgent can run in parallel)
 -   AI report generator to synthesize agent results into human-readable summary
--   Additional agents: Tax Lot Finder, Zoning Resolution
+-   Additional agents: Tax Lot Finder
 -   WebSocket/SSE for real-time report generation updates
 -   Retry logic for failed agent calls
 -   Caching of Geoservice results by address
+-   Caching of TransitZones results by lat/lng coordinates

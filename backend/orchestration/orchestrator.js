@@ -100,6 +100,45 @@ export async function generateReport(
 
 		console.log(`Geoservice succeeded. BBL: ${bbl}, Address: ${normalizedAddress}`);
 
+		// 3.5. Run TransitZonesAgent using lat/lng from Geoservice (non-critical)
+		const transitZonesAgent = getAgentBySourceKey("transit_zones");
+		if (!transitZonesAgent) {
+			console.warn("TransitZonesAgent not found, skipping...");
+		} else {
+			console.log("Executing TransitZonesAgent with lat/lng:", lat, lng);
+			try {
+				const transitZonesResult = await transitZonesAgent.execute(
+					{
+						address: addressData.address,
+						bbl: bbl,
+						normalizedAddress: normalizedAddress,
+						location: { lat, lng },
+					},
+					report.IdReport
+				);
+
+				// Store TransitZones result (non-critical - failure doesn't fail report)
+				await storeAgentResult(
+					report.IdReport,
+					"transit_zones",
+					transitZonesResult
+				);
+			} catch (transitZonesError) {
+				console.error(
+					"TransitZonesAgent failed (non-critical):",
+					transitZonesError
+				);
+				// Store failed result but don't fail the report
+				await storeAgentResult(report.IdReport, "transit_zones", {
+					status: "failed",
+					data: null,
+					error:
+						transitZonesError.message ||
+						"Unknown error in TransitZonesAgent",
+				});
+			}
+		}
+
 		// 4. Run ZolaAgent using BBL from Geoservice
 		const zolaAgent = getAgentBySourceKey("zola");
 		if (!zolaAgent) {
@@ -183,6 +222,20 @@ export async function generateReport(
 			agentResults.push({
 				agent: "zola",
 				status: zolaSource.Status === "succeeded" ? "succeeded" : "failed",
+			});
+		}
+
+		// Add TransitZones result if it exists
+		const transitZonesSource = allSources.find(
+			(s) => s.SourceKey === "transit_zones"
+		);
+		if (transitZonesSource) {
+			agentResults.push({
+				agent: "transit_zones",
+				status:
+					transitZonesSource.Status === "succeeded"
+						? "succeeded"
+						: "failed",
 			});
 		}
 

@@ -211,7 +211,7 @@ export default function DemoReportListPage() {
 				<div className="flex items-center gap-2 mb-6">
 					<FileText className="size-6 text-[#4090C2]" />
 					<h2 className="text-xl font-semibold text-[#37322F]">
-						Reports
+						Sample Reports
 					</h2>
 				</div>
 

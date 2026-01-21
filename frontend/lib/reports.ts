@@ -9,6 +9,7 @@ export interface Report {
 	UpdatedAt: string;
 	ClientName: string | null;
 	ClientEmail: string | null;
+	District: string | null;
 }
 
 /**

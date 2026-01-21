@@ -60,7 +60,7 @@ export default function ReportsPage() {
 			<div className="p-8">
 				<div className="max-w-6xl mx-auto">
 					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
-						Reports
+						Live Reports
 					</h1>
 					<div className="space-y-2">
 						{Array.from({ length: 5 }).map((_, i) => (
@@ -77,7 +77,7 @@ export default function ReportsPage() {
 			<div className="p-8">
 				<div className="max-w-6xl mx-auto">
 					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
-						Reports
+						Live Reports
 					</h1>
 					<div className="bg-red-50 border border-red-200 rounded-lg p-4">
 						<p className="text-red-700">{error}</p>
@@ -91,7 +91,7 @@ export default function ReportsPage() {
 		<div className="p-8">
 			<div className="max-w-6xl mx-auto">
 				<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
-					Reports
+					Live Reports
 				</h1>
 
 				{reports.length === 0 ? (
@@ -107,7 +107,7 @@ export default function ReportsPage() {
 										Address
 									</TableHead>
 									<TableHead className="text-[#37322F]">
-										Client
+										District
 									</TableHead>
 									<TableHead className="text-[#37322F]">
 										Created At
@@ -126,8 +126,15 @@ export default function ReportsPage() {
 										<TableCell className="text-[#37322F]">
 											{report.Address}
 										</TableCell>
-										<TableCell className="text-[#37322F]">
-											{report.ClientName || (
+										<TableCell>
+											{report.District ? (
+												<Badge
+													variant="outline"
+													className="bg-blue-100 text-blue-700 border-blue-300 text-xs"
+												>
+													{report.District}
+												</Badge>
+											) : (
 												<span className="text-[#605A57]">
 													—
 												</span>

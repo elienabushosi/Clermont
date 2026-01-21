@@ -2,47 +2,64 @@
 
 ## Overview
 
-The ZoningResolutionAgent computes maximum Floor Area Ratio (FAR), maximum lot coverage, height constraints (minimum base height, maximum base height, and maximum building height), and density requirements (Dwelling Unit Factor / DUF) for residential zoning districts in NYC. It implements hardcoded lookup tables and rule-based calculations based on the NYC Zoning Resolution (Article II - Residential Districts).
+The ZoningResolutionAgent computes maximum Floor Area Ratio (FAR), maximum lot coverage, height constraints (minimum base height, maximum base height, and maximum building height), density requirements (Dwelling Unit Factor / DUF), residential parking requirements, and yard requirements (front, side, rear) for residential zoning districts in NYC. It implements hardcoded lookup tables and rule-based calculations based on the NYC Zoning Resolution (Article II - Residential Districts, Chapter 5 - Parking and Loading).
 
 ## Architecture
 
 ### Flow
 
 1. **GeoserviceAgent** resolves address → BBL + normalized address + coordinates
-2. **ZolaAgent** uses BBL → fetches MapPLUTO parcel data from CARTO
-3. **ZoningResolutionAgent** reads Zola data → computes max FAR, max lot coverage, height constraints, and density requirements (DUF)
-4. Results stored in `report_sources` table with `SourceKey: "zoning_resolution"`
-5. Report status remains 'ready' (ZoningResolutionAgent is non-critical)
+2. **TransitZonesAgent** uses lat/lng from Geoservice → determines transit zone classification via ArcGIS
+3. **ZolaAgent** uses BBL → fetches MapPLUTO parcel data from CARTO
+4. **ZoningResolutionAgent** reads Zola, TransitZones, and Geoservice data → computes max FAR, max lot coverage, height constraints, density requirements (DUF), parking requirements, and yard requirements
+5. Results stored in `report_sources` table with `SourceKey: "zoning_resolution"`
+6. Report status remains 'ready' (ZoningResolutionAgent is non-critical)
 
 ### Agent Details
 
 #### ZoningResolutionAgent (`zoning_resolution`)
 
--   **Purpose**: Compute maximum FAR, maximum lot coverage, height constraints, and density requirements (DUF) for residential districts
--   **Data Source**: Reads from stored Zola source data (no external API calls)
--   **Input**: Reads from `report_sources` where `SourceKey = "zola"`
--   **Output**: Computed zoning constraints (max FAR, max lot coverage, height constraints, density requirements, derived calculations)
+-   **Purpose**: Compute maximum FAR, maximum lot coverage, height constraints, density requirements (DUF), residential parking requirements, and yard requirements for residential districts
+-   **Data Source**: Reads from stored source data (no external API calls)
+-   **Input**: Reads from `report_sources` where `SourceKey` in `["zola", "transit_zones", "geoservice"]`
+-   **Output**: Computed zoning constraints (max FAR, max lot coverage, height constraints, density requirements, parking requirements, yard requirements, derived calculations)
 -   **Status**: Non-critical - failure does not fail the report
--   **Scope**: Residential districts only (R1-R12) - Article II
+-   **Scope**: Residential districts only (R1-R12) - Article II, Chapter 5
 
 ## Data Sources
 
-The agent reads the following fields from the Zola source data:
+The agent reads data from multiple stored sources:
 
-### Required Fields
+### Zola Source (`SourceKey: "zola"`)
 
+**Required Fields:**
 -   `zonedist1` - Primary zoning district (e.g., "R8", "R7-2", "R6B")
 -   `lotarea` - Lot area in square feet
 -   `bldgarea` - Existing building area in square feet (for remaining FAR calculation)
 -   `bldgclass` - Building class code (for building type inference)
 
-### Optional Fields
-
+**Optional Fields:**
 -   `zonedist2`, `zonedist3`, `zonedist4` - Additional zoning districts (multi-district lots)
 -   `overlay1`, `overlay2` - Zoning overlays
 -   `spdist1`, `spdist2`, `spdist3` - Special purpose districts
--   `lotdepth`, `lotfront` - Lot dimensions (for future special rules)
--   `unitsres` - Number of residential units (for density requirements calculation)
+-   `lotdepth`, `lotfront` - Lot dimensions (for parking requirements, yard requirements, and special rules)
+-   `unitsres` - Number of residential units (for density and parking requirements)
+-   `borough` - Borough code (MN/BK/QN/BX/SI) (for parking special provisions)
+
+### TransitZones Source (`SourceKey: "transit_zones"`)
+
+**Required Fields:**
+-   `transitZone` - Normalized transit zone enum (`"inner"`, `"outer"`, `"manhattan_core_lic"`, `"beyond_gtz"`, `"unknown"`)
+
+**Optional Fields:**
+-   `transitZoneLabel` - Human-readable transit zone label
+-   `matched` - Boolean indicating if polygon match was found
+-   `notes` - Error messages or special notes
+
+### Geoservice Source (`SourceKey: "geoservice"`)
+
+**Optional Fields (for parking special provisions):**
+-   `communityDistrict` - Community district number (for Section 25-24 special provisions)
 
 ## Calculations
 
@@ -258,6 +275,261 @@ The density requirements are returned as a toggle with two candidates:
 -   Shows explanatory notes when DUF not applicable
 -   Citation link to ZR §23-52
 
+### Residential Parking Requirements
+
+**Method**: Rule-based calculation using NYC Zoning Resolution Chapter 5 (Sections 25-21, 25-22, 25-23, 25-24)
+
+**Purpose**: Calculate required parking spaces for multiple dwelling residences based on transit zone classification, zoning district, dwelling unit count, and lot characteristics.
+
+**Applicability**:
+
+-   Only computes parking if:
+    -   `buildingType === "multiple_dwelling"` AND
+    -   `unitsres > 2`
+-   Otherwise returns `kind: "not_applicable"` with explanatory note
+
+**Transit Zone Regimes**:
+
+Parking requirements are determined by transit zone classification (from TransitZonesAgent):
+
+1. **Regime 25-21** (Inner Transit Zone - existing buildings):
+    -   Applies when `transitZone === "inner"`
+    -   Lookup table by district: R1-R12 with standard percentage per dwelling unit and waiver maximum spaces
+    -   Source: ZR §25-21
+
+2. **Regime 25-22** (Outer Transit Zone):
+    -   Applies when `transitZone === "outer"`
+    -   Lookup table by district groups: R1-R12 with standard percentage and waiver maximum spaces
+    -   Source: ZR §25-22
+
+3. **Regime 25-23** (Beyond Greater Transit Zone):
+    -   Applies when `transitZone === "beyond_gtz"`
+    -   Lookup table by district with separate percentages for:
+        -   Standard units
+        -   Affordable income-restricted units
+        -   Qualifying senior units
+        -   Ancillary dwelling units (ADUs)
+    -   Includes footnote logic that modifies standard percentages based on `lotarea` and `lotfront`
+    -   Source: ZR §25-23
+
+4. **Manhattan Core & LIC** (`transitZone === "manhattan_core_lic"`):
+    -   Returns both Regime 25-21 and 25-22 candidates
+    -   Sets `requires_manual_review: true` with note: "Manhattan Core & LIC has special parking areas; confirm which section applies."
+
+5. **Unknown Transit Zone** (`transitZone === "unknown"`):
+    -   Returns all three regime candidates (25-21, 25-22, 25-23)
+    -   Sets `requires_manual_review: true` and `transit_zone_unknown: true`
+
+**Special Provisions (Section 25-24)**:
+
+-   **Bronx CD12**: Flags `special_provisions_may_apply: true` and includes both Outer and Beyond-GTZ regime candidates
+-   **Queens CD3, CD4, CD14**: Flags `special_provisions_may_apply: true` and includes both Outer and Beyond-GTZ regime candidates
+-   Note: V1 does not evaluate exact boundary geometry (e.g., "east of Junction Blvd" for Queens CD3/CD4)
+
+**Calculation Formula** (per scenario):
+
+For each scenario (standard, affordable, senior, ADU):
+
+1.   `raw_spaces = units × (percent / 100)`
+2.   `rounded_spaces = round halves up` (fraction >= 0.5 → ceil, else floor)
+3.   If `rounded_spaces <= waiverMaxSpaces` → `required_spaces = 0`
+4.   Else → `required_spaces = rounded_spaces`
+
+**Footnote Logic (Regime 25-23 only)**:
+
+Applies to "standard" scenario percentages:
+
+-   **R7-1, R7A, R7B, R7D, R7X**: Standard percent reduced to 30% where `lotarea <= 10,000 sqft`
+-   **R7-2, R7-3**: 
+    -   Standard percent reduced to 30% where `lotarea` is 10,001-15,000 sqft
+    -   Standard percent waived (0%) where `lotarea <= 10,000 sqft`
+-   **R8, R9, R10, R11, R12**:
+    -   Standard percent reduced to 20% where `lotarea` is 10,001-15,000 sqft
+    -   Standard percent waived (0%) where `lotarea <= 10,000 sqft`
+-   **Lot width <= 25 ft** (V1 assumption):
+    -   If `lotfront <= 25`, produces override candidate with 0 spaces
+    -   Sets `requires_manual_review: true` with note about "lot existed on Dec 5, 2024" assumption
+    -   For R4B districts: applies "waive 1 space" rule if required_spaces > 0
+
+**Output Structure**:
+
+```json
+{
+  "parking": {
+    "kind": "fixed" | "candidates" | "not_applicable" | "unsupported",
+    "transit_zone": "inner" | "outer" | "manhattan_core_lic" | "beyond_gtz" | "unknown",
+    "regimes": [
+      {
+        "regime_key": "existing_inner_transit_25_21" | "outer_transit_25_22" | "beyond_gtz_25_23",
+        "scenarios": [
+          {
+            "scenario_key": "standard" | "affordable_income_restricted" | "qualifying_senior" | "ancillary_dwelling_unit",
+            "percent_per_dwelling_unit": number,
+            "waiver_max_spaces": number,
+            "computed": {
+              "units": number,
+              "raw_spaces": number,
+              "rounded_spaces": number,
+              "required_spaces_after_waiver": number
+            },
+            "notes": string[],
+            "requires_manual_review": boolean
+          }
+        ],
+        "source_section": "ZR §25-21" | "ZR §25-22" | "ZR §25-23",
+        "source_url": string | null
+      }
+    ],
+    "flags": {
+      "requires_manual_review": boolean,
+      "transit_zone_unknown": boolean,
+      "affordability_unknown": boolean,
+      "senior_unknown": boolean,
+      "adu_unknown": boolean,
+      "conversion_unknown": boolean,
+      "unit_creation_date_unknown": boolean,
+      "special_provisions_may_apply": boolean
+    },
+    "assumptions": string[]
+  }
+}
+```
+
+**Disclaimers** (always included in output):
+
+-   `affordability_unknown: true` - Cannot reliably infer qualifying affordable housing status
+-   `senior_unknown: true` - Cannot reliably infer qualifying senior housing status
+-   `adu_unknown: true` - Cannot reliably infer ancillary dwelling unit status
+-   `conversion_unknown: true` - Cannot reliably infer conversion status
+-   `unit_creation_date_unknown: true` - Cannot reliably determine if units existed prior to Dec 5, 2024
+
+**Frontend Display**:
+
+-   Shows transit zone classification
+-   Displays each applicable regime with its scenarios
+-   For each scenario, shows computed spaces, percentages, waivers, and notes
+-   Citation links to ZR §25-21, §25-22, §25-23
+-   Flags and assumptions displayed as badges
+
+### Residential Yard Requirements
+
+**Method**: Rule-based calculation using NYC Zoning Resolution Article II, Chapter 3 (Sections 23-321, 23-322, 23-332, 23-335, 23-342)
+
+**Purpose**: Calculate required front, side, and rear yard dimensions for residential districts based on zoning district, building type, and lot characteristics.
+
+**Applicability**:
+
+-   **Residential districts only**: R1-R12
+-   **Non-residential districts**: Returns `kind: "unsupported"` with note "V1 supports residential districts only"
+-   **Missing district**: Returns `kind: "unsupported"` with note "District not provided"
+
+**Output Structure**:
+
+```json
+{
+	"yards": {
+		"front": {
+			"kind": "fixed" | "unsupported",
+			"value_ft": number | null,
+			"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3/23-321",
+			"source_section": "ZR §23-321",
+			"notes": ["Possible exceptions..."],
+			"requires_manual_review": boolean
+		},
+		"side": {
+			"kind": "fixed" | "unsupported",
+			"value_ft": number | null,
+			"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3/23-332",
+			"source_section": "ZR §23-332",
+			"notes": ["Possible exceptions..."],
+			"requires_manual_review": boolean
+		},
+		"rear": {
+			"kind": "fixed" | "unsupported",
+			"value_ft": number | null,
+			"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-3/23-342",
+			"source_section": "ZR §23-342",
+			"notes": ["Possible exceptions..."],
+			"requires_manual_review": boolean
+		},
+		"flags": {
+			"buildingTypeInferred": boolean,
+			"lotfrontMissing": boolean,
+			"lotdepthMissing": boolean,
+			"shallowLotCandidate": boolean,
+			"districtVariantUsed": boolean
+		}
+	}
+}
+```
+
+**Front Yard Requirements** (§23-321 for R1-R5, §23-322 for R6-R12):
+
+-   **R6-R12**: No front yard required (`value_ft: 0`, cites §23-322)
+-   **R1-R5**: Hardcoded lookup table with default values:
+    -   R1 → 20 ft
+    -   R2/R2A/R2X → 15 ft
+    -   R3-1/R3-2 → 15 ft
+    -   R3A/R3X → 10 ft
+    -   R4/R4-1/R4A → 10 ft
+    -   R4B → 5 ft
+    -   R5/R5A → 10 ft
+    -   R5B/R5D → 5 ft
+    -   Generic base fallback (R1-R5) → 20 ft
+-   **Possible exceptions** (always included in notes):
+    -   Qualifying residential site with lot width >=150 ft may reduce by 5 ft (min 5 ft)
+    -   Corner lot may reduce one front yard by 5 ft (min 5 ft)
+    -   May match shallowest adjacent front yard (min 5 ft)
+    -   Special line-up rule for R4B/R5B: no deeper than deepest adjacent, no shallower than shallowest; need not exceed 15 ft; does not apply if no prevailing street wall frontage
+    -   Facade articulation encroachments up to 50% width, max 3 ft
+-   **Manual review**: Always `true` for R1-R5 (modifiers depend on facts not available)
+
+**Side Yard Requirements** (§23-332 for R1-R5, §23-335 for R6-R12):
+
+-   **R1-R5** (§23-332):
+    -   **Single/two-family** (A*/B* building class):
+        -   Default assumes detached: R1 = 8 ft per side, R2-R5 = 5 ft per side
+        -   Notes mention: if semi-detached/zero-lot-line (R3-R5), only one 5 ft side yard applies
+        -   Notes mention: 8 ft total open area condition may apply when adjacent lot has 1-2 family
+    -   **Multiple dwelling** (C*/D* building class):
+        -   For R3-2, R4, R4B, R5, R5B, R5D: `value_ft: 0` (no required side yards per §23-332(c))
+        -   For other R1-R5: `value_ft: 5` (conservative default)
+        -   Notes mention: if any open area provided along side lot line, min width is 5 ft
+-   **R6-R12** (§23-335):
+    -   **Single/two-family**: Default assumes detached → `value_ft: 5` (two side yards, each 5 ft)
+    -   **Multiple dwelling/unknown**: `value_ft: 0` (no required side yards)
+    -   Notes mention: if open area along side lot line is provided at any level, min width is 5 ft
+    -   Notes mention: permitted obstructions in side yards are described in ZR §23-331 and §§23-311/23-312
+-   **Manual review**: Always `true` (building form cannot be reliably determined)
+
+**Rear Yard Requirements** (§23-342):
+
+-   **Default value**: `value_ft: 20` (standard lots at/below 75 ft baseline)
+-   **Possible exceptions** (always included in notes):
+    -   For detached and zero-lot-line: >=20 ft at/below 75 ft; 30 ft above 75 ft
+    -   For semi-detached/attached:
+        -   If lot width < 40 ft → 30 ft
+        -   If lot width >=40 ft → 20 ft at/below 75 ft; 30 ft above 75 ft
+    -   If `lotfront` exists, includes observed value and whether it crosses 40 ft threshold
+    -   **Shallow lot condition**: If `lotdepth < 95`, adds note about possible reduction by 0.5 ft per 1 ft under 95 (min 10 ft) only if shallow condition existed on Dec 15, 1961 and did not change
+-   **Manual review**: Always `true` (cannot determine lot type, building form, or height)
+
+**Flags**:
+
+-   `buildingTypeInferred: true` - Building type was inferred from building class (not explicitly provided)
+-   `lotfrontMissing: true` - Lot frontage not available (affects rear yard conditional notes)
+-   `lotdepthMissing: true` - Lot depth not available (affects shallow lot condition)
+-   `shallowLotCandidate: true` - Lot depth < 95 ft (shallow lot condition may apply)
+-   `districtVariantUsed: true` - Had to use base district fallback (e.g., R7-2 → R7)
+
+**Frontend Display**:
+
+-   Shows default `value_ft` for each yard type
+-   Displays notes describing possible exceptions and modifiers
+-   Citation links to ZR §23-321, §23-322, §23-332, §23-335, §23-342
+-   Flags displayed as badges
+-   Manual review badge shown when `requires_manual_review: true`
+
 ### Inferences
 
 **Lot Type**:
@@ -351,6 +623,43 @@ The agent stores results in `report_sources` with the following structure:
 			}
 		]
 	},
+	"parking": {
+		"kind": "candidates",
+		"transit_zone": "outer",
+		"regimes": [
+			{
+				"regime_key": "outer_transit_25_22",
+				"scenarios": [
+					{
+						"scenario_key": "standard",
+						"percent_per_dwelling_unit": 12,
+						"waiver_max_spaces": 30,
+						"computed": {
+							"units": 12,
+							"raw_spaces": 1.44,
+							"rounded_spaces": 1,
+							"required_spaces_after_waiver": 0
+						},
+						"notes": [],
+						"requires_manual_review": false
+					}
+				],
+				"source_section": "ZR §25-22",
+				"source_url": "https://zr.planning.nyc.gov/article-ii/chapter-5/25-22"
+			}
+		],
+		"flags": {
+			"requires_manual_review": false,
+			"transit_zone_unknown": false,
+			"affordability_unknown": true,
+			"senior_unknown": true,
+			"adu_unknown": true,
+			"conversion_unknown": true,
+			"unit_creation_date_unknown": true,
+			"special_provisions_may_apply": false
+		},
+		"assumptions": []
+	},
 	"assumptions": [
 		"Lot type unknown; assumed interior/through",
 		"Single- or two-family in R1/R2 (Section 23-361(a))",
@@ -374,6 +683,8 @@ The agent stores results in `report_sources` with the following structure:
 ## Error Handling
 
 -   **Zola source not found**: Returns error - "Zola source data not found. ZolaAgent must run before ZoningResolutionAgent."
+-   **TransitZones source not found**: Parking requirements computed with `transitZone: "unknown"` and all three regime candidates returned
+-   **Geoservice source not found**: Parking special provisions (Section 25-24) not evaluated
 -   **District not found**: Returns `null` for maxFar/maxLotCoverage with assumption explaining why
 -   **Non-residential district**: Returns `null` with assumption: "District X is not residential; V1 supports R\* districts only"
 -   **Agent failure**: Stored in `report_sources` with `Status: "failed"` and `ErrorMessage`, but does not fail the report
@@ -397,7 +708,23 @@ The agent stores results in `report_sources` with the following structure:
     - Provides toggle between "DUF applies" and "DUF not applicable" scenarios for user selection
     - Requires manual review when overlays or special districts are present
     - Single- or two-family residences return "not applicable" (DUF only applies to multiple dwellings)
-7. **No AI or web scraping**: All calculations are deterministic and rule-based
+7. **Parking requirements limitations**:
+    - Only applies to multiple dwelling residences with `unitsres > 2`
+    - Cannot reliably determine affordable/senior/ADU/conversion status - provides all scenarios
+    - Cannot determine if units existed prior to Dec 5, 2024 - lot width <= 25 ft override marked for manual review
+    - Special provisions (Section 25-24) flagged but exact boundary geometry not evaluated (e.g., "east of Junction Blvd")
+    - Some district variants may not be in lookup tables (marked as unsupported)
+    - R4-1, R4A, R4B, R5A in Regime 25-22 marked as unsupported (values not available in source)
+8. **Yard requirements limitations**:
+    - Only supports residential districts (R1-R12)
+    - Returns default values with "possible exceptions" notes; does not compute conditional values
+    - Cannot reliably determine detached vs semi-detached vs attached vs zero-lot-line building form
+    - Cannot determine interior lot vs corner lot (affects front yard modifiers)
+    - Cannot determine building height (affects rear yard requirements above 75 ft)
+    - Cannot determine if shallow lot condition existed on Dec 15, 1961 (affects rear yard reduction)
+    - Building type inferred from building class (A*/B* = single/two-family, C*/D* = multiple dwelling)
+    - All yard requirements marked for manual review due to conditional modifiers
+9. **No AI or web scraping**: All calculations are deterministic and rule-based
 
 ## Testing
 
@@ -516,13 +843,18 @@ For a property in R8 district with:
 -   [ ] Implement eligible site rules (Section 23-434)
 -   [ ] Add shallow lot rules (Section 23-363)
 -   [ ] Support commercial districts (Article III)
--   [ ] Add required yards calculations
+-   [x] Add required yards calculations (V1 implemented)
 -   [ ] Expand height constraints to R1-R5 districts (currently returns "see_section" or "unsupported")
 -   [ ] Add logic to automatically determine which candidate applies for conditional height districts
 -   [ ] Cache calculations by district + lot type + building type
 -   [ ] Automatically determine DUF exception eligibility (senior housing, affordable housing, conversions)
 -   [ ] Add logic to detect special density areas for DUF exceptions
 -   [ ] Support variable DUF values (currently hardcoded to 680)
+-   [ ] Expand parking lookup tables to cover all district variants (R4-1, R4A, R4B, R5A in Regime 25-22)
+-   [ ] Implement exact boundary geometry evaluation for Section 25-24 special provisions (Queens CD3/CD4 "east of Junction Blvd")
+-   [ ] Automatically determine affordable/senior/ADU/conversion status for parking scenarios
+-   [ ] Determine if units existed prior to Dec 5, 2024 for lot width <= 25 ft override
+-   [ ] Cache parking calculations by district + transit zone + units + lot characteristics
 
 ## References
 
@@ -534,4 +866,16 @@ For a property in R8 district with:
 -   Section 23-422 - Minimum base height in R4 and R5 Districts
 -   Section 23-432 - Height and setback regulations in R6 through R12 Districts
 -   Section 23-52 - Maximum Number of Dwelling Units (Density Regulations) - [https://zr.planning.nyc.gov/article-ii/chapter-3#23-52](https://zr.planning.nyc.gov/article-ii/chapter-3#23-52)
+-   Chapter 5 - Parking and Loading
+-   Section 25-21 - Required Accessory Off-Street Parking Spaces in Inner Transit Zones (Existing Buildings) - [https://zr.planning.nyc.gov/article-ii/chapter-5/25-21](https://zr.planning.nyc.gov/article-ii/chapter-5/25-21)
+-   Section 25-22 - Required Accessory Off-Street Parking Spaces in Outer Transit Zones - [https://zr.planning.nyc.gov/article-ii/chapter-5/25-22](https://zr.planning.nyc.gov/article-ii/chapter-5/25-22)
+-   Section 25-23 - Required Accessory Off-Street Parking Spaces Beyond the Greater Transit Zone - [https://zr.planning.nyc.gov/article-ii/chapter-5/25-23](https://zr.planning.nyc.gov/article-ii/chapter-5/25-23)
+-   Section 25-24 - Special Provisions for Required Accessory Off-Street Parking Spaces - [https://zr.planning.nyc.gov/article-ii/chapter-5/25-24](https://zr.planning.nyc.gov/article-ii/chapter-5/25-24)
+-   Section 23-321 - Front yard requirements in R1 through R5 Districts - [https://zr.planning.nyc.gov/article-ii/chapter-3/23-321](https://zr.planning.nyc.gov/article-ii/chapter-3/23-321)
+-   Section 23-322 - Front yard requirements in R6 through R12 Districts - [https://zr.planning.nyc.gov/article-ii/chapter-3/23-322](https://zr.planning.nyc.gov/article-ii/chapter-3/23-322)
+-   Section 23-331 - Permitted obstructions in side yards - [https://zr.planning.nyc.gov/article-ii/chapter-3/23-331](https://zr.planning.nyc.gov/article-ii/chapter-3/23-331)
+-   Section 23-332 - Side yard requirements in R1 through R5 Districts - [https://zr.planning.nyc.gov/article-ii/chapter-3/23-332](https://zr.planning.nyc.gov/article-ii/chapter-3/23-332)
+-   Section 23-335 - Side yard requirements in R6 through R12 Districts - [https://zr.planning.nyc.gov/article-ii/chapter-3/23-335](https://zr.planning.nyc.gov/article-ii/chapter-3/23-335)
+-   Section 23-342 - Rear yard requirements - [https://zr.planning.nyc.gov/article-ii/chapter-3/23-342](https://zr.planning.nyc.gov/article-ii/chapter-3/23-342)
+-   ArcGIS Transit Zones FeatureServer - [https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/ArcGIS/rest/services/Transit_Zones/FeatureServer](https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/ArcGIS/rest/services/Transit_Zones/FeatureServer)
 -   NYC Department of City Planning - Zoning Handbook

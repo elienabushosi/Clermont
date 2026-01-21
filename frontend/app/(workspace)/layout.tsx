@@ -32,6 +32,7 @@ import {
 	LogOut,
 	User,
 	FileCheck,
+	Users,
 } from "lucide-react";
 
 function SidebarHeaderContent({
@@ -51,7 +52,7 @@ function SidebarHeaderContent({
 				}`}
 			>
 				<img
-					src="/logos/logoipsum-348.png"
+					src="/logos/linderoworkspacelogo.png"
 					alt="Logo"
 					className={`object-contain ${
 						isCollapsed ? "h-8" : "h-auto w-full"
@@ -76,9 +77,11 @@ function getPageTitle(pathname: string): string {
 	} else if (pathname === "/search-address") {
 		return "Search Address";
 	} else if (pathname === "/reports") {
-		return "Reports";
+		return "Live Reports";
+	} else if (pathname === "/team") {
+		return "Team";
 	} else if (pathname === "/demo-report-list") {
-		return "Reports";
+		return "Sample Reports";
 	} else if (pathname.startsWith("/demo-report")) {
 		return "Report Details";
 	} else if (pathname === "/settings") {
@@ -196,19 +199,31 @@ export default function WorkspaceLayout({
 								</SidebarMenuItem>
 								<SidebarMenuItem>
 									<SidebarMenuButton
-										tooltip="Reports"
+										tooltip="Live Reports"
 										isActive={pathname === "/reports"}
 										asChild
 									>
 										<Link href="/reports">
 											<FileText className="size-4" />
-											<span>Clients</span>
+											<span>Live Reports</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>
 								<SidebarMenuItem>
 									<SidebarMenuButton
-										tooltip="Demo Reports"
+										tooltip="Team"
+										isActive={pathname === "/team"}
+										asChild
+									>
+										<Link href="/team">
+											<Users className="size-4" />
+											<span>Team</span>
+										</Link>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										tooltip="Sample Reports"
 										isActive={
 											pathname === "/demo-report-list" ||
 											pathname.startsWith("/demo-report")
@@ -217,7 +232,7 @@ export default function WorkspaceLayout({
 									>
 										<Link href="/demo-report-list">
 											<FileCheck className="size-4" />
-											<span>Your Reports</span>
+											<span>Sample Reports</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>
