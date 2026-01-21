@@ -100,3 +100,30 @@ export async function getJoinCodes(): Promise<JoinCode[]> {
 		throw error;
 	}
 }
+
+export async function removeUser(userId: string): Promise<void> {
+	try {
+		const token = localStorage.getItem("auth_token");
+		if (!token) {
+			throw new Error("No authentication token");
+		}
+
+		const response = await fetch(
+			`http://localhost:3002/api/auth/team/${userId}`,
+			{
+				method: "DELETE",
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+			}
+		);
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.message || "Failed to remove user");
+		}
+	} catch (error) {
+		console.error("Error removing user:", error);
+		throw error;
+	}
+}

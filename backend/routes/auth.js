@@ -1,6 +1,7 @@
 // Authentication routes
 import express from "express";
 import { supabase } from "../lib/supabase.js";
+import { getUserFromToken } from "../lib/auth-utils.js";
 
 const router = express.Router();
 
@@ -50,11 +51,14 @@ router.post("/signup", async (req, res) => {
 			});
 		}
 
-		// Check if user already exists
+		// Normalize email to lowercase for case-insensitive checking
+		const normalizedEmail = email.toLowerCase().trim();
+
+		// Check if user already exists (case-insensitive)
 		const { data: existingUsers, error: checkError } = await supabase
 			.from("users")
 			.select("IdUser")
-			.eq("Email", email);
+			.ilike("Email", normalizedEmail);
 
 		// If checkError exists and it's not a "not found" error, return it
 		if (checkError && checkError.code !== "PGRST116") {
@@ -159,13 +163,13 @@ router.post("/signup", async (req, res) => {
 			organization = orgData;
 		}
 
-		// Create user with organization ID
+		// Create user with organization ID (store email in lowercase)
 		const { data: user, error: userError } = await supabase
 			.from("users")
 			.insert({
 				IdOrganization: organization.IdOrganization,
 				Name: firstName,
-				Email: email,
+				Email: normalizedEmail,
 				Password: password, // Note: In production, this should be hashed!
 				Role: userRole,
 				CreatedAt: new Date().toISOString(),
@@ -245,17 +249,28 @@ router.post("/login", async (req, res) => {
 			});
 		}
 
-		// First, check if user exists in our custom users table
+		// Normalize email to lowercase for case-insensitive comparison
+		const normalizedEmail = email.toLowerCase().trim();
+
+		// First, check if user exists in our custom users table (case-insensitive)
 		const { data: user, error: userError } = await supabase
 			.from("users")
-			.select("IdUser, Email, Password, Name, IdOrganization, Role")
-			.eq("Email", email)
+			.select("IdUser, Email, Password, Name, IdOrganization, Role, Enabled")
+			.ilike("Email", normalizedEmail)
 			.single();
 
 		if (userError || !user) {
 			return res.status(401).json({
 				status: "error",
 				message: "Invalid email or password",
+			});
+		}
+
+		// Check if user is enabled
+		if (user.Enabled === false) {
+			return res.status(403).json({
+				status: "error",
+				message: "Your account has been removed from this organization",
 			});
 		}
 
@@ -271,7 +286,7 @@ router.post("/login", async (req, res) => {
 		// This will create a session and return a JWT token
 		const { data: authData, error: authError } =
 			await supabase.auth.signInWithPassword({
-				email: email,
+				email: normalizedEmail,
 				password: password,
 			});
 
@@ -285,7 +300,7 @@ router.post("/login", async (req, res) => {
 				// Create user in Supabase Auth
 				const { data: signUpData, error: signUpError } =
 					await supabase.auth.signUp({
-						email: email,
+						email: normalizedEmail,
 						password: password,
 					});
 
@@ -310,7 +325,7 @@ router.post("/login", async (req, res) => {
 				// Sign in after creating
 				const { data: signInData, error: signInError } =
 					await supabase.auth.signInWithPassword({
-						email: email,
+						email: normalizedEmail,
 						password: password,
 					});
 
@@ -391,30 +406,13 @@ router.get("/verify", async (req, res) => {
 
 		const token = authHeader.substring(7); // Remove "Bearer " prefix
 
-		// Verify token with Supabase
-		const {
-			data: { user },
-			error,
-		} = await supabase.auth.getUser(token);
+		// Get user from token (handles both custom and Supabase Auth tokens)
+		const userData = await getUserFromToken(token);
 
-		if (error || !user) {
+		if (!userData) {
 			return res.status(401).json({
 				status: "error",
 				message: "Invalid or expired token",
-			});
-		}
-
-		// Get user details from our custom users table
-		const { data: userData, error: userError } = await supabase
-			.from("users")
-			.select("IdUser, Name, Email, Role, IdOrganization")
-			.eq("Email", user.email)
-			.single();
-
-		if (userError || !userData) {
-			return res.status(401).json({
-				status: "error",
-				message: "User not found",
 			});
 		}
 
@@ -462,38 +460,22 @@ router.get("/team", async (req, res) => {
 
 		const token = authHeader.substring(7);
 
-		// Verify token and get user
-		const {
-			data: { user },
-			error,
-		} = await supabase.auth.getUser(token);
+		// Get user from token (handles both custom and Supabase Auth tokens)
+		const userData = await getUserFromToken(token);
 
-		if (error || !user) {
+		if (!userData) {
 			return res.status(401).json({
 				status: "error",
 				message: "Invalid or expired token",
 			});
 		}
 
-		// Get user details from our custom users table
-		const { data: userData, error: userError } = await supabase
-			.from("users")
-			.select("IdUser, IdOrganization")
-			.eq("Email", user.email)
-			.single();
-
-		if (userError || !userData) {
-			return res.status(401).json({
-				status: "error",
-				message: "User not found",
-			});
-		}
-
-		// Get all users in the same organization
+		// Get all enabled users in the same organization
 		const { data: teamMembers, error: teamError } = await supabase
 			.from("users")
 			.select("IdUser, Name, Email, Role, CreatedAt")
 			.eq("IdOrganization", userData.IdOrganization)
+			.eq("Enabled", true)
 			.order("CreatedAt", { ascending: false });
 
 		if (teamError) {
@@ -532,30 +514,13 @@ router.post("/joincode/generate", async (req, res) => {
 
 		const token = authHeader.substring(7);
 
-		// Verify token and get user
-		const {
-			data: { user },
-			error,
-		} = await supabase.auth.getUser(token);
+		// Get user from token (handles both custom and Supabase Auth tokens)
+		const userData = await getUserFromToken(token);
 
-		if (error || !user) {
+		if (!userData) {
 			return res.status(401).json({
 				status: "error",
 				message: "Invalid or expired token",
-			});
-		}
-
-		// Get user details from our custom users table
-		const { data: userData, error: userError } = await supabase
-			.from("users")
-			.select("IdUser, IdOrganization, Role")
-			.eq("Email", user.email)
-			.single();
-
-		if (userError || !userData) {
-			return res.status(401).json({
-				status: "error",
-				message: "User not found",
 			});
 		}
 
@@ -734,30 +699,13 @@ router.get("/joincode/list", async (req, res) => {
 
 		const token = authHeader.substring(7);
 
-		// Verify token and get user
-		const {
-			data: { user },
-			error,
-		} = await supabase.auth.getUser(token);
+		// Get user from token (handles both custom and Supabase Auth tokens)
+		const userData = await getUserFromToken(token);
 
-		if (error || !user) {
+		if (!userData) {
 			return res.status(401).json({
 				status: "error",
 				message: "Invalid or expired token",
-			});
-		}
-
-		// Get user details from our custom users table
-		const { data: userData, error: userError } = await supabase
-			.from("users")
-			.select("IdUser, IdOrganization, Role")
-			.eq("Email", user.email)
-			.single();
-
-		if (userError || !userData) {
-			return res.status(401).json({
-				status: "error",
-				message: "User not found",
 			});
 		}
 
@@ -796,6 +744,120 @@ router.get("/joincode/list", async (req, res) => {
 		res.status(500).json({
 			status: "error",
 			message: "Error fetching join codes",
+			error: error.message,
+		});
+	}
+});
+
+// Remove user from organization (soft delete - owner only)
+router.delete("/team/:userId", async (req, res) => {
+	try {
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+		const { userId } = req.params;
+
+		if (!userId) {
+			return res.status(400).json({
+				status: "error",
+				message: "User ID is required",
+			});
+		}
+
+		// Get current user from token (handles both custom and Supabase Auth tokens)
+		const currentUserData = await getUserFromToken(token);
+
+		if (!currentUserData) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		// Check if user is Owner
+		if (currentUserData.Role !== "Owner") {
+			return res.status(403).json({
+				status: "error",
+				message: "Only organization owners can remove team members",
+			});
+		}
+
+		// Prevent owner from removing themselves
+		if (currentUserData.IdUser === userId) {
+			return res.status(400).json({
+				status: "error",
+				message: "You cannot remove yourself from the organization",
+			});
+		}
+
+		// Get the user to be removed
+		const { data: userToRemove, error: targetUserError } = await supabase
+			.from("users")
+			.select("IdUser, IdOrganization, Role")
+			.eq("IdUser", userId)
+			.single();
+
+		if (targetUserError || !userToRemove) {
+			return res.status(404).json({
+				status: "error",
+				message: "User not found",
+			});
+		}
+
+		// Verify the user belongs to the same organization
+		if (userToRemove.IdOrganization !== currentUserData.IdOrganization) {
+			return res.status(403).json({
+				status: "error",
+				message: "User does not belong to your organization",
+			});
+		}
+
+		// Prevent removing another owner (optional - you may want to allow this)
+		if (userToRemove.Role === "Owner") {
+			return res.status(400).json({
+				status: "error",
+				message: "Cannot remove another owner",
+			});
+		}
+
+		// Soft delete: Set Enabled to false
+		const { data: updatedUser, error: updateError } = await supabase
+			.from("users")
+			.update({ Enabled: false })
+			.eq("IdUser", userId)
+			.select()
+			.single();
+
+		if (updateError) {
+			console.error("Error removing user:", updateError);
+			return res.status(500).json({
+				status: "error",
+				message: "Failed to remove user",
+				error: updateError.message,
+			});
+		}
+
+		res.json({
+			status: "success",
+			message: "User removed successfully",
+			user: {
+				IdUser: updatedUser.IdUser,
+				Name: updatedUser.Name,
+				Email: updatedUser.Email,
+			},
+		});
+	} catch (error) {
+		console.error("Error removing user:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error removing user",
 			error: error.message,
 		});
 	}

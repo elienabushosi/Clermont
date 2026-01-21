@@ -44,6 +44,12 @@ export default function LoginPage() {
 		setIsLoading(true);
 
 		try {
+			// Normalize email to lowercase for case-insensitive login
+			const normalizedData = {
+				...data,
+				email: data.email.toLowerCase().trim(),
+			};
+
 			const response = await fetch(
 				"http://localhost:3002/api/auth/login",
 				{
@@ -51,7 +57,7 @@ export default function LoginPage() {
 					headers: {
 						"Content-Type": "application/json",
 					},
-					body: JSON.stringify(data),
+					body: JSON.stringify(normalizedData),
 				}
 			);
 

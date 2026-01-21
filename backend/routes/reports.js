@@ -2,7 +2,7 @@
 import express from "express";
 import { generateReport } from "../orchestration/orchestrator.js";
 import { getReportsByOrganization } from "../services/report-service.js";
-import { supabase } from "../lib/supabase.js";
+import { getUserFromToken } from "../lib/auth-utils.js";
 
 const router = express.Router();
 
@@ -24,30 +24,13 @@ router.post("/generate", async (req, res) => {
 
 		const token = authHeader.substring(7);
 
-		// Verify token and get user
-		const {
-			data: { user },
-			error: authError,
-		} = await supabase.auth.getUser(token);
+		// Get user from token (handles both custom and Supabase Auth tokens)
+		const userData = await getUserFromToken(token);
 
-		if (authError || !user) {
+		if (!userData) {
 			return res.status(401).json({
 				status: "error",
 				message: "Invalid or expired token",
-			});
-		}
-
-		// Get user details from our custom users table
-		const { data: userData, error: userError } = await supabase
-			.from("users")
-			.select("IdUser, IdOrganization")
-			.eq("Email", user.email)
-			.single();
-
-		if (userError || !userData) {
-			return res.status(401).json({
-				status: "error",
-				message: "User not found",
 			});
 		}
 
@@ -118,30 +101,13 @@ router.get("/", async (req, res) => {
 
 		const token = authHeader.substring(7);
 
-		// Verify token and get user
-		const {
-			data: { user },
-			error: authError,
-		} = await supabase.auth.getUser(token);
+		// Get user from token (handles both custom and Supabase Auth tokens)
+		const userData = await getUserFromToken(token);
 
-		if (authError || !user) {
+		if (!userData) {
 			return res.status(401).json({
 				status: "error",
 				message: "Invalid or expired token",
-			});
-		}
-
-		// Get user details from our custom users table
-		const { data: userData, error: userError } = await supabase
-			.from("users")
-			.select("IdUser, IdOrganization")
-			.eq("Email", user.email)
-			.single();
-
-		if (userError || !userData) {
-			return res.status(401).json({
-				status: "error",
-				message: "User not found",
 			});
 		}
 
@@ -182,30 +148,13 @@ router.get("/:reportId", async (req, res) => {
 
 		const token = authHeader.substring(7);
 
-		// Verify token and get user
-		const {
-			data: { user },
-			error: authError,
-		} = await supabase.auth.getUser(token);
+		// Get user from token (handles both custom and Supabase Auth tokens)
+		const userData = await getUserFromToken(token);
 
-		if (authError || !user) {
+		if (!userData) {
 			return res.status(401).json({
 				status: "error",
 				message: "Invalid or expired token",
-			});
-		}
-
-		// Get user details from our custom users table
-		const { data: userData, error: userError } = await supabase
-			.from("users")
-			.select("IdUser, IdOrganization")
-			.eq("Email", user.email)
-			.single();
-
-		if (userError || !userData) {
-			return res.status(401).json({
-				status: "error",
-				message: "User not found",
 			});
 		}
 

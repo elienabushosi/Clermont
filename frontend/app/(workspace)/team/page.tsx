@@ -13,15 +13,26 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Users, Shield, UserPlus, Copy, Check } from "lucide-react";
+import { Users, Shield, UserPlus, Copy, Check, Trash2 } from "lucide-react";
 import {
 	getTeamMembers,
 	generateJoinCode,
 	getJoinCodes,
+	removeUser,
 	type TeamMember,
 	type JoinCode,
 } from "@/lib/team";
 import { getCurrentUser } from "@/lib/auth";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function TeamPage() {
 	const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -34,6 +45,8 @@ export default function TeamPage() {
 	const [generatedCode, setGeneratedCode] = useState<string | null>(null);
 	const [copiedCode, setCopiedCode] = useState<string | null>(null);
 	const [showJoinCodes, setShowJoinCodes] = useState(false);
+	const [userToRemove, setUserToRemove] = useState<TeamMember | null>(null);
+	const [isRemoving, setIsRemoving] = useState(false);
 
 	const isOwner = currentUserRole === "Owner";
 
@@ -107,6 +120,28 @@ export default function TeamPage() {
 			setTimeout(() => setCopiedCode(null), 2000);
 		} catch (err) {
 			console.error("Failed to copy code:", err);
+		}
+	};
+
+	const handleRemoveUser = async () => {
+		if (!userToRemove) return;
+
+		setIsRemoving(true);
+		setError(null);
+		try {
+			await removeUser(userToRemove.IdUser);
+			// Refresh team members list
+			const members = await getTeamMembers();
+			setTeamMembers(members);
+			setUserToRemove(null);
+		} catch (err) {
+			setError(
+				err instanceof Error
+					? err.message
+					: "Failed to remove user"
+			);
+		} finally {
+			setIsRemoving(false);
 		}
 	};
 
@@ -294,13 +329,18 @@ export default function TeamPage() {
 								<TableHead className="text-[#37322F]">
 									Joined
 								</TableHead>
+								{isOwner && (
+									<TableHead className="text-[#37322F] w-[50px]">
+										Actions
+									</TableHead>
+								)}
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{teamMembers.length === 0 ? (
 								<TableRow>
 									<TableCell
-										colSpan={4}
+										colSpan={isOwner ? 5 : 4}
 										className="text-center py-12"
 									>
 										<Users className="size-12 text-[#605A57] mx-auto mb-4 opacity-50" />
@@ -351,6 +391,22 @@ export default function TeamPage() {
 													"MMM d, yyyy"
 												)}
 											</TableCell>
+											{isOwner && (
+												<TableCell>
+													{!isCurrentUser && member.Role !== "Owner" && (
+														<Button
+															type="button"
+															variant="outline"
+															size="sm"
+															onClick={() => setUserToRemove(member)}
+															className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+														>
+															<Trash2 className="h-4 w-4 mr-2" />
+															Remove
+														</Button>
+													)}
+												</TableCell>
+											)}
 										</TableRow>
 									);
 								})
@@ -358,6 +414,38 @@ export default function TeamPage() {
 						</TableBody>
 					</Table>
 				</div>
+
+				{/* Remove User Confirmation Dialog */}
+				<AlertDialog
+					open={userToRemove !== null}
+					onOpenChange={(open) => {
+						if (!open) setUserToRemove(null);
+					}}
+				>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Remove team member</AlertDialogTitle>
+							<AlertDialogDescription>
+								Are you sure you want to remove{" "}
+								<strong>{userToRemove?.Name}</strong> from your team? They will
+								no longer have access to the organization, but their reports will
+								be preserved.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel disabled={isRemoving}>
+								Cancel
+							</AlertDialogCancel>
+							<AlertDialogAction
+								onClick={handleRemoveUser}
+								disabled={isRemoving}
+								className="bg-red-600 hover:bg-red-700"
+							>
+								{isRemoving ? "Removing..." : "Remove"}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
 			</div>
 		</div>
 	);
