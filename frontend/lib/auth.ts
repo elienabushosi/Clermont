@@ -74,3 +74,65 @@ export async function getCurrentUser(): Promise<{
 		return null;
 	}
 }
+
+// Request password reset code
+export async function requestPasswordReset(): Promise<void> {
+	try {
+		const token = getAuthToken();
+		if (!token) {
+			throw new Error("No authentication token");
+		}
+
+		const response = await fetch(
+			"http://localhost:3002/api/auth/password/request-reset",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+			}
+		);
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.message || "Failed to request password reset");
+		}
+	} catch (error) {
+		console.error("Error requesting password reset:", error);
+		throw error;
+	}
+}
+
+// Reset password with code
+export async function resetPassword(
+	code: string,
+	newPassword: string
+): Promise<void> {
+	try {
+		const token = getAuthToken();
+		if (!token) {
+			throw new Error("No authentication token");
+		}
+
+		const response = await fetch(
+			"http://localhost:3002/api/auth/password/reset",
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ code, newPassword }),
+			}
+		);
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.message || "Failed to reset password");
+		}
+	} catch (error) {
+		console.error("Error resetting password:", error);
+		throw error;
+	}
+}

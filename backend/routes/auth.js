@@ -1,6 +1,6 @@
 // Authentication routes
 import express from "express";
-import { supabase } from "../lib/supabase.js";
+import { supabase, supabaseAdmin } from "../lib/supabase.js";
 import { getUserFromToken } from "../lib/auth-utils.js";
 
 const router = express.Router();
@@ -858,6 +858,251 @@ router.delete("/team/:userId", async (req, res) => {
 		res.status(500).json({
 			status: "error",
 			message: "Error removing user",
+			error: error.message,
+		});
+	}
+});
+
+// Request password change - sends email with code
+router.post("/password/request-reset", async (req, res) => {
+	try {
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+
+		// Get user from token (handles both custom and Supabase Auth tokens)
+		const userData = await getUserFromToken(token);
+
+		if (!userData) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		const normalizedEmail = userData.Email.toLowerCase().trim();
+		
+		// Validate email format
+		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+		if (!emailRegex.test(normalizedEmail)) {
+			return res.status(400).json({
+				status: "error",
+				message: "Invalid email format",
+			});
+		}
+
+		// Generate a 6-digit code
+		const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+		// Set expiration to 15 minutes from now
+		const expiresAt = new Date();
+		expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+		// Invalidate any existing unused codes for this user
+		await supabase
+			.from("password_reset_codes")
+			.update({ UsedAt: new Date().toISOString() })
+			.eq("IdUser", userData.IdUser)
+			.is("UsedAt", null)
+			.gt("ExpiresAt", new Date().toISOString());
+
+		// Store the code in our database FIRST
+		const { data: resetCode, error: codeError } = await supabase
+			.from("password_reset_codes")
+			.insert({
+				IdUser: userData.IdUser,
+				Code: code,
+				ExpiresAt: expiresAt.toISOString(),
+			})
+			.select()
+			.single();
+
+		if (codeError) {
+			console.error("Error creating password reset code:", codeError);
+			return res.status(500).json({
+				status: "error",
+				message: "Failed to generate password reset code",
+				error: codeError.message,
+			});
+		}
+
+		console.log(`Reset code stored: ${code}`);
+		console.log(`Attempting to send password reset email to: ${normalizedEmail}`);
+
+		// Send password reset email with our code in the URL
+		// The email template should show the code from the URL, not Supabase's token
+		const redirectUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/settings?resetCode=${code}`;
+		const { error: emailError } = await supabase.auth.resetPasswordForEmail(
+			normalizedEmail,
+			{
+				redirectTo: redirectUrl,
+			}
+		);
+
+		if (emailError) {
+			console.error("Error sending password reset email:", emailError);
+			// Delete the code we just created since email failed
+			await supabase
+				.from("password_reset_codes")
+				.delete()
+				.eq("IdPasswordResetCode", resetCode.IdPasswordResetCode);
+			
+			return res.status(400).json({
+				status: "error",
+				message: "Failed to send password reset email",
+				error: emailError.message,
+			});
+		}
+
+		console.log(`Password reset email sent successfully with code: ${code}`);
+
+		// Return success - code is in the email URL
+		res.json({
+			status: "success",
+			message: "Password reset code sent to your email",
+		});
+	} catch (error) {
+		console.error("Error requesting password reset:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error requesting password reset",
+			error: error.message,
+		});
+	}
+});
+
+// Verify code and update password
+router.post("/password/reset", async (req, res) => {
+	try {
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+		const { code, newPassword } = req.body;
+
+		if (!code || !newPassword) {
+			return res.status(400).json({
+				status: "error",
+				message: "Code and new password are required",
+			});
+		}
+
+		// Validate password length
+		if (newPassword.length < 6) {
+			return res.status(400).json({
+				status: "error",
+				message: "Password must be at least 6 characters",
+			});
+		}
+
+		// Get user from token
+		const userData = await getUserFromToken(token);
+
+		if (!userData) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		// Find the password reset code
+		const { data: resetCode, error: codeError } = await supabase
+			.from("password_reset_codes")
+			.select("IdPasswordResetCode, Code, IdUser, ExpiresAt, UsedAt")
+			.eq("IdUser", userData.IdUser)
+			.eq("Code", code)
+			.is("UsedAt", null)
+			.single();
+
+		if (codeError || !resetCode) {
+			return res.status(400).json({
+				status: "error",
+				message: "Invalid or expired code",
+			});
+		}
+
+		// Check if code is expired
+		const now = new Date();
+		const expiresAt = new Date(resetCode.ExpiresAt);
+		if (now > expiresAt) {
+			return res.status(400).json({
+				status: "error",
+				message: "Code has expired",
+			});
+		}
+
+		// Update password in users table
+		const { error: updateError } = await supabase
+			.from("users")
+			.update({
+				Password: newPassword, // Note: In production, this should be hashed!
+				UpdatedAt: new Date().toISOString(),
+			})
+			.eq("IdUser", userData.IdUser);
+
+		if (updateError) {
+			console.error("Error updating password:", updateError);
+			return res.status(500).json({
+				status: "error",
+				message: "Failed to update password",
+				error: updateError.message,
+			});
+		}
+
+		// Update password in Supabase Auth (if admin client is available)
+		// This is optional - our custom table is the source of truth
+		if (supabaseAdmin) {
+			const normalizedEmail = userData.Email.toLowerCase().trim();
+			try {
+				// Try to find and update user in Supabase Auth
+				// Note: This may fail if user doesn't exist in Supabase Auth (uses custom token)
+				// That's okay - our custom users table is updated
+				const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
+				const matchingUser = authUsers?.users?.find(
+					(u) => u.email?.toLowerCase() === normalizedEmail
+				);
+
+				if (matchingUser) {
+					await supabaseAdmin.auth.admin.updateUserById(matchingUser.id, {
+						password: newPassword,
+					});
+				}
+			} catch (authError) {
+				// Silently fail - custom table is updated, which is what matters
+				console.log(
+					"Note: Could not update Supabase Auth password (user may use custom token)"
+				);
+			}
+		}
+
+		// Mark code as used
+		await supabase
+			.from("password_reset_codes")
+			.update({ UsedAt: new Date().toISOString() })
+			.eq("IdPasswordResetCode", resetCode.IdPasswordResetCode);
+
+		res.json({
+			status: "success",
+			message: "Password updated successfully",
+		});
+	} catch (error) {
+		console.error("Error resetting password:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error resetting password",
 			error: error.message,
 		});
 	}

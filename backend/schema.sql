@@ -170,3 +170,22 @@ CREATE INDEX IF NOT EXISTS idx_joincodes_organization ON joincodes("IdOrganizati
 CREATE INDEX IF NOT EXISTS idx_joincodes_createdby ON joincodes("CreatedBy");
 CREATE INDEX IF NOT EXISTS idx_joincodes_expiresat ON joincodes("ExpiresAt");
 CREATE INDEX IF NOT EXISTS idx_joincodes_usedat ON joincodes("UsedAt");
+
+
+-- ----------------------------------------------------
+-- Password Reset Codes table
+-- ----------------------------------------------------
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+    "IdPasswordResetCode" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "IdUser" UUID NOT NULL REFERENCES users("IdUser") ON DELETE CASCADE,
+    "Code" TEXT NOT NULL,
+    "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    "ExpiresAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+    "UsedAt" TIMESTAMP WITH TIME ZONE
+);
+
+-- Indexes for password_reset_codes
+CREATE INDEX IF NOT EXISTS idx_password_reset_codes_user ON password_reset_codes("IdUser");
+CREATE INDEX IF NOT EXISTS idx_password_reset_codes_code ON password_reset_codes("Code");
+CREATE INDEX IF NOT EXISTS idx_password_reset_codes_expiresat ON password_reset_codes("ExpiresAt");
+CREATE INDEX IF NOT EXISTS idx_password_reset_codes_usedat ON password_reset_codes("UsedAt");
