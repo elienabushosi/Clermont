@@ -1048,4 +1048,250 @@ router.post("/password/reset", async (req, res) => {
 	}
 });
 
+// Forgot password - request reset code by email (NO AUTH REQUIRED)
+router.post("/password/forgot", async (req, res) => {
+	try {
+		const { email } = req.body;
+
+		if (!email) {
+			return res.status(400).json({
+				status: "error",
+				message: "Email is required",
+			});
+		}
+
+		// Validate email format
+		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+		const normalizedEmail = email.toLowerCase().trim();
+		
+		if (!emailRegex.test(normalizedEmail)) {
+			return res.status(400).json({
+				status: "error",
+				message: "Invalid email format",
+			});
+		}
+
+		// Find user by email (case-insensitive)
+		const { data: user, error: userError } = await supabase
+			.from("users")
+			.select("IdUser, Email, Enabled")
+			.ilike("Email", normalizedEmail)
+			.single();
+
+		// Don't reveal if user exists or not (security best practice)
+		// But we still need to check if user is enabled
+		if (userError || !user || user.Enabled === false) {
+			// Return success even if user doesn't exist (don't reveal user existence)
+			return res.json({
+				status: "success",
+				message: "If an account exists with this email, a password reset code has been sent",
+			});
+		}
+
+		// Generate a 6-digit code
+		const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+		// Set expiration to 15 minutes from now
+		const expiresAt = new Date();
+		expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+		// Invalidate any existing unused codes for this user
+		await supabase
+			.from("password_reset_codes")
+			.update({ UsedAt: new Date().toISOString() })
+			.eq("IdUser", user.IdUser)
+			.is("UsedAt", null)
+			.gt("ExpiresAt", new Date().toISOString());
+
+		// Store the code in our database
+		const { data: resetCode, error: codeError } = await supabase
+			.from("password_reset_codes")
+			.insert({
+				IdUser: user.IdUser,
+				Code: code,
+				ExpiresAt: expiresAt.toISOString(),
+			})
+			.select()
+			.single();
+
+		if (codeError) {
+			console.error("Error creating password reset code:", codeError);
+			// Return success even on error (don't reveal system state)
+			return res.json({
+				status: "success",
+				message: "If an account exists with this email, a password reset code has been sent",
+			});
+		}
+
+		console.log(`Forgot password - Reset code stored: ${code} for ${normalizedEmail}`);
+
+		// Ensure user exists in Supabase Auth for email sending
+		// Try to send the email
+		const redirectUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login?resetCode=${code}`;
+		const { error: emailError } = await supabase.auth.resetPasswordForEmail(
+			normalizedEmail,
+			{
+				redirectTo: redirectUrl,
+			}
+		);
+
+		if (emailError) {
+			console.error("Error sending password reset email:", emailError);
+			// Delete the code we just created since email failed
+			await supabase
+				.from("password_reset_codes")
+				.delete()
+				.eq("IdPasswordResetCode", resetCode.IdPasswordResetCode);
+			
+			// Still return success (don't reveal email delivery failure)
+			return res.json({
+				status: "success",
+				message: "If an account exists with this email, a password reset code has been sent",
+			});
+		}
+
+		console.log(`Forgot password - Email sent successfully with code: ${code}`);
+
+		// Return success - don't reveal if email was actually sent
+		res.json({
+			status: "success",
+			message: "If an account exists with this email, a password reset code has been sent",
+		});
+	} catch (error) {
+		console.error("Error in forgot password:", error);
+		// Return success even on error (security best practice)
+		res.json({
+			status: "success",
+			message: "If an account exists with this email, a password reset code has been sent",
+		});
+	}
+});
+
+// Reset password with code and email (NO AUTH REQUIRED)
+router.post("/password/reset-with-code", async (req, res) => {
+	try {
+		const { email, code, newPassword } = req.body;
+
+		if (!email || !code || !newPassword) {
+			return res.status(400).json({
+				status: "error",
+				message: "Email, code, and new password are required",
+			});
+		}
+
+		// Validate password length
+		if (newPassword.length < 6) {
+			return res.status(400).json({
+				status: "error",
+				message: "Password must be at least 6 characters",
+			});
+		}
+
+		// Validate email format
+		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+		const normalizedEmail = email.toLowerCase().trim();
+		
+		if (!emailRegex.test(normalizedEmail)) {
+			return res.status(400).json({
+				status: "error",
+				message: "Invalid email format",
+			});
+		}
+
+		// Find user by email
+		const { data: user, error: userError } = await supabase
+			.from("users")
+			.select("IdUser, Email, Enabled")
+			.ilike("Email", normalizedEmail)
+			.single();
+
+		if (userError || !user || user.Enabled === false) {
+			return res.status(400).json({
+				status: "error",
+				message: "Invalid email or code",
+			});
+		}
+
+		// Find the password reset code
+		const { data: resetCode, error: codeError } = await supabase
+			.from("password_reset_codes")
+			.select("IdPasswordResetCode, Code, IdUser, ExpiresAt, UsedAt")
+			.eq("IdUser", user.IdUser)
+			.eq("Code", code)
+			.is("UsedAt", null)
+			.single();
+
+		if (codeError || !resetCode) {
+			return res.status(400).json({
+				status: "error",
+				message: "Invalid or expired code",
+			});
+		}
+
+		// Check if code is expired
+		const now = new Date();
+		const expiresAt = new Date(resetCode.ExpiresAt);
+		if (now > expiresAt) {
+			return res.status(400).json({
+				status: "error",
+				message: "Code has expired",
+			});
+		}
+
+		// Update password in users table
+		const { error: updateError } = await supabase
+			.from("users")
+			.update({
+				Password: newPassword, // Note: In production, this should be hashed!
+				UpdatedAt: new Date().toISOString(),
+			})
+			.eq("IdUser", user.IdUser);
+
+		if (updateError) {
+			console.error("Error updating password:", updateError);
+			return res.status(500).json({
+				status: "error",
+				message: "Failed to update password",
+				error: updateError.message,
+			});
+		}
+
+		// Update password in Supabase Auth (if admin client is available)
+		if (supabaseAdmin) {
+			try {
+				const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
+				const matchingUser = authUsers?.users?.find(
+					(u) => u.email?.toLowerCase() === normalizedEmail
+				);
+
+				if (matchingUser) {
+					await supabaseAdmin.auth.admin.updateUserById(matchingUser.id, {
+						password: newPassword,
+					});
+				}
+			} catch (authError) {
+				console.log("Note: Could not update Supabase Auth password");
+			}
+		}
+
+		// Mark code as used
+		await supabase
+			.from("password_reset_codes")
+			.update({ UsedAt: new Date().toISOString() })
+			.eq("IdPasswordResetCode", resetCode.IdPasswordResetCode);
+
+		res.json({
+			status: "success",
+			message: "Password updated successfully",
+		});
+	} catch (error) {
+		console.error("Error resetting password:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error resetting password",
+			error: error.message,
+		});
+	}
+});
+
 export default router;
