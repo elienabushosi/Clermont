@@ -11,7 +11,7 @@ import AddressAutocomplete, {
 	AddressData,
 } from "@/components/address-autocomplete";
 import AddressMap from "@/components/address-map";
-import { getAuthToken } from "@/lib/auth";
+import { getAuthToken, getCurrentUser } from "@/lib/auth";
 import { getReports, type Report, getReportWithSources } from "@/lib/reports";
 
 export default function SearchAddressPage() {
@@ -25,14 +25,28 @@ export default function SearchAddressPage() {
 		setAddressData(data);
 	};
 
-	// Fetch recent reports
+	// Fetch recent reports for the logged-in user
 	useEffect(() => {
 		const fetchRecentReports = async () => {
 			try {
 				setIsLoadingReports(true);
+				
+				// Get current user to filter reports
+				const currentUser = await getCurrentUser();
+				if (!currentUser) {
+					setIsLoadingReports(false);
+					return;
+				}
+
 				const reports = await getReports();
+				
+				// Filter to only show reports created by the current user
+				const userReports = reports.filter(
+					(report) => report.CreatedBy === currentUser.user.IdUser
+				);
+				
 				// Sort by CreatedAt descending and take the 6 most recent
-				const sortedReports = reports
+				const sortedReports = userReports
 					.sort(
 						(a, b) =>
 							new Date(b.CreatedAt).getTime() -
@@ -102,15 +116,21 @@ export default function SearchAddressPage() {
 					setPollingReportId(null);
 					
 					// Refresh recent reports to show the new one
-					const reports = await getReports();
-					const sortedReports = reports
-						.sort(
-							(a, b) =>
-								new Date(b.CreatedAt).getTime() -
-								new Date(a.CreatedAt).getTime()
-						)
-						.slice(0, 6);
-					setRecentReports(sortedReports);
+					const currentUser = await getCurrentUser();
+					if (currentUser) {
+						const reports = await getReports();
+						const userReports = reports.filter(
+							(report) => report.CreatedBy === currentUser.user.IdUser
+						);
+						const sortedReports = userReports
+							.sort(
+								(a, b) =>
+									new Date(b.CreatedAt).getTime() -
+									new Date(a.CreatedAt).getTime()
+							)
+							.slice(0, 6);
+						setRecentReports(sortedReports);
+					}
 				} else if (status === "failed") {
 					isPolling = false;
 					if (pollInterval) clearInterval(pollInterval);
@@ -231,7 +251,7 @@ export default function SearchAddressPage() {
 
 				<div>
 					<h2 className="text-xl font-semibold text-[#37322F] mb-4">
-						Recent Addresses
+						Your Recent Searches
 					</h2>
 					{isLoadingReports ? (
 						<div className="space-y-3">
@@ -263,7 +283,7 @@ export default function SearchAddressPage() {
 											{report.District && (
 												<Badge
 													variant="outline"
-													className="bg-blue-100 text-blue-700 border-blue-300 text-xs flex-shrink-0"
+													className="bg-blue-100 text-blue-700 border-blue-300 text-xs shrink-0"
 												>
 													{report.District}
 												</Badge>
@@ -284,7 +304,7 @@ export default function SearchAddressPage() {
 												`/viewreport/${report.IdReport}`
 											)
 										}
-										className="ml-4 flex-shrink-0"
+										className="ml-4 shrink-0"
 									>
 										View Report
 									</Button>
