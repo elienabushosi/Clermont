@@ -13,6 +13,15 @@ export interface Report {
 	CreatedByName: string | null;
 	CreatedByEmail: string | null;
 	District: string | null;
+	// Source data fields
+	LandUse: string | null;
+	BuildingClass: string | null;
+	ZoningDistricts: string | null;
+	LotArea: number | null;
+	MaxFAR: number | null;
+	MaxLotCoverage: number | null;
+	NumberOfFloors: number | null;
+	ResidentialUnits: number | null;
 }
 
 /**

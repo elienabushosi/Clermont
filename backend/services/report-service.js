@@ -335,11 +335,11 @@ export async function getReportsByOrganization(organizationId) {
 		}
 	}
 
-	// Get report IDs to fetch district from zola sources
+	// Get report IDs to fetch source data
 	const reportIds = reports.map((r) => r.IdReport);
 
-	// Fetch zola sources to get district information
-	let districtMap = {};
+	// Fetch zola sources to get property data
+	let zolaDataMap = {};
 	if (reportIds.length > 0) {
 		const { data: zolaSources, error: zolaError } = await supabase
 			.from("report_sources")
@@ -351,24 +351,50 @@ export async function getReportsByOrganization(organizationId) {
 		if (!zolaError && zolaSources) {
 			zolaSources.forEach((source) => {
 				if (source.ContentJson) {
-					// Extract district from zola ContentJson
-					// ContentJson structure: { contentJson: { zonedist1: "R8", ... } } or { zonedist1: "R8", ... }
 					const zolaData =
 						source.ContentJson.contentJson ||
 						source.ContentJson;
-					const district = zolaData?.zonedist1 || null;
-					if (district) {
-						districtMap[source.IdReport] = district;
-					}
+					zolaDataMap[source.IdReport] = zolaData;
 				}
 			});
 		}
 	}
 
-	// Combine reports with client information, creator information, and district
+	// Fetch zoning-resolution sources to get zoning calculations
+	let zoningDataMap = {};
+	if (reportIds.length > 0) {
+		const { data: zoningSources, error: zoningError } = await supabase
+			.from("report_sources")
+			.select("IdReport, ContentJson")
+			.eq("SourceKey", "zoning-resolution")
+			.in("IdReport", reportIds)
+			.eq("Status", "succeeded");
+
+		if (!zoningError && zoningSources) {
+			zoningSources.forEach((source) => {
+				if (source.ContentJson) {
+					zoningDataMap[source.IdReport] = source.ContentJson;
+				}
+			});
+		}
+	}
+
+	// Combine reports with client information, creator information, and source data
 	return reports.map((report) => {
 		const client = report.IdClient ? clientsMap[report.IdClient] : null;
 		const creator = report.CreatedBy ? usersMap[report.CreatedBy] : null;
+		const zolaData = zolaDataMap[report.IdReport] || {};
+		const zoningData = zoningDataMap[report.IdReport] || {};
+
+		// Extract zoning districts
+		const zoningDistricts = [
+			zolaData.zonedist1,
+			zolaData.zonedist2,
+			zolaData.zonedist3,
+			zolaData.zonedist4,
+		]
+			.filter(Boolean)
+			.join(", ") || null;
 
 		return {
 			IdReport: report.IdReport,
@@ -382,7 +408,15 @@ export async function getReportsByOrganization(organizationId) {
 			CreatedBy: report.CreatedBy || null,
 			CreatedByName: creator?.Name || null,
 			CreatedByEmail: creator?.Email || null,
-			District: districtMap[report.IdReport] || null,
+			// Source data fields
+			LandUse: zolaData.landuse || null,
+			BuildingClass: zolaData.bldgclass || null,
+			ZoningDistricts: zoningDistricts,
+			LotArea: zolaData.lotarea || null,
+			MaxFAR: zoningData.maxFar || null,
+			MaxLotCoverage: zoningData.maxLotCoverage || null,
+			NumberOfFloors: zolaData.numfloors || null,
+			ResidentialUnits: zolaData.unitsres || null,
 		};
 	});
 }

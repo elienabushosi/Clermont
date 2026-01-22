@@ -1,319 +1,354 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { format, isWithinInterval, subDays, subHours } from "date-fns";
 import {
 	Card,
 	CardContent,
-	CardDescription,
 	CardHeader,
 	CardTitle,
-	CardFooter,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Skeleton } from "@/components/ui/skeleton";
+import { getReports, type Report } from "@/lib/reports";
+import { getBuildingClassDescriptionText } from "@/lib/building-class";
+import { getLandUseDescriptionText } from "@/lib/land-use";
 import {
-	User,
 	MapPin,
-	Mail,
-	Target,
-	Phone,
 	FileText,
+	Calendar,
+	User,
+	Building2,
+	LandPlot,
+	Grid2x2Check,
+	Ruler,
+	Home,
 } from "lucide-react";
 
-type ActivityItem = {
-	id: string;
-	type:
-		| "new-prospect"
-		| "great-fit"
-		| "feasibility-ready"
-		| "likely-to-close"
-		| "incomplete"
-		| "ai-priority";
-	name: string;
-	email?: string;
-	phone?: string;
-	address?: string;
-	goals?: string[];
-	reason?: string;
-	requestSummary?: string;
-	timestamp: string;
-	status: "Report Ready" | "In Progress" | "Need More Information";
-	leadQuality: "Good lead" | "Okay lead" | "Bad Lead";
-};
-
-// Mock data - in production this would come from an API
-const mockActivities: ActivityItem[] = [
-	{
-		id: "1",
-		type: "new-prospect",
-		name: "Sarah Johnson",
-		email: "sarah.johnson@email.com",
-		phone: "(212) 555-0123",
-		address: "123 Park Ave, Manhattan, NY 10017",
-		requestSummary: "Single Family Occupancy to Multifamily Occupancy",
-		timestamp: "2 hours ago",
-		status: "In Progress",
-		leadQuality: "Good lead",
-	},
-	{
-		id: "2",
-		type: "ai-priority",
-		name: "Michael Chen",
-		email: "mchen@email.com",
-		phone: "(718) 555-0456",
-		address: "456 Atlantic Ave, Brooklyn, NY 11217",
-		requestSummary: "Residential Renovation and Backyard Redesign",
-		timestamp: "3 hours ago",
-		status: "Report Ready",
-		leadQuality: "Good lead",
-	},
-	{
-		id: "3",
-		type: "feasibility-ready",
-		name: "Emily Rodriguez",
-		email: "emily.r@email.com",
-		phone: "(212) 555-0789",
-		address: "789 Broadway, Manhattan, NY 10003",
-		requestSummary: "Office to Residential Conversion",
-		timestamp: "5 hours ago",
-		status: "Report Ready",
-		leadQuality: "Okay lead",
-	},
-	{
-		id: "4",
-		type: "great-fit",
-		name: "David Kim",
-		email: "david.kim@email.com",
-		phone: "(718) 555-0321",
-		address: "321 5th Ave, Brooklyn, NY 11215",
-		requestSummary: "Exterior Patio and Dining Room",
-		timestamp: "1 day ago",
-		status: "In Progress",
-		leadQuality: "Good lead",
-	},
-	{
-		id: "5",
-		type: "likely-to-close",
-		name: "Jennifer Martinez",
-		email: "j.martinez@email.com",
-		phone: "(212) 555-0654",
-		address: "654 Lexington Ave, Manhattan, NY 10022",
-		requestSummary: "Cellar Renovation",
-		timestamp: "1 day ago",
-		status: "In Progress",
-		leadQuality: "Good lead",
-	},
-	{
-		id: "6",
-		type: "incomplete",
-		name: "Robert Taylor",
-		email: "rtaylor@email.com",
-		phone: "(718) 555-0987",
-		address: "987 Court St, Brooklyn, NY 11231",
-		requestSummary: "Flexibility Exploration within Existing Apartment Layout",
-		timestamp: "2 days ago",
-		status: "Need More Information",
-		leadQuality: "Bad Lead",
-	},
-];
-
-function getActivityTypeConfig(type: ActivityItem["type"]) {
-	switch (type) {
-		case "new-prospect":
-			return {
-				icon: User,
-				label: "New Prospect",
-				color: "bg-blue-100 text-blue-700 border-blue-200",
-				badgeVariant: "default" as const,
-			};
-		case "great-fit":
-			return {
-				icon: User,
-				label: "Great Fit",
-				color: "bg-yellow-100 text-yellow-700 border-yellow-200",
-				badgeVariant: "secondary" as const,
-			};
-		case "feasibility-ready":
-			return {
-				icon: User,
-				label: "Report Ready",
-				color: "bg-green-100 text-green-700 border-green-200",
-				badgeVariant: "default" as const,
-			};
-		case "likely-to-close":
-			return {
-				icon: User,
-				label: "Likely to Close",
-				color: "bg-purple-100 text-purple-700 border-purple-200",
-				badgeVariant: "secondary" as const,
-			};
-		case "incomplete":
-			return {
-				icon: User,
-				label: "Incomplete",
-				color: "bg-orange-100 text-orange-700 border-orange-200",
-				badgeVariant: "outline" as const,
-			};
-		case "ai-priority":
-			return {
-				icon: User,
-				label: "AI Priority",
-				color: "bg-indigo-100 text-indigo-700 border-indigo-200",
-				badgeVariant: "default" as const,
-			};
-	}
-}
-
-function getStatusColor(status: ActivityItem["status"]) {
+function getStatusColor(status: string) {
 	switch (status) {
-		case "Report Ready":
-			return "bg-green-100 text-green-700 border-green-200";
-		case "In Progress":
-			return "bg-blue-100 text-blue-700 border-blue-200";
-		case "Need More Information":
-			return "bg-orange-100 text-orange-700 border-orange-200";
-	}
-}
-
-function getLeadQualityColor(quality: ActivityItem["leadQuality"]) {
-	switch (quality) {
-		case "Good lead":
-			return "bg-green-100 text-green-700 border-green-200";
-		case "Okay lead":
+		case "pending":
 			return "bg-yellow-100 text-yellow-700 border-yellow-200";
-		case "Bad Lead":
+		case "ready":
+			return "bg-green-100 text-green-700 border-green-200";
+		case "failed":
 			return "bg-red-100 text-red-700 border-red-200";
+		default:
+			return "bg-gray-100 text-gray-700 border-gray-200";
 	}
 }
 
-function ActivityCard({ activity }: { activity: ActivityItem }) {
-	const config = getActivityTypeConfig(activity.type);
-	const Icon = config.icon;
+function formatLotArea(lotArea: number | null): string {
+	if (!lotArea) return "—";
+	return `${lotArea.toLocaleString()} sq ft`;
+}
+
+function formatFAR(far: number | null): string {
+	if (!far) return "—";
+	return far.toFixed(2);
+}
+
+function formatLotCoverage(coverage: number | null): string {
+	if (!coverage) return "—";
+	return `${(coverage * 100).toFixed(0)}%`;
+}
+
+function ReportCard({ report }: { report: Report }) {
+	const router = useRouter();
 
 	return (
 		<Card className="hover:shadow-md transition-shadow">
 			<CardHeader>
 				<div className="flex items-start justify-between">
-					<div className="flex items-start gap-3 flex-1">
-						<div
-							className={`p-2 rounded-lg border ${config.color} flex-shrink-0`}
-						>
-							<Icon className="size-4" />
-						</div>
-						<div className="flex-1 min-w-0">
-							<div className="flex items-center gap-2 mb-1 flex-wrap">
-								<CardTitle className="text-base font-semibold">
-									{activity.name}
-								</CardTitle>
-								<Badge
-									variant="outline"
-									className={`text-xs ${getLeadQualityColor(activity.leadQuality)}`}
-								>
-									{activity.leadQuality}
+					<div className="flex-1">
+						<CardTitle className="text-lg font-semibold text-[#37322F] mb-2">
+							{report.Address}
+						</CardTitle>
+						<div className="flex items-center gap-2 flex-wrap">
+							<Badge
+								variant="outline"
+								className={`text-xs ${getStatusColor(report.Status)}`}
+							>
+								{report.Status}
+							</Badge>
+							{report.CreatedByName && (
+								<Badge variant="outline" className="text-xs">
+									<User className="h-3 w-3 mr-1" />
+									{report.CreatedByName}
 								</Badge>
-							</div>
-							<CardDescription className="text-sm text-[#605A57]">
-								{activity.timestamp}
-							</CardDescription>
+							)}
+							<Badge variant="outline" className="text-xs text-[#605A57]">
+								<Calendar className="h-3 w-3 mr-1" />
+								{format(new Date(report.CreatedAt), "MMM d, yyyy")}
+							</Badge>
 						</div>
 					</div>
-					<Badge
-						variant="outline"
-						className={`text-xs ${getStatusColor(activity.status)}`}
-					>
-						{activity.status}
-					</Badge>
 				</div>
 			</CardHeader>
 			<CardContent className="space-y-3">
-				{activity.email && (
-					<div className="flex items-center gap-2 text-sm text-[#37322F]">
-						<Mail className="size-4 text-[#605A57]" />
-						<span>{activity.email}</span>
-					</div>
-				)}
-				{activity.phone && (
-					<div className="flex items-center gap-2 text-sm text-[#37322F]">
-						<Phone className="size-4 text-[#605A57]" />
-						<span>{activity.phone}</span>
-					</div>
-				)}
-				{activity.address && (
-					<div className="flex items-start gap-2 text-sm text-[#37322F]">
-						<MapPin className="size-4 text-[#605A57] mt-0.5 flex-shrink-0" />
-						<span>{activity.address}</span>
-					</div>
-				)}
-				{activity.requestSummary && (
-					<div className="pt-2 border-t border-[#E0DEDB]">
-						<p className="text-sm text-[#37322F]">
-							<span className="font-medium">Request: </span>
-							{activity.requestSummary}
-						</p>
-					</div>
-				)}
-			</CardContent>
-			{activity.status === "Report Ready" && (
-				<CardFooter className="border-t border-[#E0DEDB] pt-4">
-					<Button className="w-full" variant="default">
-						<FileText className="size-4" />
+				<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+					{report.LandUse && (
+						<div className="flex items-start gap-2 text-sm">
+							<LandPlot className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
+							<div>
+								<span className="text-[#605A57]">Land Use: </span>
+								<span className="text-[#37322F] font-medium">
+									{getLandUseDescriptionText(report.LandUse) || report.LandUse}
+								</span>
+							</div>
+						</div>
+					)}
+					{report.BuildingClass && (
+						<div className="flex items-start gap-2 text-sm">
+							<Building2 className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
+							<div>
+								<span className="text-[#605A57]">Building Class: </span>
+								<span className="text-[#37322F] font-medium">
+									{getBuildingClassDescriptionText(report.BuildingClass) ||
+										report.BuildingClass}
+								</span>
+							</div>
+						</div>
+					)}
+					{report.ZoningDistricts && (
+						<div className="flex items-start gap-2 text-sm">
+							<Grid2x2Check className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
+							<div>
+								<span className="text-[#605A57]">Zoning Districts: </span>
+								<span className="text-[#37322F] font-medium">
+									{report.ZoningDistricts}
+								</span>
+							</div>
+						</div>
+					)}
+					{report.LotArea && (
+						<div className="flex items-start gap-2 text-sm">
+							<Ruler className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
+							<div>
+								<span className="text-[#605A57]">Lot Area: </span>
+								<span className="text-[#37322F] font-medium">
+									{formatLotArea(report.LotArea)}
+								</span>
+							</div>
+						</div>
+					)}
+					{report.MaxFAR && (
+						<div className="flex items-start gap-2 text-sm">
+							<Building2 className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
+							<div>
+								<span className="text-[#605A57]">Max FAR: </span>
+								<span className="text-[#37322F] font-medium">
+									{formatFAR(report.MaxFAR)}
+								</span>
+							</div>
+						</div>
+					)}
+					{report.MaxLotCoverage && (
+						<div className="flex items-start gap-2 text-sm">
+							<Grid2x2Check className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
+							<div>
+								<span className="text-[#605A57]">Max Lot Coverage: </span>
+								<span className="text-[#37322F] font-medium">
+									{formatLotCoverage(report.MaxLotCoverage)}
+								</span>
+							</div>
+						</div>
+					)}
+					{report.NumberOfFloors && (
+						<div className="flex items-start gap-2 text-sm">
+							<Building2 className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
+							<div>
+								<span className="text-[#605A57]">Number of Floors: </span>
+								<span className="text-[#37322F] font-medium">
+									{report.NumberOfFloors}
+								</span>
+							</div>
+						</div>
+					)}
+					{report.ResidentialUnits !== null && (
+						<div className="flex items-start gap-2 text-sm">
+							<Home className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
+							<div>
+								<span className="text-[#605A57]">Residential Units: </span>
+								<span className="text-[#37322F] font-medium">
+									{report.ResidentialUnits || 0}
+								</span>
+							</div>
+						</div>
+					)}
+				</div>
+				<div className="pt-3 border-t border-[#E0DEDB]">
+					<Button
+						onClick={() => router.push(`/viewreport/${report.IdReport}`)}
+						className="w-full bg-[#37322F] hover:bg-[#37322F]/90 text-white"
+					>
+						<FileText className="h-4 w-4 mr-2" />
 						View Report
 					</Button>
-				</CardFooter>
-			)}
+				</div>
+			</CardContent>
 		</Card>
 	);
 }
 
-export default function HomePage() {
-	const [viewMode, setViewMode] = useState<"Lead" | "Address">("Lead");
+function ReportSection({
+	title,
+	reports,
+}: {
+	title: string;
+	reports: Report[];
+}) {
+	if (reports.length === 0) return null;
 
 	return (
-		<div className="p-8">
-			<div className="max-w-4xl mx-auto">
-				<div className="mb-6 flex items-start justify-between">
-					<div>
-						<h2 className="text-2xl font-semibold text-[#37322F] mb-2">
-							Activity Feed
-						</h2>
-						<p className="text-sm text-[#605A57]">
-							Quick triage and prioritization of new client activity
-						</p>
-					</div>
-					<ToggleGroup
-						type="single"
-						value={viewMode}
-						onValueChange={(value) => {
-							if (value) setViewMode(value as "Lead" | "Address");
-						}}
-						variant="outline"
-						size="lg"
-					>
-						<ToggleGroupItem value="Lead" aria-label="Lead view">
-							Lead
-						</ToggleGroupItem>
-						<ToggleGroupItem value="Address" aria-label="Address view">
-							Address
-						</ToggleGroupItem>
-					</ToggleGroup>
-				</div>
-
-				<div className="space-y-4">
-					{mockActivities.length === 0 ? (
-						<Card>
-							<CardContent className="py-12 text-center">
-								<p className="text-[#605A57]">No activity to display</p>
-							</CardContent>
-						</Card>
-					) : (
-						mockActivities.map((activity) => (
-							<ActivityCard key={activity.id} activity={activity} />
-						))
-					)}
-				</div>
+		<div className="mb-8">
+			<h3 className="text-xl font-semibold text-[#37322F] mb-4">{title}</h3>
+			<div className="space-y-4">
+				{reports.map((report) => (
+					<ReportCard key={report.IdReport} report={report} />
+				))}
 			</div>
 		</div>
 	);
 }
 
+export default function HomePage() {
+	const router = useRouter();
+	const [reports, setReports] = useState<Report[]>([]);
+	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		const fetchReports = async () => {
+			try {
+				setIsLoading(true);
+				setError(null);
+				const data = await getReports();
+				// Sort by CreatedAt descending (newest first)
+				const sorted = data.sort(
+					(a, b) =>
+						new Date(b.CreatedAt).getTime() -
+						new Date(a.CreatedAt).getTime()
+				);
+				setReports(sorted);
+			} catch (err) {
+				console.error("Error fetching reports:", err);
+				setError(
+					err instanceof Error ? err.message : "Failed to load reports"
+				);
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		fetchReports();
+	}, []);
+
+	// Organize reports by time periods
+	const now = new Date();
+	const last24Hours = subHours(now, 24);
+	const last7Days = subDays(now, 7);
+
+	const last24HoursReports = reports.filter((report) => {
+		const reportDate = new Date(report.CreatedAt);
+		return reportDate >= last24Hours;
+	});
+
+	const last7DaysReports = reports.filter((report) => {
+		const reportDate = new Date(report.CreatedAt);
+		return reportDate >= last7Days && reportDate < last24Hours;
+	});
+
+	const olderReports = reports.filter((report) => {
+		const reportDate = new Date(report.CreatedAt);
+		return reportDate < last7Days;
+	});
+
+	if (isLoading) {
+		return (
+			<div className="p-8">
+				<div className="max-w-6xl mx-auto">
+					<h2 className="text-2xl font-semibold text-[#37322F] mb-6">
+						Reports Dashboard
+					</h2>
+					<div className="space-y-4">
+						{[1, 2, 3].map((i) => (
+							<Card key={i}>
+								<CardHeader>
+									<Skeleton className="h-6 w-64" />
+								</CardHeader>
+								<CardContent>
+									<Skeleton className="h-32 w-full" />
+								</CardContent>
+							</Card>
+						))}
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	if (error) {
+		return (
+			<div className="p-8">
+				<div className="max-w-6xl mx-auto">
+					<Card>
+						<CardContent className="py-12 text-center">
+							<p className="text-red-600 mb-4">{error}</p>
+							<Button
+								onClick={() => window.location.reload()}
+								variant="outline"
+							>
+								Retry
+							</Button>
+						</CardContent>
+					</Card>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="p-8">
+			<div className="max-w-6xl mx-auto">
+				<div className="mb-6">
+					<h2 className="text-2xl font-semibold text-[#37322F] mb-2">
+						Reports Dashboard
+					</h2>
+					<p className="text-sm text-[#605A57]">
+						Overview of all reports for your organization
+					</p>
+				</div>
+
+				{reports.length === 0 ? (
+					<Card>
+						<CardContent className="py-12 text-center">
+							<MapPin className="h-12 w-12 text-[#605A57] mx-auto mb-4" />
+							<p className="text-[#605A57] mb-4">No reports found</p>
+							<Button
+								onClick={() => router.push("/search")}
+								className="bg-[#37322F] hover:bg-[#37322F]/90 text-white"
+							>
+								Create Your First Report
+							</Button>
+						</CardContent>
+					</Card>
+				) : (
+					<>
+						<ReportSection
+							title="Last 24 Hours"
+							reports={last24HoursReports}
+						/>
+						<ReportSection
+							title="Last 7 Days"
+							reports={last7DaysReports}
+						/>
+						<ReportSection title="Older Reports" reports={olderReports} />
+					</>
+				)}
+			</div>
+		</div>
+	);
+}
