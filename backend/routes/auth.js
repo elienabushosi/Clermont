@@ -282,94 +282,34 @@ router.post("/login", async (req, res) => {
 			});
 		}
 
-		// Use Supabase Auth to sign in the user
-		// This will create a session and return a JWT token
+		// Try to sign in with Supabase Auth
+		// If successful, use Supabase Auth token; if not, use custom token
 		const { data: authData, error: authError } =
 			await supabase.auth.signInWithPassword({
 				email: normalizedEmail,
 				password: password,
 			});
 
-		// If Supabase Auth user doesn't exist, create one
+		// If Supabase Auth sign-in fails, use custom token
+		// We don't create users during login - that only happens during signup
 		if (authError) {
-			// If user doesn't exist in Supabase Auth, create them
-			if (
-				authError.message.includes("Invalid login credentials") ||
-				authError.status === 400
-			) {
-				// Create user in Supabase Auth
-				const { data: signUpData, error: signUpError } =
-					await supabase.auth.signUp({
-						email: normalizedEmail,
-						password: password,
-					});
-
-				if (signUpError) {
-					console.error("Supabase Auth signup error:", signUpError);
-					// Even if Supabase Auth fails, we can still authenticate with our custom table
-					// Return a token based on our custom authentication
-					return res.json({
-						status: "success",
-						message: "Login successful",
-						user: {
-							IdUser: user.IdUser,
-							Name: user.Name,
-							Email: user.Email,
-							Role: user.Role,
-							IdOrganization: user.IdOrganization,
-						},
-						token: `custom_${user.IdUser}_${Date.now()}`, // Custom token for now
-					});
-				}
-
-				// Sign in after creating
-				const { data: signInData, error: signInError } =
-					await supabase.auth.signInWithPassword({
-						email: normalizedEmail,
-						password: password,
-					});
-
-				if (signInError) {
-					console.error("Supabase Auth signin error:", signInError);
-					return res.json({
-						status: "success",
-						message: "Login successful",
-						user: {
-							IdUser: user.IdUser,
-							Name: user.Name,
-							Email: user.Email,
-							Role: user.Role,
-							IdOrganization: user.IdOrganization,
-						},
-						token:
-							signInData?.session?.access_token ||
-							`custom_${user.IdUser}_${Date.now()}`,
-					});
-				}
-
-				return res.json({
-					status: "success",
-					message: "Login successful",
-					user: {
-						IdUser: user.IdUser,
-						Name: user.Name,
-						Email: user.Email,
-						Role: user.Role,
-						IdOrganization: user.IdOrganization,
-					},
-					token: signInData.session.access_token,
-				});
-			}
-
-			console.error("Supabase Auth error:", authError);
-			return res.status(500).json({
-				status: "error",
-				message: "Authentication error",
-				error: authError.message,
+			// User doesn't exist in Supabase Auth or password is wrong
+			// Use custom token instead - this is fine for our hybrid auth system
+			return res.json({
+				status: "success",
+				message: "Login successful",
+				user: {
+					IdUser: user.IdUser,
+					Name: user.Name,
+					Email: user.Email,
+					Role: user.Role,
+					IdOrganization: user.IdOrganization,
+				},
+				token: `custom_${user.IdUser}_${Date.now()}`,
 			});
 		}
 
-		// Success - return user data and JWT token
+		// Success - return user data and JWT token from Supabase Auth
 		res.json({
 			status: "success",
 			message: "Login successful",
