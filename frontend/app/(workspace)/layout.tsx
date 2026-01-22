@@ -223,6 +223,18 @@ export default function WorkspaceLayout({
 								</SidebarMenuItem>
 								<SidebarMenuItem>
 									<SidebarMenuButton
+										tooltip="Settings"
+										isActive={pathname === "/settings"}
+										asChild
+									>
+										<Link href="/settings">
+											<Settings className="size-4" />
+											<span>Settings</span>
+										</Link>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+								<SidebarMenuItem>
+									<SidebarMenuButton
 										tooltip="Sample Reports"
 										isActive={
 											pathname === "/demo-report-list" ||
@@ -233,18 +245,6 @@ export default function WorkspaceLayout({
 										<Link href="/demo-report-list">
 											<FileCheck className="size-4" />
 											<span>Sample Reports</span>
-										</Link>
-									</SidebarMenuButton>
-								</SidebarMenuItem>
-								<SidebarMenuItem>
-									<SidebarMenuButton
-										tooltip="Settings"
-										isActive={pathname === "/settings"}
-										asChild
-									>
-										<Link href="/settings">
-											<Settings className="size-4" />
-											<span>Settings</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>

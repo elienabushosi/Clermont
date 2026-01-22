@@ -25,6 +25,7 @@ import {
 	Grid2x2Check,
 	Ruler,
 	Home,
+	Search,
 } from "lucide-react";
 
 function getStatusColor(status: string) {
@@ -313,13 +314,22 @@ export default function HomePage() {
 	return (
 		<div className="p-8">
 			<div className="max-w-6xl mx-auto">
-				<div className="mb-6">
-					<h2 className="text-2xl font-semibold text-[#37322F] mb-2">
-						Reports Dashboard
-					</h2>
-					<p className="text-sm text-[#605A57]">
-						Overview of all reports for your organization
-					</p>
+				<div className="mb-6 flex items-start justify-between">
+					<div>
+						<h2 className="text-2xl font-semibold text-[#37322F] mb-2">
+							Reports Dashboard
+						</h2>
+						<p className="text-sm text-[#605A57]">
+							Overview of all reports for your organization
+						</p>
+					</div>
+					<Button
+						onClick={() => router.push("/search-address")}
+						className="bg-[#37322F] hover:bg-[#37322F]/90 text-white"
+					>
+						<Search className="h-4 w-4 mr-2" />
+						Search Address
+					</Button>
 				</div>
 
 				{reports.length === 0 ? (

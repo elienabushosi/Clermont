@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Lock, CreditCard, Mail, CheckCircle2 } from "lucide-react";
 
 const passwordResetSchema = z.object({
@@ -150,7 +151,33 @@ export default function SettingsPage() {
 					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
 						Settings
 					</h1>
-					<div className="text-[#605A57]">Loading...</div>
+					<div className="space-y-6">
+						<Card>
+							<CardHeader>
+								<CardTitle className="flex items-center gap-2">
+									<Lock className="h-5 w-5" />
+									Change Password
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-4">
+								<Skeleton className="h-4 w-full" />
+								<Skeleton className="h-4 w-3/4" />
+								<Skeleton className="h-10 w-48" />
+							</CardContent>
+						</Card>
+						<Card>
+							<CardHeader>
+								<CardTitle className="flex items-center gap-2">
+									<CreditCard className="h-5 w-5" />
+									Billing
+								</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<Skeleton className="h-4 w-full" />
+								<Skeleton className="h-4 w-2/3 mt-2" />
+							</CardContent>
+						</Card>
+					</div>
 				</div>
 			</div>
 		);
