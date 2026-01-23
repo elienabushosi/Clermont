@@ -4,16 +4,32 @@ import cors from "cors";
 import { supabase } from "./lib/supabase.js";
 import authRoutes from "./routes/auth.js";
 import reportRoutes from "./routes/reports.js";
+import billingRoutes from "./routes/billing.js";
 
 const app = express();
 const PORT = process.env.PORT || 3002;
 
 app.use(cors());
-app.use(express.json());
+
+// Stripe webhook needs raw body for signature verification
+// Apply raw body parser only to webhook endpoint, before JSON parser
+app.use(
+	"/api/billing/webhook",
+	express.raw({ type: "application/json" })
+);
+
+// JSON body parser for all other routes (skip webhook which uses raw body)
+app.use((req, res, next) => {
+	if (req.path === "/api/billing/webhook") {
+		return next(); // Skip JSON parsing for webhook
+	}
+	express.json()(req, res, next);
+});
 
 // API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/billing", billingRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {

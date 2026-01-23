@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS organizations (
     "IdOrganization" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "Name" TEXT NOT NULL,
     "Type" TEXT,
+    "SubscriptionStatus" TEXT DEFAULT 'none', -- 'active', 'past_due', 'canceled', 'none'
+    "TrialEndsAt" TIMESTAMP WITH TIME ZONE, -- Optional, can be configured later
     "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     "UpdatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -189,3 +191,34 @@ CREATE INDEX IF NOT EXISTS idx_password_reset_codes_user ON password_reset_codes
 CREATE INDEX IF NOT EXISTS idx_password_reset_codes_code ON password_reset_codes("Code");
 CREATE INDEX IF NOT EXISTS idx_password_reset_codes_expiresat ON password_reset_codes("ExpiresAt");
 CREATE INDEX IF NOT EXISTS idx_password_reset_codes_usedat ON password_reset_codes("UsedAt");
+
+
+-- ----------------------------------------------------
+-- Subscriptions table
+-- ----------------------------------------------------
+CREATE TABLE IF NOT EXISTS subscriptions (
+    "IdSubscription" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "IdOrganization" UUID NOT NULL REFERENCES organizations("IdOrganization") ON DELETE CASCADE,
+    "StripeCustomerId" TEXT,
+    "StripeSubscriptionId" TEXT UNIQUE,
+    "StripePriceId" TEXT NOT NULL,
+    "Status" TEXT NOT NULL, -- 'trialing', 'active', 'past_due', 'canceled', 'incomplete', 'incomplete_expired'
+    "TrialEndsAt" TIMESTAMP WITH TIME ZONE,
+    "CurrentPeriodStart" TIMESTAMP WITH TIME ZONE,
+    "CurrentPeriodEnd" TIMESTAMP WITH TIME ZONE,
+    "CancelAtPeriodEnd" BOOLEAN DEFAULT FALSE,
+    "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    "UpdatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for subscriptions
+CREATE INDEX IF NOT EXISTS idx_subscriptions_organization ON subscriptions("IdOrganization");
+CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer ON subscriptions("StripeCustomerId");
+CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription ON subscriptions("StripeSubscriptionId");
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions("Status");
+
+-- Trigger to auto-update UpdatedAt for subscriptions
+DROP TRIGGER IF EXISTS update_subscriptions_updated_at ON subscriptions;
+CREATE TRIGGER update_subscriptions_updated_at
+BEFORE UPDATE ON subscriptions
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

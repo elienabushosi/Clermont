@@ -145,6 +145,7 @@ router.post("/signup", async (req, res) => {
 				.insert({
 					Name: organizationName.trim(),
 					Type: null, // Can be set later if needed
+					SubscriptionStatus: "none",
 					CreatedAt: new Date().toISOString(),
 					UpdatedAt: new Date().toISOString(),
 				})
