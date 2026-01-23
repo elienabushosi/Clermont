@@ -1,4 +1,5 @@
 // Team utilities
+import { config } from "./config";
 
 export interface TeamMember {
 	IdUser: string;
@@ -23,7 +24,7 @@ export async function getTeamMembers(): Promise<TeamMember[]> {
 			throw new Error("No authentication token");
 		}
 
-		const response = await fetch("http://localhost:3002/api/auth/team", {
+		const response = await fetch(`${config.apiUrl}/api/auth/team`, {
 			method: "GET",
 			headers: {
 				Authorization: `Bearer ${token}`,
@@ -50,7 +51,7 @@ export async function generateJoinCode(): Promise<JoinCode> {
 		}
 
 		const response = await fetch(
-			"http://localhost:3002/api/auth/joincode/generate",
+			`${config.apiUrl}/api/auth/joincode/generate`,
 			{
 				method: "POST",
 				headers: {
@@ -80,7 +81,7 @@ export async function getJoinCodes(): Promise<JoinCode[]> {
 		}
 
 		const response = await fetch(
-			"http://localhost:3002/api/auth/joincode/list",
+			`${config.apiUrl}/api/auth/joincode/list`,
 			{
 				method: "GET",
 				headers: {
@@ -109,7 +110,7 @@ export async function removeUser(userId: string): Promise<void> {
 		}
 
 		const response = await fetch(
-			`http://localhost:3002/api/auth/team/${userId}`,
+			`${config.apiUrl}/api/auth/team/${userId}`,
 			{
 				method: "DELETE",
 				headers: {

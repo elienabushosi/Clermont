@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { config } from "@/lib/config";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -102,7 +103,7 @@ export default function LoginPage() {
 			};
 
 			const response = await fetch(
-				"http://localhost:3002/api/auth/login",
+				`${config.apiUrl}/api/auth/login`,
 				{
 					method: "POST",
 					headers: {
@@ -146,7 +147,7 @@ export default function LoginPage() {
 
 		try {
 			const response = await fetch(
-				"http://localhost:3002/api/auth/password/forgot",
+				`${config.apiUrl}/api/auth/password/forgot`,
 				{
 					method: "POST",
 					headers: {
@@ -186,7 +187,7 @@ export default function LoginPage() {
 
 		try {
 			const response = await fetch(
-				"http://localhost:3002/api/auth/password/reset-with-code",
+				`${config.apiUrl}/api/auth/password/reset-with-code`,
 				{
 					method: "POST",
 					headers: {

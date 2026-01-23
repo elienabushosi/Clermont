@@ -179,7 +179,7 @@ export default function SearchAddressPage() {
 			toast.loading("Generating report...", { id: "generate-report" });
 
 			const response = await fetch(
-				"http://localhost:3002/api/reports/generate",
+				`${config.apiUrl}/api/reports/generate`,
 				{
 					method: "POST",
 					headers: {

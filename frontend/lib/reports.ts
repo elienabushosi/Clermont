@@ -1,4 +1,5 @@
 // Reports API utilities
+import { config } from "./config";
 
 export interface Report {
 	IdReport: string;
@@ -35,7 +36,7 @@ export async function getReports(): Promise<Report[]> {
 		throw new Error("No authentication token found");
 	}
 
-	const response = await fetch("http://localhost:3002/api/reports", {
+	const response = await fetch(`${config.apiUrl}/api/reports`, {
 		method: "GET",
 		headers: {
 			Authorization: `Bearer ${token}`,
@@ -105,7 +106,7 @@ export async function getReportWithSources(
 	}
 
 	const response = await fetch(
-		`http://localhost:3002/api/reports/${reportId}`,
+		`${config.apiUrl}/api/reports/${reportId}`,
 		{
 			method: "GET",
 			headers: {

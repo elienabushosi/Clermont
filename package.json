@@ -7,10 +7,14 @@
     "backend"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=frontend",
+    "dev": "npm run dev:all",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:all": "npm run dev:backend & npm run dev:frontend",
+    "prod": "npm run prod:all",
+    "prod:frontend": "npm run prod --workspace=frontend",
+    "prod:backend": "npm run prod --workspace=backend",
+    "prod:all": "npm run prod:backend & npm run prod:frontend",
     "build": "npm run build --workspace=frontend",
     "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend"
   }

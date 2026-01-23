@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { config } from "@/lib/config";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -99,7 +100,7 @@ export default function SignupPage() {
 
 		try {
 			const response = await fetch(
-				`http://localhost:3002/api/auth/joincode/validate/${code.toUpperCase()}`
+				`${config.apiUrl}/api/auth/joincode/validate/${code.toUpperCase()}`
 			);
 
 			const result = await response.json();
@@ -157,7 +158,7 @@ export default function SignupPage() {
 			}
 
 			const response = await fetch(
-				"http://localhost:3002/api/auth/signup",
+				`${config.apiUrl}/api/auth/signup`,
 				{
 					method: "POST",
 					headers: {

@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Lock, CreditCard, Mail, CheckCircle2 } from "lucide-react";
+import { config } from "@/lib/config";
 
 const passwordResetSchema = z.object({
 	code: z.string().min(6, "Code must be at least 6 characters").max(10, "Code must be 10 characters or less"),
@@ -96,7 +97,7 @@ export default function SettingsPage() {
 
 		try {
 			const response = await fetch(
-				"http://localhost:3002/api/auth/password/request-reset",
+				`${config.apiUrl}/api/auth/password/request-reset`,
 				{
 					method: "POST",
 					headers: {

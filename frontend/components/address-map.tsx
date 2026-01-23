@@ -8,7 +8,8 @@ interface AddressMapProps {
 	addressData: AddressData | null;
 }
 
-const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+import { config } from "@/lib/config";
+const GOOGLE_MAPS_API_KEY = config.googleMapsApiKey;
 
 // Move libraries array outside component to prevent reloads
 const LIBRARIES: "places"[] = ["places"];

@@ -3,10 +3,11 @@
 	"version": "0.1.0",
 	"private": true,
 	"scripts": {
-		"build": "next build",
-		"dev": "next dev",
+		"build": "NODE_ENV=production next build",
+		"dev": "NODE_ENV=development next dev",
+		"prod": "NODE_ENV=production next start",
 		"lint": "next lint",
-		"start": "next start"
+		"start": "NODE_ENV=production next start"
 	},
 	"dependencies": {
 		"@hookform/resolvers": "^3.10.0",

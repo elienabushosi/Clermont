@@ -1,4 +1,5 @@
 // Authentication utilities
+import { config } from "./config";
 
 export function getAuthToken(): string | null {
 	if (typeof window === "undefined") return null;
@@ -22,7 +23,7 @@ export function isAuthenticated(): boolean {
 // Verify token with backend
 export async function verifyToken(token: string): Promise<boolean> {
 	try {
-		const response = await fetch("http://localhost:3002/api/auth/verify", {
+		const response = await fetch(`${config.apiUrl}/api/auth/verify`, {
 			method: "GET",
 			headers: {
 				Authorization: `Bearer ${token}`,
@@ -55,7 +56,7 @@ export async function getCurrentUser(): Promise<{
 		const token = getAuthToken();
 		if (!token) return null;
 
-		const response = await fetch("http://localhost:3002/api/auth/verify", {
+		const response = await fetch(`${config.apiUrl}/api/auth/verify`, {
 			method: "GET",
 			headers: {
 				Authorization: `Bearer ${token}`,
@@ -84,7 +85,7 @@ export async function requestPasswordReset(): Promise<void> {
 		}
 
 		const response = await fetch(
-			"http://localhost:3002/api/auth/password/request-reset",
+			`${config.apiUrl}/api/auth/password/request-reset`,
 			{
 				method: "POST",
 				headers: {
@@ -116,7 +117,7 @@ export async function resetPassword(
 		}
 
 		const response = await fetch(
-			"http://localhost:3002/api/auth/password/reset",
+			`${config.apiUrl}/api/auth/password/reset`,
 			{
 				method: "POST",
 				headers: {

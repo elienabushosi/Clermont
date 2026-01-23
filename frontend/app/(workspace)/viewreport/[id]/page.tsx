@@ -26,6 +26,7 @@ import {
 	MapPinCheck,
 } from "lucide-react";
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
+import { config } from "@/lib/config";
 
 function getStatusColor(status: string) {
 	switch (status) {
@@ -2503,8 +2504,7 @@ function PropertyMap({
 	lng: number;
 	address: string;
 }) {
-	const GOOGLE_MAPS_API_KEY =
-		process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+	const GOOGLE_MAPS_API_KEY = config.googleMapsApiKey;
 
 	const { isLoaded, loadError } = useLoadScript({
 		googleMapsApiKey: GOOGLE_MAPS_API_KEY || "",
