@@ -174,6 +174,73 @@ export async function cancelSubscription(): Promise<void> {
 }
 
 /**
+ * Preview upgrade prorated amount
+ */
+export async function previewUpgrade(newPriceId: string): Promise<{
+	proratedAmount: number;
+	currency: string;
+	formattedAmount: string;
+}> {
+	try {
+		const token = localStorage.getItem("auth_token");
+		if (!token) {
+			throw new Error("No authentication token");
+		}
+
+		const response = await fetch(
+			`${config.apiUrl}/api/billing/upgrade-preview?newPriceId=${encodeURIComponent(newPriceId)}`,
+			{
+				method: "GET",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+				},
+			}
+		);
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.message || "Failed to preview upgrade");
+		}
+
+		const data = await response.json();
+		return data;
+	} catch (error) {
+		console.error("Error previewing upgrade:", error);
+		throw error;
+	}
+}
+
+/**
+ * Upgrade subscription with proration
+ */
+export async function upgradeSubscription(newPriceId: string): Promise<void> {
+	try {
+		const token = localStorage.getItem("auth_token");
+		if (!token) {
+			throw new Error("No authentication token");
+		}
+
+		const response = await fetch(`${config.apiUrl}/api/billing/upgrade-subscription`, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ newPriceId }),
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.message || "Failed to upgrade subscription");
+		}
+	} catch (error) {
+		console.error("Error upgrading subscription:", error);
+		throw error;
+	}
+}
+
+/**
  * Format price for display
  */
 export function formatPrice(amount: number | null, currency: string | null): string {

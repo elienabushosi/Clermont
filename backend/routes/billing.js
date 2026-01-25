@@ -633,6 +633,251 @@ router.post("/cancel-subscription", async (req, res) => {
 	}
 });
 
+// GET /api/billing/upgrade-preview
+// Preview prorated amount for upgrading subscription (owner only)
+router.get("/upgrade-preview", async (req, res) => {
+	try {
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+		const userData = await getUserFromToken(token);
+
+		if (!userData) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		// Only owners can preview upgrades
+		if (userData.Role !== "Owner") {
+			return res.status(403).json({
+				status: "error",
+				message: "Only organization owners can preview upgrades",
+			});
+		}
+
+		const { newPriceId } = req.query;
+
+		if (!newPriceId) {
+			return res.status(400).json({
+				status: "error",
+				message: "newPriceId is required",
+			});
+		}
+
+		if (!stripe) {
+			return res.status(500).json({
+				status: "error",
+				message: "Stripe is not configured",
+			});
+		}
+
+		// Get current subscription
+		const { data: subscription, error: subError } = await supabase
+			.from("subscriptions")
+			.select("*")
+			.eq("IdOrganization", userData.IdOrganization)
+			.eq("Status", "active")
+			.order("CreatedAt", { ascending: false })
+			.limit(1)
+			.single();
+
+		if (subError || !subscription || !subscription.StripeSubscriptionId) {
+			return res.status(404).json({
+				status: "error",
+				message: "No active subscription found",
+			});
+		}
+
+		// Get the subscription from Stripe to access items
+		const stripeSubscription = await stripe.subscriptions.retrieve(
+			subscription.StripeSubscriptionId,
+			{
+				expand: ["items.data.price"],
+			}
+		);
+
+		// Get the new price details
+		const newPrice = await stripe.prices.retrieve(newPriceId);
+
+		// Calculate prorated amount using Stripe's invoice preview
+		// We'll use the upcoming invoice to see what would be charged
+		const upcomingInvoice = await stripe.invoices.retrieveUpcoming({
+			customer: stripeSubscription.customer,
+			subscription: subscription.StripeSubscriptionId,
+			subscription_items: [
+				{
+					id: stripeSubscription.items.data[0].id,
+					price: newPriceId,
+				},
+			],
+			subscription_proration_behavior: "always_invoice",
+		});
+
+		// Calculate the prorated amount (total - amount_due from current subscription)
+		const proratedAmount = upcomingInvoice.amount_due;
+
+		res.json({
+			status: "success",
+			proratedAmount: proratedAmount, // Amount in cents
+			currency: upcomingInvoice.currency,
+			currentPrice: subscription.StripePriceId,
+			newPrice: newPriceId,
+			formattedAmount: new Intl.NumberFormat("en-US", {
+				style: "currency",
+				currency: upcomingInvoice.currency.toUpperCase(),
+			}).format(proratedAmount / 100),
+		});
+	} catch (error) {
+		console.error("Error previewing upgrade:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error previewing upgrade",
+			error: error.message,
+		});
+	}
+});
+
+// POST /api/billing/upgrade-subscription
+// Upgrade subscription with proration (owner only)
+router.post("/upgrade-subscription", async (req, res) => {
+	try {
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+		const userData = await getUserFromToken(token);
+
+		if (!userData) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		// Only owners can upgrade subscriptions
+		if (userData.Role !== "Owner") {
+			return res.status(403).json({
+				status: "error",
+				message: "Only organization owners can upgrade subscriptions",
+			});
+		}
+
+		const { newPriceId } = req.body;
+
+		if (!newPriceId) {
+			return res.status(400).json({
+				status: "error",
+				message: "newPriceId is required",
+			});
+		}
+
+		if (!stripe) {
+			return res.status(500).json({
+				status: "error",
+				message: "Stripe is not configured",
+			});
+		}
+
+		// Get current subscription
+		const { data: subscription, error: subError } = await supabase
+			.from("subscriptions")
+			.select("*")
+			.eq("IdOrganization", userData.IdOrganization)
+			.eq("Status", "active")
+			.order("CreatedAt", { ascending: false })
+			.limit(1)
+			.single();
+
+		if (subError || !subscription || !subscription.StripeSubscriptionId) {
+			return res.status(404).json({
+				status: "error",
+				message: "No active subscription found",
+			});
+		}
+
+		// Get the subscription from Stripe to access items
+		const stripeSubscription = await stripe.subscriptions.retrieve(
+			subscription.StripeSubscriptionId,
+			{
+				expand: ["items.data.price"],
+			}
+		);
+
+		// Update subscription with new price and proration
+		const updatedSubscription = await stripe.subscriptions.update(
+			subscription.StripeSubscriptionId,
+			{
+				items: [
+					{
+						id: stripeSubscription.items.data[0].id,
+						price: newPriceId,
+					},
+				],
+				proration_behavior: "always_invoice", // Immediately invoice for prorated amount
+			}
+		);
+
+		// Update subscription in database
+		await supabase
+			.from("subscriptions")
+			.update({
+				StripePriceId: updatedSubscription.items.data[0]?.price.id || newPriceId,
+				Status: updatedSubscription.status,
+				CurrentPeriodStart: updatedSubscription.current_period_start
+					? new Date(updatedSubscription.current_period_start * 1000).toISOString()
+					: null,
+				CurrentPeriodEnd: updatedSubscription.current_period_end
+					? new Date(updatedSubscription.current_period_end * 1000).toISOString()
+					: null,
+				UpdatedAt: new Date().toISOString(),
+			})
+			.eq("IdSubscription", subscription.IdSubscription);
+
+		// Update organization status
+		await supabase
+			.from("organizations")
+			.update({
+				SubscriptionStatus: updatedSubscription.status === "trialing" || updatedSubscription.status === "active" ? "active" : updatedSubscription.status,
+				UpdatedAt: new Date().toISOString(),
+			})
+			.eq("IdOrganization", userData.IdOrganization);
+
+		res.json({
+			status: "success",
+			message: "Subscription upgraded successfully",
+			subscription: {
+				status: updatedSubscription.status,
+				priceId: updatedSubscription.items.data[0]?.price.id,
+				currentPeriodEnd: updatedSubscription.current_period_end
+					? new Date(updatedSubscription.current_period_end * 1000).toISOString()
+					: null,
+			},
+		});
+	} catch (error) {
+		console.error("Error upgrading subscription:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error upgrading subscription",
+			error: error.message,
+		});
+	}
+});
+
 // POST /api/billing/webhook
 // Stripe webhook endpoint (no auth required - uses Stripe signature verification)
 // Note: Raw body parsing is handled in server.js before express.json()

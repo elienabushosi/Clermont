@@ -41,6 +41,8 @@ import {
 	createCheckoutSession,
 	processCheckoutSession,
 	cancelSubscription,
+	previewUpgrade,
+	upgradeSubscription,
 	formatPrice,
 	type SubscriptionStatus,
 	type StripeProduct,
@@ -84,6 +86,14 @@ export default function SettingsPage() {
 	const [isCanceling, setIsCanceling] = useState(false);
 	const [showCancelDialog, setShowCancelDialog] = useState(false);
 	const [selectedBillingInterval, setSelectedBillingInterval] = useState<"month" | "year">("month");
+	const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
+	const [isPreviewingUpgrade, setIsPreviewingUpgrade] = useState(false);
+	const [isUpgrading, setIsUpgrading] = useState(false);
+	const [proratedAmount, setProratedAmount] = useState<{
+		amount: number;
+		currency: string;
+		formatted: string;
+	} | null>(null);
 
 	const isOwner = currentUser?.user.Role === "Owner";
 
@@ -172,6 +182,17 @@ export default function SettingsPage() {
 			fetchProducts();
 		}
 	}, [isOwner]);
+
+	// Set toggle to match current subscription interval
+	useEffect(() => {
+		if (subscriptionStatus?.status === "active" && subscriptionStatus.plan && products.length > 0) {
+			const currentProduct = products.find(p => p.priceId === subscriptionStatus.plan);
+			if (currentProduct) {
+				const interval = currentProduct.interval === 'month' ? 'month' : 'year';
+				setSelectedBillingInterval(interval);
+			}
+		}
+	}, [subscriptionStatus, products]);
 
 	const handleRequestCode = async () => {
 		setIsRequestingCode(true);
@@ -263,6 +284,68 @@ export default function SettingsPage() {
 			);
 		} finally {
 			setIsCanceling(false);
+		}
+	};
+
+	const handleUpgradeClick = async () => {
+		// Find annual price ID
+		const annualPriceId = products.find(
+			p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+		)?.priceId;
+
+		if (!annualPriceId) {
+			setError("Annual plan not found");
+			return;
+		}
+
+		setIsPreviewingUpgrade(true);
+		setError(null);
+		setProratedAmount(null);
+
+		try {
+			const preview = await previewUpgrade(annualPriceId);
+			setProratedAmount({
+				amount: preview.proratedAmount,
+				currency: preview.currency,
+				formatted: preview.formattedAmount,
+			});
+			setShowUpgradeDialog(true);
+		} catch (err) {
+			setError(
+				err instanceof Error ? err.message : "Failed to preview upgrade"
+			);
+		} finally {
+			setIsPreviewingUpgrade(false);
+		}
+	};
+
+	const handleConfirmUpgrade = async () => {
+		// Find annual price ID
+		const annualPriceId = products.find(
+			p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+		)?.priceId;
+
+		if (!annualPriceId) {
+			setError("Annual plan not found");
+			return;
+		}
+
+		setIsUpgrading(true);
+		setError(null);
+
+		try {
+			await upgradeSubscription(annualPriceId);
+			setSuccess("Subscription upgraded successfully!");
+			setShowUpgradeDialog(false);
+			setProratedAmount(null);
+			// Refresh subscription status
+			await fetchSubscriptionStatus();
+		} catch (err) {
+			setError(
+				err instanceof Error ? err.message : "Failed to upgrade subscription"
+			);
+		} finally {
+			setIsUpgrading(false);
 		}
 	};
 
@@ -586,8 +669,80 @@ export default function SettingsPage() {
 								</p>
 							)}
 
+							{/* Current Subscription Details - Show above Available Plans */}
+							{isOwner && subscriptionStatus?.status === "active" && (() => {
+								const currentSubscriptionPriceId = subscriptionStatus?.plan;
+								const currentSubscriptionProduct = currentSubscriptionPriceId 
+									? products.find(p => p.priceId === currentSubscriptionPriceId)
+									: null;
+
+								if (!currentSubscriptionProduct) return null;
+
+								return (
+									<div className="pt-4 border-t border-[#E0DEDB]">
+										<Card className="border-2 border-[#6f9f6b] bg-green-50/30">
+											<CardHeader>
+												<CardTitle className="text-lg flex items-center gap-2">
+													<CheckCircle2 className="h-5 w-5 text-[#6f9f6b]" />
+													Current Subscription
+												</CardTitle>
+											</CardHeader>
+											<CardContent>
+												<div className="space-y-4">
+													<div className="flex items-center justify-between">
+														<div>
+															<p className="font-semibold text-[#37322F]">
+																{currentSubscriptionProduct.name}
+															</p>
+															<p className="text-sm text-[#605A57]">
+																{currentSubscriptionProduct.interval === 'month' ? 'Billed monthly' : 'Billed annually'}
+															</p>
+														</div>
+														<div className="text-right">
+															<p className="text-2xl font-bold text-[#37322F]">
+																{formatPrice(currentSubscriptionProduct.amount, currentSubscriptionProduct.currency)}
+															</p>
+															<p className="text-xs text-[#605A57]">
+																{currentSubscriptionProduct.interval === 'month' ? 'per month' : 'per year'}
+															</p>
+														</div>
+													</div>
+													
+													{/* Upgrade Button - Only show for monthly subscribers */}
+													{currentSubscriptionProduct.priceId === 'price_1SssqwKFRZRd0A1rf1wdOELZ' && (
+														<Button
+															onClick={handleUpgradeClick}
+															disabled={isPreviewingUpgrade || isUpgrading}
+															className="w-full bg-[#37322F] hover:bg-[#37322F]/90 text-white"
+														>
+															{isPreviewingUpgrade ? (
+																<>
+																	<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																	Calculating...
+																</>
+															) : (
+																"Upgrade & save $589 annually"
+															)}
+														</Button>
+													)}
+												</div>
+											</CardContent>
+										</Card>
+									</div>
+								);
+							})()}
+
 							{/* Pricing Plans - Owner Only */}
-							{isOwner && (
+							{isOwner && (() => {
+								// Hide available plans if user is on monthly subscription
+								const isMonthlySubscriber = subscriptionStatus?.status === "active" && 
+									subscriptionStatus.plan === 'price_1SssqwKFRZRd0A1rf1wdOELZ';
+								
+								if (isMonthlySubscriber) {
+									return null; // Don't show available plans for monthly subscribers
+								}
+
+								return (
 								<div className="space-y-4 pt-4 border-t border-[#E0DEDB]">
 									<div>
 										<h3 className="text-lg font-semibold text-[#37322F] mb-2">
@@ -603,6 +758,12 @@ export default function SettingsPage() {
 											Loading pricing plans...
 										</div>
 									) : (() => {
+										// Find current subscription price
+										const currentSubscriptionPriceId = subscriptionStatus?.plan;
+										const currentSubscriptionProduct = currentSubscriptionPriceId 
+											? products.find(p => p.priceId === currentSubscriptionPriceId)
+											: null;
+
 										// Group products by product ID to show monthly/annual toggle
 										const productGroups = products.reduce((acc, product) => {
 											if (!acc[product.id]) {
@@ -718,9 +879,56 @@ export default function SettingsPage() {
 										);
 									})()}
 								</div>
-							)}
+								);
+							})()}
 						</CardContent>
 					</Card>
+
+					{/* Upgrade Confirmation Dialog */}
+					<AlertDialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle>Upgrade to Annual Plan</AlertDialogTitle>
+								<AlertDialogDescription>
+									Upgrade your subscription to the annual plan and save $589 per year. You'll be charged a prorated amount based on the time remaining in your current billing period.
+								</AlertDialogDescription>
+							</AlertDialogHeader>
+							<div className="py-4">
+								{proratedAmount && (
+									<div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+										<p className="text-sm text-blue-800 mb-1">
+											<strong>Amount to be charged:</strong>
+										</p>
+										<p className="text-2xl font-bold text-blue-900">
+											{proratedAmount.formatted}
+										</p>
+										<p className="text-xs text-blue-700 mt-1">
+											This is the prorated amount after crediting your remaining monthly subscription.
+										</p>
+									</div>
+								)}
+							</div>
+							<AlertDialogFooter>
+								<AlertDialogCancel disabled={isUpgrading}>
+									Cancel
+								</AlertDialogCancel>
+								<AlertDialogAction
+									onClick={handleConfirmUpgrade}
+									disabled={isUpgrading}
+									className="bg-[#37322F] hover:bg-[#37322F]/90 text-white"
+								>
+									{isUpgrading ? (
+										<>
+											<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+											Upgrading...
+										</>
+									) : (
+										"Confirm Upgrade"
+									)}
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
 				</div>
 			</div>
 		</div>
