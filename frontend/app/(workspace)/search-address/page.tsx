@@ -14,7 +14,8 @@ import AddressMap from "@/components/address-map";
 import { getAuthToken, getCurrentUser } from "@/lib/auth";
 import { getReports, type Report, getReportWithSources } from "@/lib/reports";
 import { getSubscriptionStatus, createCheckoutSession, getProducts, formatPrice, type SubscriptionStatus, type StripeProduct } from "@/lib/billing";
-import { Loader2, AlertTriangle, FileText, Check } from "lucide-react";
+import { Loader2, AlertTriangle, Check } from "lucide-react";
+import Image from "next/image";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -468,7 +469,13 @@ export default function SearchAddressPage() {
 						<>
 							<AlertDialogHeader>
 								<div className="flex flex-col items-center text-center mb-4">
-									<FileText className="h-12 w-12 text-[#37322F] mb-3" />
+									<Image
+										src="/logos/linderpaymentmodallogo.png"
+										alt="Lindero"
+										width={120}
+										height={40}
+										className="mb-3"
+									/>
 									<AlertDialogTitle className="text-2xl font-bold text-[#37322F]">
 										Upgrade to Pro
 									</AlertDialogTitle>
@@ -489,7 +496,7 @@ export default function SearchAddressPage() {
 										"Yard Requirements"
 									].map((feature) => (
 										<div key={feature} className="flex items-center gap-3">
-											<div className="h-6 w-6 rounded-full bg-green-600 flex items-center justify-center shrink-0">
+											<div className="h-6 w-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#6f9f6b' }}>
 												<Check className="h-4 w-4 text-white" />
 											</div>
 											<span className="text-sm text-[#37322F]">{feature}</span>
@@ -583,7 +590,7 @@ export default function SearchAddressPage() {
 																			Pro
 																		</div>
 																		<div className="text-xs text-[#605A57] mt-1">
-																			billed monthly
+																			billed monthly & <span className="italic">cancel anytime</span>
 																		</div>
 																	</div>
 																</div>
