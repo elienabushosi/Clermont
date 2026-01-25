@@ -7,6 +7,8 @@ export interface SubscriptionStatus {
 	trialEndsAt: string | null;
 	currentPeriodEnd?: string | null;
 	cancelAtPeriodEnd?: boolean;
+	freeReportsUsed?: number;
+	freeReportsLimit?: number;
 	subscription?: any;
 }
 

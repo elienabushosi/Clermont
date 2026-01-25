@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS organizations (
     "Type" TEXT,
     "SubscriptionStatus" TEXT DEFAULT 'none', -- 'active', 'past_due', 'canceled', 'none'
     "TrialEndsAt" TIMESTAMP WITH TIME ZONE, -- Optional, can be configured later
+    "FreeReportsUsed" INTEGER DEFAULT 0, -- Track free reports used (only for owners)
+    "FreeReportsLimit" INTEGER DEFAULT 2, -- Maximum free reports allowed
     "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     "UpdatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

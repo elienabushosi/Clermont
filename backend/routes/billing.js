@@ -37,12 +37,26 @@ async function getOrganizationSubscriptionStatus(organizationId) {
 		return null;
 	}
 
-	// If no subscription exists, return none status
+	// Get organization info for free reports
+	const { data: org, error: orgError } = await supabase
+		.from("organizations")
+		.select("FreeReportsUsed, FreeReportsLimit")
+		.eq("IdOrganization", organizationId)
+		.single();
+
+	const freeReportsUsed = org?.FreeReportsUsed || 0;
+	const freeReportsLimit = org?.FreeReportsLimit || 2;
+
+	// If no subscription exists, return none status with free reports info
 	if (!subscription) {
 		return {
 			status: "none",
 			plan: "free",
 			trialEndsAt: null,
+			currentPeriodEnd: null,
+			cancelAtPeriodEnd: false,
+			freeReportsUsed: freeReportsUsed,
+			freeReportsLimit: freeReportsLimit,
 			subscription: null,
 		};
 	}
@@ -54,6 +68,8 @@ async function getOrganizationSubscriptionStatus(organizationId) {
 		trialEndsAt: subscription.TrialEndsAt,
 		currentPeriodEnd: subscription.CurrentPeriodEnd,
 		cancelAtPeriodEnd: subscription.CancelAtPeriodEnd || false,
+		freeReportsUsed: freeReportsUsed, // Still track even with subscription
+		freeReportsLimit: freeReportsLimit,
 		subscription: subscription,
 	};
 }
@@ -147,22 +163,45 @@ router.get("/products", async (req, res) => {
 		// Fetch products and prices from Stripe
 		const products = await stripe.products.list({
 			active: true,
-			expand: ["data.default_price"],
 		});
 
-		// Format products with prices
-		const formattedProducts = products.data.map((product) => {
-			const price = product.default_price;
-			return {
+		// Fetch all prices for each product
+		const productsWithPrices = await Promise.all(
+			products.data.map(async (product) => {
+				const prices = await stripe.prices.list({
+					product: product.id,
+					active: true,
+				});
+
+				// Format prices
+				const formattedPrices = prices.data.map((price) => ({
+					priceId: price.id,
+					amount: price.unit_amount,
+					currency: price.currency,
+					interval: price.recurring?.interval || null,
+				}));
+
+				return {
+					id: product.id,
+					name: product.name,
+					description: product.description,
+					prices: formattedPrices,
+				};
+			})
+		);
+
+		// Flatten to return each price as a separate product option
+		const formattedProducts = productsWithPrices.flatMap((product) =>
+			product.prices.map((price) => ({
 				id: product.id,
 				name: product.name,
 				description: product.description,
-				priceId: price?.id || null,
-				amount: price && typeof price === "object" && "unit_amount" in price ? price.unit_amount : null,
-				currency: price && typeof price === "object" && "currency" in price ? price.currency : null,
-				interval: price && typeof price === "object" && "recurring" in price ? price.recurring?.interval : null,
-			};
-		});
+				priceId: price.priceId,
+				amount: price.amount,
+				currency: price.currency,
+				interval: price.interval,
+			}))
+		);
 
 		res.json({
 			status: "success",

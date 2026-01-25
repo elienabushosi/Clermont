@@ -13,6 +13,19 @@ import AddressAutocomplete, {
 import AddressMap from "@/components/address-map";
 import { getAuthToken, getCurrentUser } from "@/lib/auth";
 import { getReports, type Report, getReportWithSources } from "@/lib/reports";
+import { getSubscriptionStatus, createCheckoutSession, getProducts, formatPrice, type SubscriptionStatus, type StripeProduct } from "@/lib/billing";
+import { Loader2, AlertTriangle, FileText, Check } from "lucide-react";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { config } from "@/lib/config";
 
 export default function SearchAddressPage() {
 	const router = useRouter();
@@ -20,10 +33,66 @@ export default function SearchAddressPage() {
 	const [recentReports, setRecentReports] = useState<Report[]>([]);
 	const [isLoadingReports, setIsLoadingReports] = useState(true);
 	const [pollingReportId, setPollingReportId] = useState<string | null>(null);
+	const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+	const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+	const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+	const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
+	const [currentUser, setCurrentUser] = useState<{ user: { Role: string } } | null>(null);
+	const [products, setProducts] = useState<StripeProduct[]>([]);
+	const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
 
 	const handleAddressSelect = (data: AddressData) => {
 		setAddressData(data);
 	};
+
+	// Fetch subscription status and user info
+	useEffect(() => {
+		const fetchSubscriptionAndUser = async () => {
+			try {
+				const user = await getCurrentUser();
+				setCurrentUser(user);
+				
+				const status = await getSubscriptionStatus();
+				setSubscriptionStatus(status);
+
+				// Fetch products if user is owner
+				if (user?.user.Role === "Owner") {
+					try {
+						const productsList = await getProducts();
+						setProducts(productsList);
+						
+						// Auto-select annual Pro plan (price_1SssqwKFRZRd0A1rexXIA41g) by default
+						const annualProPrice = productsList.find(
+							p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+						);
+						if (annualProPrice) {
+							setSelectedPriceId(annualProPrice.priceId);
+						}
+					} catch (err) {
+						console.error("Error fetching products:", err);
+					}
+				}
+			} catch (err) {
+				console.error("Error fetching subscription status:", err);
+			} finally {
+				setIsLoadingSubscription(false);
+			}
+		};
+
+		fetchSubscriptionAndUser();
+	}, []);
+
+	// Auto-select annual Pro plan when modal opens and products are loaded
+	useEffect(() => {
+		if (showSubscriptionModal && currentUser?.user.Role === "Owner" && products.length > 0 && !selectedPriceId) {
+			const annualProPrice = products.find(
+				p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+			);
+			if (annualProPrice) {
+				setSelectedPriceId(annualProPrice.priceId);
+			}
+		}
+	}, [showSubscriptionModal, currentUser, products, selectedPriceId]);
 
 	// Fetch recent reports for the logged-in user
 	useEffect(() => {
@@ -175,6 +244,8 @@ export default function SearchAddressPage() {
 			return;
 		}
 
+		// Backend will handle the subscription check and return requiresSubscription: true if needed
+
 		try {
 			toast.loading("Generating report...", { id: "generate-report" });
 
@@ -198,6 +269,20 @@ export default function SearchAddressPage() {
 			const result = await response.json();
 
 			if (!response.ok) {
+				// Check if subscription is required
+				if (result.requiresSubscription) {
+					toast.dismiss("generate-report");
+					// Auto-select annual Pro plan when opening modal
+					const annualProPrice = products.find(
+						p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+					);
+					if (annualProPrice && !selectedPriceId) {
+						setSelectedPriceId(annualProPrice.priceId);
+					}
+					setShowSubscriptionModal(true);
+					return;
+				}
+				
 				toast.error(result.message || "Failed to generate report", {
 					id: "generate-report",
 				});
@@ -209,6 +294,12 @@ export default function SearchAddressPage() {
 			});
 
 			console.log("Report generated:", result);
+			
+			// Refresh subscription status to update free reports count
+			if (isOwner && !hasActiveSubscription) {
+				const status = await getSubscriptionStatus();
+				setSubscriptionStatus(status);
+			}
 			
 			// Start polling for report status
 			if (result.reportId) {
@@ -222,9 +313,63 @@ export default function SearchAddressPage() {
 		}
 	};
 
+	const handleSelectPlan = async () => {
+		// Use selected price or default to annual Pro
+		const priceIdToUse = selectedPriceId || products.find(
+			p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+		)?.priceId;
+
+		if (!priceIdToUse) {
+			toast.error("Please select a plan");
+			return;
+		}
+
+		setIsCreatingCheckout(true);
+		try {
+			const { url } = await createCheckoutSession(priceIdToUse);
+			// Redirect to Stripe Checkout
+			window.location.href = url;
+		} catch (err) {
+			toast.error(
+				err instanceof Error ? err.message : "Failed to start checkout"
+			);
+			setIsCreatingCheckout(false);
+		}
+	};
+
+	// Check subscription and user info
+	const hasActiveSubscription = subscriptionStatus?.status === "active";
+	const isOwner = currentUser?.user.Role === "Owner";
+	
+	// Calculate remaining free reports (only for owners without subscription)
+	const freeReportsRemaining = hasActiveSubscription || !isOwner
+		? null 
+		: (subscriptionStatus?.freeReportsLimit || 2) - (subscriptionStatus?.freeReportsUsed || 0);
+	
+	// Check if button should be disabled
+	const isButtonDisabled = !addressData || (isLoadingSubscription || isLoadingReports);
+
 	return (
 		<div className="p-8">
 			<div className="max-w-4xl">
+				{/* Free Reports Indicator */}
+				{isLoadingSubscription ? (
+					<div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
+						<div className="flex items-center gap-2">
+							<Loader2 className="h-4 w-4 animate-spin text-[#605A57]" />
+							<p className="text-sm text-[#605A57]">
+								Loading subscription status...
+							</p>
+						</div>
+					</div>
+				) : !hasActiveSubscription && freeReportsRemaining !== null && (
+					<div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+						<p className="text-sm text-blue-700">
+							<strong>Free Reports:</strong> {freeReportsRemaining} of {subscriptionStatus?.freeReportsLimit || 2} remaining
+						</p>
+					</div>
+				)}
+
 				<div className="flex gap-4 mb-8">
 					<AddressAutocomplete
 						onAddressSelect={handleAddressSelect}
@@ -233,7 +378,7 @@ export default function SearchAddressPage() {
 					/>
 					<Button
 						onClick={handleGenerateReport}
-						disabled={!addressData}
+						disabled={isButtonDisabled}
 					>
 						Generate Report
 					</Button>
@@ -314,6 +459,238 @@ export default function SearchAddressPage() {
 					)}
 				</div>
 			</div>
+
+			{/* Subscription Required Modal */}
+			<AlertDialog open={showSubscriptionModal} onOpenChange={setShowSubscriptionModal}>
+				<AlertDialogContent className="max-w-2xl">
+					{isOwner ? (
+						// Owner view: Upgrade to Pro modal
+						<>
+							<AlertDialogHeader>
+								<div className="flex flex-col items-center text-center mb-4">
+									<FileText className="h-12 w-12 text-[#37322F] mb-3" />
+									<AlertDialogTitle className="text-2xl font-bold text-[#37322F]">
+										Upgrade to Pro
+									</AlertDialogTitle>
+									<AlertDialogDescription className="text-base mt-2">
+										For comprehensive access to all features
+									</AlertDialogDescription>
+								</div>
+							</AlertDialogHeader>
+							
+							<div className="py-4">
+								{/* Features List */}
+								<div className="mb-6 space-y-3">
+									{[
+										"Unlimited reports",
+										"Zoning Restriction Insights",
+										"High Requirement Data",
+										"Zone Lot Coverage Data",
+										"Yard Requirements"
+									].map((feature) => (
+										<div key={feature} className="flex items-center gap-3">
+											<div className="h-6 w-6 rounded-full bg-green-600 flex items-center justify-center shrink-0">
+												<Check className="h-4 w-4 text-white" />
+											</div>
+											<span className="text-sm text-[#37322F]">{feature}</span>
+										</div>
+									))}
+								</div>
+
+								{/* Pricing Options */}
+								{products.length > 0 ? (
+									<div className="space-y-3">
+										{(() => {
+											// Filter for the specific product and group prices
+											const proProduct = products.find(p => p.id === 'prod_Tqa06S4Qy1ya2w');
+											if (!proProduct) {
+												// If product not found, show all products
+												return products.map((product) => {
+													const isSelected = selectedPriceId === product.priceId;
+													return (
+														<div 
+															key={product.id} 
+															className={`border-2 rounded-lg p-4 cursor-pointer transition-colors ${
+																isSelected 
+																	? 'border-blue-600 bg-blue-50' 
+																	: 'border-gray-200 hover:bg-gray-50'
+															}`}
+															onClick={() => setSelectedPriceId(product.priceId || null)}
+														>
+															<div className="flex items-center justify-between">
+																<div className="flex items-center gap-3">
+																	<input
+																		type="radio"
+																		name="plan"
+																		checked={isSelected}
+																		onChange={() => setSelectedPriceId(product.priceId || null)}
+																		className="h-4 w-4"
+																	/>
+																	<div>
+																		<div className="font-semibold text-[#37322F]">
+																			Pro
+																		</div>
+																		<div className="text-xs text-[#605A57] mt-1">
+																			{product.interval === 'month' ? 'billed monthly' : 'billed annually'}
+																		</div>
+																	</div>
+																</div>
+																<div className="text-right">
+																	<div className="font-bold text-lg text-[#37322F]">
+																		{formatPrice(product.amount, product.currency)}
+																	</div>
+																	{product.interval === 'year' && (
+																		<div className="text-xs text-green-600 font-medium mt-1">
+																			Save $589 annually
+																		</div>
+																	)}
+																</div>
+															</div>
+														</div>
+													);
+												});
+											}
+
+											// Group prices for the Pro product
+											const monthlyPrice = products.find(p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rf1wdOELZ');
+											const annualPrice = products.find(p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g');
+
+											// Use annual as default if no selection
+											const defaultPriceId = selectedPriceId || annualPrice?.priceId || monthlyPrice?.priceId;
+
+											return (
+												<>
+													{monthlyPrice && (
+														<div 
+															className={`border-2 rounded-lg p-4 cursor-pointer transition-colors ${
+																(selectedPriceId || defaultPriceId) === monthlyPrice.priceId
+																	? 'border-blue-600 bg-blue-50' 
+																	: 'border-gray-200 hover:bg-gray-50'
+															}`}
+															onClick={() => setSelectedPriceId(monthlyPrice.priceId)}
+														>
+															<div className="flex items-center justify-between">
+																<div className="flex items-center gap-3">
+																	<input
+																		type="radio"
+																		name="plan"
+																		checked={(selectedPriceId || defaultPriceId) === monthlyPrice.priceId}
+																		onChange={() => setSelectedPriceId(monthlyPrice.priceId)}
+																		className="h-4 w-4"
+																	/>
+																	<div>
+																		<div className="font-semibold text-[#37322F]">
+																			Pro
+																		</div>
+																		<div className="text-xs text-[#605A57] mt-1">
+																			billed monthly
+																		</div>
+																	</div>
+																</div>
+																<div className="text-right">
+																	<div className="font-bold text-lg text-[#37322F]">
+																		{formatPrice(monthlyPrice.amount, monthlyPrice.currency)}
+																	</div>
+																</div>
+															</div>
+														</div>
+													)}
+													{annualPrice && (
+														<div 
+															className={`border-2 rounded-lg p-4 cursor-pointer transition-colors ${
+																(selectedPriceId || defaultPriceId) === annualPrice.priceId
+																	? 'border-blue-600 bg-blue-50' 
+																	: 'border-gray-200 hover:bg-gray-50'
+															}`}
+															onClick={() => setSelectedPriceId(annualPrice.priceId)}
+														>
+															<div className="flex items-center justify-between">
+																<div className="flex items-center gap-3">
+																	<input
+																		type="radio"
+																		name="plan"
+																		checked={(selectedPriceId || defaultPriceId) === annualPrice.priceId}
+																		onChange={() => setSelectedPriceId(annualPrice.priceId)}
+																		className="h-4 w-4"
+																	/>
+																	<div>
+																		<div className="font-semibold text-[#37322F]">
+																			Pro
+																		</div>
+																		<div className="text-xs text-[#605A57] mt-1">
+																			billed annually
+																		</div>
+																	</div>
+																</div>
+																<div className="text-right">
+																	<div className="font-bold text-lg text-[#37322F]">
+																		{formatPrice(annualPrice.amount, annualPrice.currency)}
+																	</div>
+																	<div className="text-xs text-green-600 font-medium mt-1">
+																		Save $589 annually
+																	</div>
+																</div>
+															</div>
+														</div>
+													)}
+												</>
+											);
+										})()}
+									</div>
+								) : (
+									<div className="text-center py-8 text-[#605A57]">
+										Loading pricing plans...
+									</div>
+								)}
+							</div>
+						</>
+					) : (
+						// Team member view: Show alert message
+						<>
+							<AlertDialogHeader>
+								<AlertDialogTitle>Subscription Required</AlertDialogTitle>
+								<AlertDialogDescription>
+									Contact your admin to subscribe. A subscription from your organization is required to generate reports.
+								</AlertDialogDescription>
+							</AlertDialogHeader>
+							<div className="py-4">
+								<div className="flex items-center gap-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+									<AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0" />
+									<p className="text-sm text-yellow-800">
+										Contact your admin to subscribe. A subscription from your organization is required to generate reports.
+									</p>
+								</div>
+							</div>
+						</>
+					)}
+
+					<AlertDialogFooter>
+						{isOwner ? (
+							<>
+								<AlertDialogCancel disabled={isCreatingCheckout}>
+									Cancel
+								</AlertDialogCancel>
+								<AlertDialogAction
+									onClick={handleSelectPlan}
+									disabled={!selectedPriceId && !products.find(p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g')?.priceId || isCreatingCheckout}
+									className="bg-[#37322F] hover:bg-[#37322F]/90"
+								>
+									{isCreatingCheckout ? (
+										<>
+											<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+											Processing...
+										</>
+									) : (
+										"Continue to Checkout"
+									)}
+								</AlertDialogAction>
+							</>
+						) : (
+							<AlertDialogCancel>Close</AlertDialogCancel>
+						)}
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	);
 }

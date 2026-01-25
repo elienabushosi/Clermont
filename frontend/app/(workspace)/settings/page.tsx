@@ -83,6 +83,7 @@ export default function SettingsPage() {
 	const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
 	const [isCanceling, setIsCanceling] = useState(false);
 	const [showCancelDialog, setShowCancelDialog] = useState(false);
+	const [selectedBillingInterval, setSelectedBillingInterval] = useState<"month" | "year">("month");
 
 	const isOwner = currentUser?.user.Role === "Owner";
 
@@ -601,62 +602,121 @@ export default function SettingsPage() {
 										<div className="text-sm text-[#605A57]">
 											Loading pricing plans...
 										</div>
-									) : (
-										<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-											{products.map((product) => (
-												<Card
-													key={product.id}
-													className="hover:shadow-md transition-shadow"
-												>
-													<CardHeader>
-														<CardTitle className="text-lg">
-															{product.name}
-														</CardTitle>
-														{product.description && (
-															<p className="text-sm text-[#605A57]">
-																{product.description}
-															</p>
-														)}
-													</CardHeader>
-													<CardContent className="space-y-4">
-														<div>
-															<div className="text-3xl font-bold text-[#37322F]">
-																{formatPrice(product.amount, product.currency)}
-															</div>
-															{product.interval && (
-																<p className="text-sm text-[#605A57]">
-																	per {product.interval}
-																</p>
-															)}
-														</div>
-														<Button
-															onClick={() =>
-																product.priceId &&
-																handleSelectPlan(product.priceId)
-															}
-															disabled={
-																!product.priceId ||
-																isCreatingCheckout ||
-																subscriptionStatus?.status === "active"
-															}
-															className="w-full bg-[#37322F] hover:bg-[#37322F]/90 text-white"
-														>
-															{isCreatingCheckout ? (
-																<>
-																	<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-																	Processing...
-																</>
-															) : subscriptionStatus?.status === "active" ? (
-																"Current Plan"
-															) : (
-																"Select Plan"
-															)}
-														</Button>
-													</CardContent>
-												</Card>
-											))}
-										</div>
-									)}
+									) : (() => {
+										// Group products by product ID to show monthly/annual toggle
+										const productGroups = products.reduce((acc, product) => {
+											if (!acc[product.id]) {
+												acc[product.id] = {
+													id: product.id,
+													name: product.name,
+													description: product.description,
+													prices: [],
+												};
+											}
+											acc[product.id].prices.push(product);
+											return acc;
+										}, {} as Record<string, { id: string; name: string; description: string | null; prices: StripeProduct[] }>);
+
+										const productGroupsArray = Object.values(productGroups);
+
+										return (
+											<div className="space-y-6">
+												{productGroupsArray.map((group) => {
+													const monthlyPrice = group.prices.find(p => p.interval === 'month');
+													const annualPrice = group.prices.find(p => p.interval === 'year');
+													const selectedPrice = selectedBillingInterval === 'month' ? monthlyPrice : annualPrice;
+
+													// Calculate savings for annual
+													const monthlyAnnualCost = monthlyPrice?.amount ? monthlyPrice.amount * 12 : 0;
+													const annualCost = annualPrice?.amount || 0;
+													const savings = monthlyAnnualCost - annualCost;
+
+													return (
+														<Card key={group.id} className="hover:shadow-md transition-shadow">
+															<CardHeader>
+																<CardTitle className="text-lg">
+																	{group.name}
+																</CardTitle>
+																{group.description && (
+																	<p className="text-sm text-[#605A57]">
+																		{group.description}
+																	</p>
+																)}
+															</CardHeader>
+															<CardContent className="space-y-4">
+																{/* Billing Interval Toggle */}
+																{monthlyPrice && annualPrice && (
+																	<div className="flex items-center gap-2 p-1 bg-gray-100 rounded-lg">
+																		<button
+																			type="button"
+																			onClick={() => setSelectedBillingInterval("month")}
+																			className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+																				selectedBillingInterval === "month"
+																					? "bg-white text-[#37322F] shadow-sm"
+																					: "text-[#605A57] hover:text-[#37322F]"
+																			}`}
+																		>
+																			Monthly
+																		</button>
+																		<button
+																			type="button"
+																			onClick={() => setSelectedBillingInterval("year")}
+																			className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+																				selectedBillingInterval === "year"
+																					? "bg-white text-[#37322F] shadow-sm"
+																					: "text-[#605A57] hover:text-[#37322F]"
+																			}`}
+																		>
+																			Annual
+																		</button>
+																	</div>
+																)}
+
+																<div>
+																	<div className="text-3xl font-bold text-[#37322F]">
+																		{selectedPrice ? formatPrice(selectedPrice.amount, selectedPrice.currency) : "—"}
+																	</div>
+																	{selectedPrice?.interval && (
+																		<p className="text-sm text-[#605A57]">
+																			per {selectedPrice.interval}
+																		</p>
+																	)}
+																	{selectedBillingInterval === "year" && savings > 0 && (
+																		<p className="text-sm text-green-600 font-medium mt-1">
+																			Save $589 annually
+																		</p>
+																	)}
+																</div>
+																<Button
+																	onClick={() =>
+																		selectedPrice?.priceId &&
+																		handleSelectPlan(selectedPrice.priceId)
+																	}
+																	disabled={
+																		!selectedPrice?.priceId ||
+																		isCreatingCheckout ||
+																		subscriptionStatus?.status === "active"
+																	}
+																	className="w-full bg-[#37322F] hover:bg-[#37322F]/90 text-white"
+																>
+																	{isCreatingCheckout ? (
+																		<>
+																			<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																			Processing...
+																		</>
+																	) : subscriptionStatus?.status === "active" ? (
+																		"Current Plan"
+																	) : (
+																		"Select Plan"
+																	)}
+																</Button>
+															</CardContent>
+														</Card>
+													);
+												})}
+											</div>
+										);
+									})()}
 								</div>
 							)}
 						</CardContent>

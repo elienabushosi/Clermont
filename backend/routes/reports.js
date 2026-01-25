@@ -3,6 +3,7 @@ import express from "express";
 import { generateReport } from "../orchestration/orchestrator.js";
 import { getReportsByOrganization } from "../services/report-service.js";
 import { getUserFromToken } from "../lib/auth-utils.js";
+import { supabase } from "../lib/supabase.js";
 
 const router = express.Router();
 
@@ -32,6 +33,63 @@ router.post("/generate", async (req, res) => {
 				status: "error",
 				message: "Invalid or expired token",
 			});
+		}
+
+		// Check subscription and free reports access
+		// Get organization subscription status
+		const { data: subscription, error: subError } = await supabase
+			.from("subscriptions")
+			.select("Status")
+			.eq("IdOrganization", userData.IdOrganization)
+			.eq("Status", "active")
+			.order("CreatedAt", { ascending: false })
+			.limit(1)
+			.single();
+
+		const hasActiveSubscription = !subError && subscription;
+
+		// If user is not Owner, check if owner has subscription
+		if (userData.Role !== "Owner") {
+			if (!hasActiveSubscription) {
+				return res.status(403).json({
+					status: "error",
+					message: "Reports are only available to subscribers. Please contact your organization owner to subscribe.",
+					requiresSubscription: true,
+				});
+			}
+			// Member has access, proceed with report generation
+		} else {
+			// Owner: Check free reports if no subscription
+			if (!hasActiveSubscription) {
+				// Get organization free reports info
+				const { data: org, error: orgError } = await supabase
+					.from("organizations")
+					.select("FreeReportsUsed, FreeReportsLimit")
+					.eq("IdOrganization", userData.IdOrganization)
+					.single();
+
+				if (orgError) {
+					console.error("Error fetching organization:", orgError);
+					return res.status(500).json({
+						status: "error",
+						message: "Error checking organization status",
+					});
+				}
+
+				const freeReportsUsed = org?.FreeReportsUsed || 0;
+				const freeReportsLimit = org?.FreeReportsLimit || 2;
+
+				// Check if free reports limit reached
+				if (freeReportsUsed >= freeReportsLimit) {
+					return res.status(403).json({
+						status: "error",
+						message: "You've used your free reports. Please subscribe to continue generating reports.",
+						requiresSubscription: true,
+						freeReportsUsed: freeReportsUsed,
+						freeReportsLimit: freeReportsLimit,
+					});
+				}
+			}
 		}
 
 		// Validate request body
@@ -65,6 +123,26 @@ router.post("/generate", async (req, res) => {
 			userData.IdUser,
 			req.body.clientId || null
 		);
+
+		// If owner and no subscription, increment free reports counter after successful generation
+		if (userData.Role === "Owner" && !hasActiveSubscription) {
+			const { data: org } = await supabase
+				.from("organizations")
+				.select("FreeReportsUsed")
+				.eq("IdOrganization", userData.IdOrganization)
+				.single();
+
+			if (org) {
+				const newCount = (org.FreeReportsUsed || 0) + 1;
+				await supabase
+					.from("organizations")
+					.update({
+						FreeReportsUsed: newCount,
+						UpdatedAt: new Date().toISOString(),
+					})
+					.eq("IdOrganization", userData.IdOrganization);
+			}
+		}
 
 		res.json({
 			status: "success",
