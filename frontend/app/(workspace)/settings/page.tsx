@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Lock, CreditCard, Mail, CheckCircle2, Loader2, X } from "lucide-react";
+import { Lock, CreditCard, Mail, CheckCircle2, Loader2, X, Check } from "lucide-react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -85,7 +85,7 @@ export default function SettingsPage() {
 	const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
 	const [isCanceling, setIsCanceling] = useState(false);
 	const [showCancelDialog, setShowCancelDialog] = useState(false);
-	const [selectedBillingInterval, setSelectedBillingInterval] = useState<"month" | "year">("month");
+	const [selectedBillingInterval, setSelectedBillingInterval] = useState<"month" | "year">("year");
 	const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
 	const [isPreviewingUpgrade, setIsPreviewingUpgrade] = useState(false);
 	const [isUpgrading, setIsUpgrading] = useState(false);
@@ -183,7 +183,7 @@ export default function SettingsPage() {
 		}
 	}, [isOwner]);
 
-	// Set toggle to match current subscription interval
+	// Set toggle to match current subscription interval (only if subscription is active)
 	useEffect(() => {
 		if (subscriptionStatus?.status === "active" && subscriptionStatus.plan && products.length > 0) {
 			const currentProduct = products.find(p => p.priceId === subscriptionStatus.plan);
@@ -191,6 +191,9 @@ export default function SettingsPage() {
 				const interval = currentProduct.interval === 'month' ? 'month' : 'year';
 				setSelectedBillingInterval(interval);
 			}
+		} else {
+			// Default to annual if no active subscription
+			setSelectedBillingInterval("year");
 		}
 	}, [subscriptionStatus, products]);
 
@@ -821,9 +824,42 @@ export default function SettingsPage() {
 																)}
 															</CardHeader>
 															<CardContent className="space-y-4">
+																{/* Features List */}
+																<div className="space-y-3">
+																	{[
+																		"Unlimited reports",
+																		"Zoning Restriction Insights",
+																		"High Requirement Data",
+																		"Zone Lot Coverage Data",
+																		"Yard Requirements"
+																	].map((feature) => (
+																		<div key={feature} className="flex items-center gap-3">
+																			<div className="h-6 w-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#6f9f6b' }}>
+																				<Check className="h-4 w-4 text-white" />
+																			</div>
+																			<span className="text-sm text-[#37322F]">{feature}</span>
+																		</div>
+																	))}
+																</div>
 																{/* Billing Interval Toggle */}
 																{monthlyPrice && annualPrice && (
 																	<div className="flex items-center gap-2 p-1 bg-gray-100 rounded-lg">
+																		<button
+																			type="button"
+																			onClick={() => setSelectedBillingInterval("year")}
+																			className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors relative ${
+																				selectedBillingInterval === "year"
+																					? "bg-white text-[#37322F] shadow-sm"
+																					: "text-[#605A57] hover:text-[#37322F]"
+																			}`}
+																		>
+																			<div className="flex flex-col items-center gap-1">
+																				<span>Billed Annually</span>
+																				<Badge className="bg-green-600 text-white text-xs border-0 px-2 py-0.5">
+																					Saving over 15%
+																				</Badge>
+																			</div>
+																		</button>
 																		<button
 																			type="button"
 																			onClick={() => setSelectedBillingInterval("month")}
@@ -833,31 +869,24 @@ export default function SettingsPage() {
 																					: "text-[#605A57] hover:text-[#37322F]"
 																			}`}
 																		>
-																			Monthly
-																		</button>
-																		<button
-																			type="button"
-																			onClick={() => setSelectedBillingInterval("year")}
-																			className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-																				selectedBillingInterval === "year"
-																					? "bg-white text-[#37322F] shadow-sm"
-																					: "text-[#605A57] hover:text-[#37322F]"
-																			}`}
-																		>
-																			Annual
+																			Billed Monthly
 																		</button>
 																	</div>
 																)}
 
 																<div>
 																	<div className="text-3xl font-bold text-[#37322F]">
-																		{selectedPrice ? formatPrice(selectedPrice.amount, selectedPrice.currency) : "—"}
+																		{selectedBillingInterval === "month" && selectedPrice
+																			? formatPrice(selectedPrice.amount, selectedPrice.currency)
+																			: "$249"
+																		}
 																	</div>
-																	{selectedPrice?.interval && (
-																		<p className="text-sm text-[#605A57]">
-																			per {selectedPrice.interval}
-																		</p>
-																	)}
+																	<p className="text-sm text-[#605A57]">
+																		{selectedBillingInterval === "month" 
+																			? selectedPrice?.interval ? `per ${selectedPrice.interval}` : "per month"
+																			: "per month"
+																		}
+																	</p>
 																	{selectedBillingInterval === "year" && savings > 0 && (
 																		<p className="text-sm text-green-600 font-medium mt-1">
 																			Save $589 annually
