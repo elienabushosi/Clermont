@@ -23,6 +23,7 @@ import {
 	type JoinCode,
 } from "@/lib/team";
 import { getCurrentUser } from "@/lib/auth";
+import { getSubscriptionStatus, previewAddSeat, type SubscriptionStatus } from "@/lib/billing";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -47,6 +48,14 @@ export default function TeamPage() {
 	const [showJoinCodes, setShowJoinCodes] = useState(false);
 	const [userToRemove, setUserToRemove] = useState<TeamMember | null>(null);
 	const [isRemoving, setIsRemoving] = useState(false);
+	const [showAddSeatModal, setShowAddSeatModal] = useState(false);
+	const [isPreviewingCost, setIsPreviewingCost] = useState(false);
+	const [seatCost, setSeatCost] = useState<{
+		formattedAmount: string;
+		currentQuantity: number;
+		newQuantity: number;
+	} | null>(null);
+	const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
 
 	const isOwner = currentUserRole === "Owner";
 
@@ -75,6 +84,14 @@ export default function TeamPage() {
 					} catch (err) {
 						console.error("Error fetching join codes:", err);
 					}
+
+					// Fetch subscription status to check if subscription is active
+					try {
+						const status = await getSubscriptionStatus();
+						setSubscriptionStatus(status);
+					} catch (err) {
+						console.error("Error fetching subscription status:", err);
+					}
 				}
 			} catch (err) {
 				console.error("Error fetching team data:", err);
@@ -91,9 +108,39 @@ export default function TeamPage() {
 		fetchData();
 	}, []);
 
+	const handleInviteClick = async () => {
+		// If subscription is active, show cost preview modal first
+		if (subscriptionStatus?.status === "active") {
+			setIsPreviewingCost(true);
+			setError(null);
+			try {
+				const preview = await previewAddSeat();
+				setSeatCost({
+					formattedAmount: preview.formattedAmount,
+					currentQuantity: preview.currentQuantity,
+					newQuantity: preview.newQuantity,
+				});
+				setShowAddSeatModal(true);
+			} catch (err) {
+				setError(
+					err instanceof Error
+						? err.message
+						: "Failed to preview cost"
+				);
+			} finally {
+				setIsPreviewingCost(false);
+			}
+		} else {
+			// No subscription, generate code directly
+			await handleGenerateCode();
+		}
+	};
+
 	const handleGenerateCode = async () => {
 		setIsGeneratingCode(true);
 		setError(null);
+		setShowAddSeatModal(false);
+		setSeatCost(null);
 		try {
 			const code = await generateJoinCode();
 			setGeneratedCode(code.Code);
@@ -102,6 +149,11 @@ export default function TeamPage() {
 			const codes = await getJoinCodes();
 			setJoinCodes(codes);
 			setShowJoinCodes(true);
+			// Refresh subscription status to update quantity
+			if (subscriptionStatus?.status === "active") {
+				const status = await getSubscriptionStatus();
+				setSubscriptionStatus(status);
+			}
 		} catch (err) {
 			setError(
 				err instanceof Error
@@ -196,9 +248,9 @@ export default function TeamPage() {
 						</p>
 					</div>
 					{isOwner && (
-						<Button onClick={handleGenerateCode} disabled={isGeneratingCode}>
+						<Button onClick={handleInviteClick} disabled={isGeneratingCode || isPreviewingCost}>
 							<UserPlus className="size-4 mr-2" />
-							{isGeneratingCode ? "Generating..." : "Invite Member"}
+							{isGeneratingCode ? "Generating..." : isPreviewingCost ? "Calculating..." : "Invite Member"}
 						</Button>
 					)}
 				</div>
@@ -415,6 +467,57 @@ export default function TeamPage() {
 					</Table>
 				</div>
 
+				{/* Add Seat Confirmation Dialog */}
+				<AlertDialog open={showAddSeatModal} onOpenChange={setShowAddSeatModal}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Add Team Member</AlertDialogTitle>
+							<AlertDialogDescription>
+								Adding a new team member will increase your subscription cost. You'll be charged a prorated amount based on the time remaining in your current billing period.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<div className="py-4">
+							{seatCost && (
+								<div className="space-y-3">
+									<div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+										<p className="text-sm text-blue-800 mb-1">
+											<strong>Current seats:</strong> {seatCost.currentQuantity}
+										</p>
+										<p className="text-sm text-blue-800 mb-1">
+											<strong>New total seats:</strong> {seatCost.newQuantity}
+										</p>
+										<p className="text-sm text-blue-800 mb-1 mt-3">
+											<strong>Amount to be charged:</strong>
+										</p>
+										<p className="text-2xl font-bold text-blue-900">
+											{seatCost.formattedAmount}
+										</p>
+										<p className="text-xs text-blue-700 mt-1">
+											This is the prorated amount for the additional seat.
+										</p>
+									</div>
+								</div>
+							)}
+						</div>
+						<AlertDialogFooter>
+							<AlertDialogCancel disabled={isGeneratingCode}>
+								Cancel
+							</AlertDialogCancel>
+							<AlertDialogAction
+								onClick={handleGenerateCode}
+								disabled={isGeneratingCode}
+								className="bg-[#37322F] hover:bg-[#37322F]/90 text-white"
+							>
+								{isGeneratingCode ? (
+									"Processing..."
+								) : (
+									"Confirm & Generate Code"
+								)}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+
 				{/* Remove User Confirmation Dialog */}
 				<AlertDialog
 					open={userToRemove !== null}
@@ -429,7 +532,7 @@ export default function TeamPage() {
 								Are you sure you want to remove{" "}
 								<strong>{userToRemove?.Name}</strong> from your team? They will
 								no longer have access to the organization, but their reports will
-								be preserved.
+								be preserved. The subscription cost will decrease at the end of the current billing period.
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>

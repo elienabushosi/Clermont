@@ -209,6 +209,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     "CurrentPeriodStart" TIMESTAMP WITH TIME ZONE,
     "CurrentPeriodEnd" TIMESTAMP WITH TIME ZONE,
     "CancelAtPeriodEnd" BOOLEAN DEFAULT FALSE,
+    "Quantity" INTEGER DEFAULT 1, -- Number of seats (owner + team members)
     "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     "UpdatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

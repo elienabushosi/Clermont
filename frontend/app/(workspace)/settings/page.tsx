@@ -678,6 +678,10 @@ export default function SettingsPage() {
 
 								if (!currentSubscriptionProduct) return null;
 
+								const quantity = subscriptionStatus?.quantity || 1;
+								const perSeatPrice = currentSubscriptionProduct.amount || 0;
+								const totalPrice = perSeatPrice * quantity;
+
 								return (
 									<div className="pt-4 border-t border-[#E0DEDB]">
 										<Card className="border-2 border-[#6f9f6b] bg-green-50/30">
@@ -700,11 +704,23 @@ export default function SettingsPage() {
 														</div>
 														<div className="text-right">
 															<p className="text-2xl font-bold text-[#37322F]">
-																{formatPrice(currentSubscriptionProduct.amount, currentSubscriptionProduct.currency)}
+																{formatPrice(totalPrice, currentSubscriptionProduct.currency)}
 															</p>
 															<p className="text-xs text-[#605A57]">
 																{currentSubscriptionProduct.interval === 'month' ? 'per month' : 'per year'}
 															</p>
+														</div>
+													</div>
+
+													{/* Seat Count Breakdown */}
+													<div className="pt-3 border-t border-[#E0DEDB]">
+														<div className="flex items-center justify-between text-sm">
+															<span className="text-[#605A57]">
+																{quantity} {quantity === 1 ? 'seat' : 'seats'} @ {formatPrice(perSeatPrice, currentSubscriptionProduct.currency)}/{currentSubscriptionProduct.interval === 'month' ? 'month' : 'year'}
+															</span>
+															<span className="font-semibold text-[#37322F]">
+																= {formatPrice(totalPrice, currentSubscriptionProduct.currency)}/{currentSubscriptionProduct.interval === 'month' ? 'month' : 'year'}
+															</span>
 														</div>
 													</div>
 													

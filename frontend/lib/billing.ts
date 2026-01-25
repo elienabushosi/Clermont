@@ -9,6 +9,7 @@ export interface SubscriptionStatus {
 	cancelAtPeriodEnd?: boolean;
 	freeReportsUsed?: number;
 	freeReportsLimit?: number;
+	quantity?: number; // Number of seats
 	subscription?: any;
 }
 
@@ -236,6 +237,43 @@ export async function upgradeSubscription(newPriceId: string): Promise<void> {
 		}
 	} catch (error) {
 		console.error("Error upgrading subscription:", error);
+		throw error;
+	}
+}
+
+/**
+ * Preview cost of adding a seat
+ */
+export async function previewAddSeat(): Promise<{
+	proratedAmount: number;
+	currency: string;
+	formattedAmount: string;
+	currentQuantity: number;
+	newQuantity: number;
+}> {
+	try {
+		const token = localStorage.getItem("auth_token");
+		if (!token) {
+			throw new Error("No authentication token");
+		}
+
+		const response = await fetch(`${config.apiUrl}/api/billing/preview-add-seat`, {
+			method: "GET",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json",
+			},
+		});
+
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.message || "Failed to preview add seat");
+		}
+
+		const data = await response.json();
+		return data;
+	} catch (error) {
+		console.error("Error previewing add seat:", error);
 		throw error;
 	}
 }

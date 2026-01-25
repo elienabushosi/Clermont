@@ -20,6 +20,22 @@ const stripe = stripeSecretKey
 	  })
 	: null;
 
+// Helper function to get team member count for an organization
+async function getTeamMemberCount(organizationId) {
+	const { count, error } = await supabase
+		.from("users")
+		.select("*", { count: "exact", head: true })
+		.eq("IdOrganization", organizationId)
+		.eq("Enabled", true);
+
+	if (error) {
+		console.error("Error counting team members:", error);
+		return 1; // Default to 1 (owner only) on error
+	}
+
+	return count || 1; // At least 1 (the owner)
+}
+
 // Helper function to get organization subscription status
 async function getOrganizationSubscriptionStatus(organizationId) {
 	// Get subscription from database
@@ -47,6 +63,9 @@ async function getOrganizationSubscriptionStatus(organizationId) {
 	const freeReportsUsed = org?.FreeReportsUsed || 0;
 	const freeReportsLimit = org?.FreeReportsLimit || 2;
 
+	// Get current team member count
+	const teamMemberCount = await getTeamMemberCount(organizationId);
+
 	// If no subscription exists, return none status with free reports info
 	if (!subscription) {
 		return {
@@ -57,6 +76,7 @@ async function getOrganizationSubscriptionStatus(organizationId) {
 			cancelAtPeriodEnd: false,
 			freeReportsUsed: freeReportsUsed,
 			freeReportsLimit: freeReportsLimit,
+			quantity: teamMemberCount,
 			subscription: null,
 		};
 	}
@@ -70,6 +90,7 @@ async function getOrganizationSubscriptionStatus(organizationId) {
 		cancelAtPeriodEnd: subscription.CancelAtPeriodEnd || false,
 		freeReportsUsed: freeReportsUsed, // Still track even with subscription
 		freeReportsLimit: freeReportsLimit,
+		quantity: subscription.Quantity || 1,
 		subscription: subscription,
 	};
 }
@@ -290,11 +311,15 @@ router.post("/create-checkout-session", async (req, res) => {
 			customerId = customer.id;
 		}
 
+		// Get current team member count (owner + team members)
+		const teamMemberCount = await getTeamMemberCount(userData.IdOrganization);
+
 		// Create checkout session
 		const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
 		console.log("Creating checkout session with metadata:", {
 			organizationId: userData.IdOrganization,
 			userId: userData.IdUser,
+			quantity: teamMemberCount,
 		});
 		const session = await stripe.checkout.sessions.create({
 			customer: customerId,
@@ -302,7 +327,7 @@ router.post("/create-checkout-session", async (req, res) => {
 			line_items: [
 				{
 					price: priceId,
-					quantity: 1,
+					quantity: teamMemberCount, // Set quantity based on team member count
 				},
 			],
 			mode: "subscription",
@@ -311,11 +336,13 @@ router.post("/create-checkout-session", async (req, res) => {
 			metadata: {
 				organizationId: userData.IdOrganization,
 				userId: userData.IdUser,
+				quantity: teamMemberCount.toString(),
 			},
 			subscription_data: {
 				metadata: {
 					organizationId: userData.IdOrganization,
 					userId: userData.IdUser,
+					quantity: teamMemberCount.toString(),
 				},
 			},
 		});
@@ -429,6 +456,9 @@ router.post("/process-checkout-session", async (req, res) => {
 			}
 		);
 
+		// Get quantity from subscription (default to 1 if not set)
+		const quantity = subscription.items.data[0]?.quantity || 1;
+
 		// Create or update subscription in database
 		const subscriptionData = {
 			IdOrganization: organizationId,
@@ -446,6 +476,7 @@ router.post("/process-checkout-session", async (req, res) => {
 				? new Date(subscription.current_period_end * 1000).toISOString()
 				: null,
 			CancelAtPeriodEnd: subscription.cancel_at_period_end,
+			Quantity: quantity,
 			UpdatedAt: new Date().toISOString(),
 		};
 
@@ -878,6 +909,407 @@ router.post("/upgrade-subscription", async (req, res) => {
 	}
 });
 
+// POST /api/billing/add-seat
+// Add a seat to subscription (increase quantity with proration) - owner only
+router.post("/add-seat", async (req, res) => {
+	try {
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+		const userData = await getUserFromToken(token);
+
+		if (!userData) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		// Only owners can add seats
+		if (userData.Role !== "Owner") {
+			return res.status(403).json({
+				status: "error",
+				message: "Only organization owners can add seats",
+			});
+		}
+
+		if (!stripe) {
+			return res.status(500).json({
+				status: "error",
+				message: "Stripe is not configured",
+			});
+		}
+
+		// Get current subscription
+		const { data: subscription, error: subError } = await supabase
+			.from("subscriptions")
+			.select("*")
+			.eq("IdOrganization", userData.IdOrganization)
+			.eq("Status", "active")
+			.order("CreatedAt", { ascending: false })
+			.limit(1)
+			.single();
+
+		if (subError || !subscription || !subscription.StripeSubscriptionId) {
+			return res.status(404).json({
+				status: "error",
+				message: "No active subscription found",
+			});
+		}
+
+		// Get the subscription from Stripe to access items
+		const stripeSubscription = await stripe.subscriptions.retrieve(
+			subscription.StripeSubscriptionId,
+			{
+				expand: ["items.data.price"],
+			}
+		);
+
+		// Get current quantity and increase by 1
+		const currentQuantity = stripeSubscription.items.data[0]?.quantity || subscription.Quantity || 1;
+		const newQuantity = currentQuantity + 1;
+
+		// Update subscription with new quantity (proration happens automatically)
+		const updatedSubscription = await stripe.subscriptions.update(
+			subscription.StripeSubscriptionId,
+			{
+				items: [
+					{
+						id: stripeSubscription.items.data[0].id,
+						quantity: newQuantity,
+					},
+				],
+				proration_behavior: "always_invoice", // Immediately invoice for prorated amount
+			}
+		);
+
+		// Update subscription in database
+		await supabase
+			.from("subscriptions")
+			.update({
+				Quantity: newQuantity,
+				Status: updatedSubscription.status,
+				CurrentPeriodStart: updatedSubscription.current_period_start
+					? new Date(updatedSubscription.current_period_start * 1000).toISOString()
+					: null,
+				CurrentPeriodEnd: updatedSubscription.current_period_end
+					? new Date(updatedSubscription.current_period_end * 1000).toISOString()
+					: null,
+				UpdatedAt: new Date().toISOString(),
+			})
+			.eq("IdSubscription", subscription.IdSubscription);
+
+		res.json({
+			status: "success",
+			message: "Seat added successfully",
+			subscription: {
+				status: updatedSubscription.status,
+				quantity: newQuantity,
+			},
+		});
+	} catch (error) {
+		console.error("Error adding seat:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error adding seat",
+			error: error.message,
+		});
+	}
+});
+
+// POST /api/billing/remove-seat
+// Remove a seat from subscription (decrease quantity at period end) - owner only
+router.post("/remove-seat", async (req, res) => {
+	try {
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+		const userData = await getUserFromToken(token);
+
+		if (!userData) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		// Only owners can remove seats
+		if (userData.Role !== "Owner") {
+			return res.status(403).json({
+				status: "error",
+				message: "Only organization owners can remove seats",
+			});
+		}
+
+		if (!stripe) {
+			return res.status(500).json({
+				status: "error",
+				message: "Stripe is not configured",
+			});
+		}
+
+		// Get current subscription
+		const { data: subscription, error: subError } = await supabase
+			.from("subscriptions")
+			.select("*")
+			.eq("IdOrganization", userData.IdOrganization)
+			.eq("Status", "active")
+			.order("CreatedAt", { ascending: false })
+			.limit(1)
+			.single();
+
+		if (subError || !subscription || !subscription.StripeSubscriptionId) {
+			return res.status(404).json({
+				status: "error",
+				message: "No active subscription found",
+			});
+		}
+
+		// Get the subscription from Stripe to access items
+		const stripeSubscription = await stripe.subscriptions.retrieve(
+			subscription.StripeSubscriptionId,
+			{
+				expand: ["items.data.price"],
+			}
+		);
+
+		// Get current quantity and decrease by 1 (minimum 1 for owner)
+		const currentQuantity = stripeSubscription.items.data[0]?.quantity || subscription.Quantity || 1;
+		const newQuantity = Math.max(1, currentQuantity - 1);
+
+		if (currentQuantity === 1) {
+			return res.status(400).json({
+				status: "error",
+				message: "Cannot remove the last seat (owner seat)",
+			});
+		}
+
+		// Update subscription with new quantity at period end
+		// We'll use subscription schedule to decrease at period end
+		// For now, we'll update immediately but note that billing change happens at period end
+		// Stripe doesn't have a direct "decrease at period end" for quantity, so we'll
+		// use a subscription schedule or update with proration_behavior: 'none' and handle it manually
+		
+		// Actually, Stripe supports updating quantity with proration_behavior: 'none' 
+		// but that still changes it immediately. For "at period end", we need to use
+		// subscription schedules or track it ourselves.
+		
+		// For simplicity, let's use subscription schedules to schedule the quantity decrease
+		try {
+			// Create a subscription schedule to decrease quantity at period end
+			const schedule = await stripe.subscriptionSchedules.create({
+				from_subscription: subscription.StripeSubscriptionId,
+			});
+
+			// Update the schedule to decrease quantity at the end of current period
+			const updatedSchedule = await stripe.subscriptionSchedules.update(schedule.id, {
+				phases: [
+					{
+						items: [
+							{
+								price: stripeSubscription.items.data[0].price.id,
+								quantity: currentQuantity,
+							},
+						],
+						start_date: stripeSubscription.current_period_start,
+						end_date: stripeSubscription.current_period_end,
+					},
+					{
+						items: [
+							{
+								price: stripeSubscription.items.data[0].price.id,
+								quantity: newQuantity,
+							},
+						],
+						start_date: stripeSubscription.current_period_end,
+					},
+				],
+			});
+
+			// Update subscription in database (quantity will be updated by webhook when period ends)
+			await supabase
+				.from("subscriptions")
+				.update({
+					UpdatedAt: new Date().toISOString(),
+				})
+				.eq("IdSubscription", subscription.IdSubscription);
+
+			res.json({
+				status: "success",
+				message: "Seat will be removed at the end of the current billing period",
+				subscription: {
+					status: subscription.Status,
+					currentQuantity: currentQuantity,
+					newQuantity: newQuantity,
+					effectiveDate: new Date(stripeSubscription.current_period_end * 1000).toISOString(),
+				},
+			});
+		} catch (scheduleError) {
+			// If schedule creation fails, fall back to immediate update
+			console.error("Error creating subscription schedule:", scheduleError);
+			
+			// Update immediately with no proration (no refund)
+			const updatedSubscription = await stripe.subscriptions.update(
+				subscription.StripeSubscriptionId,
+				{
+					items: [
+						{
+							id: stripeSubscription.items.data[0].id,
+							quantity: newQuantity,
+						},
+					],
+					proration_behavior: "none", // No proration, no refund
+				}
+			);
+
+			// Update subscription in database
+			await supabase
+				.from("subscriptions")
+				.update({
+					Quantity: newQuantity,
+					Status: updatedSubscription.status,
+					UpdatedAt: new Date().toISOString(),
+				})
+				.eq("IdSubscription", subscription.IdSubscription);
+
+			res.json({
+				status: "success",
+				message: "Seat removed successfully",
+				subscription: {
+					status: updatedSubscription.status,
+					quantity: newQuantity,
+				},
+			});
+		}
+	} catch (error) {
+		console.error("Error removing seat:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error removing seat",
+			error: error.message,
+		});
+	}
+});
+
+// GET /api/billing/preview-add-seat
+// Preview prorated amount for adding a seat (owner only)
+router.get("/preview-add-seat", async (req, res) => {
+	try {
+		const authHeader = req.headers.authorization;
+
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({
+				status: "error",
+				message: "No token provided",
+			});
+		}
+
+		const token = authHeader.substring(7);
+		const userData = await getUserFromToken(token);
+
+		if (!userData) {
+			return res.status(401).json({
+				status: "error",
+				message: "Invalid or expired token",
+			});
+		}
+
+		// Only owners can preview add seat
+		if (userData.Role !== "Owner") {
+			return res.status(403).json({
+				status: "error",
+				message: "Only organization owners can preview add seat",
+			});
+		}
+
+		if (!stripe) {
+			return res.status(500).json({
+				status: "error",
+				message: "Stripe is not configured",
+			});
+		}
+
+		// Get current subscription
+		const { data: subscription, error: subError } = await supabase
+			.from("subscriptions")
+			.select("*")
+			.eq("IdOrganization", userData.IdOrganization)
+			.eq("Status", "active")
+			.order("CreatedAt", { ascending: false })
+			.limit(1)
+			.single();
+
+		if (subError || !subscription || !subscription.StripeSubscriptionId) {
+			return res.status(404).json({
+				status: "error",
+				message: "No active subscription found",
+			});
+		}
+
+		// Get the subscription from Stripe to access items
+		const stripeSubscription = await stripe.subscriptions.retrieve(
+			subscription.StripeSubscriptionId,
+			{
+				expand: ["items.data.price"],
+			}
+		);
+
+		// Get current quantity
+		const currentQuantity = stripeSubscription.items.data[0]?.quantity || subscription.Quantity || 1;
+		const newQuantity = currentQuantity + 1;
+
+		// Calculate prorated amount using Stripe's invoice preview
+		const upcomingInvoice = await stripe.invoices.retrieveUpcoming({
+			customer: stripeSubscription.customer,
+			subscription: subscription.StripeSubscriptionId,
+			subscription_items: [
+				{
+					id: stripeSubscription.items.data[0].id,
+					quantity: newQuantity,
+				},
+			],
+			subscription_proration_behavior: "always_invoice",
+		});
+
+		// The prorated amount is the difference between new and current invoice
+		// For simplicity, we'll use the amount_due which includes the prorated charge
+		const proratedAmount = upcomingInvoice.amount_due;
+
+		res.json({
+			status: "success",
+			proratedAmount: proratedAmount, // Amount in cents
+			currency: upcomingInvoice.currency,
+			currentQuantity: currentQuantity,
+			newQuantity: newQuantity,
+			formattedAmount: new Intl.NumberFormat("en-US", {
+				style: "currency",
+				currency: upcomingInvoice.currency.toUpperCase(),
+			}).format(proratedAmount / 100),
+		});
+	} catch (error) {
+		console.error("Error previewing add seat:", error);
+		res.status(500).json({
+			status: "error",
+			message: "Error previewing add seat",
+			error: error.message,
+		});
+	}
+});
+
 // POST /api/billing/webhook
 // Stripe webhook endpoint (no auth required - uses Stripe signature verification)
 // Note: Raw body parsing is handled in server.js before express.json()
@@ -970,6 +1402,9 @@ router.post("/webhook", async (req, res) => {
 				);
 				console.log(`  → Subscription Status: ${subscription.status}`);
 
+				// Get quantity from subscription (default to 1 if not set)
+				const quantity = subscription.items.data[0]?.quantity || 1;
+
 				// Create or update subscription in database
 				const subscriptionData = {
 					IdOrganization: organizationId,
@@ -987,6 +1422,7 @@ router.post("/webhook", async (req, res) => {
 						? new Date(subscription.current_period_end * 1000).toISOString()
 						: null,
 					CancelAtPeriodEnd: subscription.cancel_at_period_end,
+					Quantity: quantity,
 					UpdatedAt: new Date().toISOString(),
 				};
 
@@ -1083,6 +1519,9 @@ router.post("/webhook", async (req, res) => {
 				console.log(`  → Organization ID: ${organizationId}`);
 				console.log(`  → Subscription Status: ${subscription.status}`);
 
+				// Get quantity from subscription (default to 1 if not set)
+				const quantity = subscription.items.data[0]?.quantity || 1;
+
 				// Update subscription in database
 				console.log("  → Updating subscription in database...");
 				const { error: updateError } = await supabase
@@ -1097,6 +1536,7 @@ router.post("/webhook", async (req, res) => {
 							? new Date(subscription.current_period_end * 1000).toISOString()
 							: null,
 						CancelAtPeriodEnd: subscription.cancel_at_period_end,
+						Quantity: quantity,
 						UpdatedAt: new Date().toISOString(),
 					})
 					.eq("StripeSubscriptionId", subscription.id);

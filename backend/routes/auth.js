@@ -1,9 +1,18 @@
 // Authentication routes
 import express from "express";
+import Stripe from "stripe";
 import { supabase, supabaseAdmin } from "../lib/supabase.js";
 import { getUserFromToken } from "../lib/auth-utils.js";
 
 const router = express.Router();
+
+// Initialize Stripe
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeSecretKey
+	? new Stripe(stripeSecretKey, {
+			apiVersion: "2024-12-18.acacia",
+	  })
+	: null;
 
 // Signup endpoint
 router.post("/signup", async (req, res) => {
@@ -441,6 +450,22 @@ router.get("/team", async (req, res) => {
 	}
 });
 
+// Helper function to get team member count
+async function getTeamMemberCount(organizationId) {
+	const { count, error } = await supabase
+		.from("users")
+		.select("*", { count: "exact", head: true })
+		.eq("IdOrganization", organizationId)
+		.eq("Enabled", true);
+
+	if (error) {
+		console.error("Error counting team members:", error);
+		return 1; // Default to 1 (owner only) on error
+	}
+
+	return count || 1; // At least 1 (the owner)
+}
+
 // Generate a join code (owner only)
 router.post("/joincode/generate", async (req, res) => {
 	try {
@@ -471,6 +496,77 @@ router.post("/joincode/generate", async (req, res) => {
 				status: "error",
 				message: "Only organization owners can generate join codes",
 			});
+		}
+
+		// Check if organization has an active subscription
+		const { data: subscription, error: subError } = await supabase
+			.from("subscriptions")
+			.select("*")
+			.eq("IdOrganization", userData.IdOrganization)
+			.eq("Status", "active")
+			.order("CreatedAt", { ascending: false })
+			.limit(1)
+			.single();
+
+		// If subscription exists, add a seat (charge for new team member)
+		if (!subError && subscription && subscription.StripeSubscriptionId) {
+			if (!stripe) {
+				return res.status(500).json({
+					status: "error",
+					message: "Stripe is not configured",
+				});
+			}
+
+			try {
+					// Get the subscription from Stripe
+					const stripeSubscription = await stripe.subscriptions.retrieve(
+						subscription.StripeSubscriptionId,
+						{
+							expand: ["items.data.price"],
+						}
+					);
+
+					// Get current quantity and increase by 1
+					const currentQuantity = stripeSubscription.items.data[0]?.quantity || subscription.Quantity || 1;
+					const newQuantity = currentQuantity + 1;
+
+					// Update subscription with new quantity (proration happens automatically)
+					const updatedSubscription = await stripe.subscriptions.update(
+						subscription.StripeSubscriptionId,
+						{
+							items: [
+								{
+									id: stripeSubscription.items.data[0].id,
+									quantity: newQuantity,
+								},
+							],
+							proration_behavior: "always_invoice", // Immediately invoice for prorated amount
+						}
+					);
+
+					// Update subscription in database
+					await supabase
+						.from("subscriptions")
+						.update({
+							Quantity: newQuantity,
+							Status: updatedSubscription.status,
+							CurrentPeriodStart: updatedSubscription.current_period_start
+								? new Date(updatedSubscription.current_period_start * 1000).toISOString()
+								: null,
+							CurrentPeriodEnd: updatedSubscription.current_period_end
+								? new Date(updatedSubscription.current_period_end * 1000).toISOString()
+								: null,
+							UpdatedAt: new Date().toISOString(),
+						})
+						.eq("IdSubscription", subscription.IdSubscription);
+			} catch (stripeError) {
+				console.error("Error adding seat for join code:", stripeError);
+				return res.status(500).json({
+					status: "error",
+					message: "Failed to process payment for new team member",
+					error: stripeError.message,
+				});
+			}
 		}
 
 		// Generate a unique code (format: LINDERO-XXXXXX)
@@ -766,6 +862,94 @@ router.delete("/team/:userId", async (req, res) => {
 				status: "error",
 				message: "Cannot remove another owner",
 			});
+		}
+
+		// Check if organization has an active subscription and decrease seat quantity
+		const { data: subscription, error: subError } = await supabase
+			.from("subscriptions")
+			.select("*")
+			.eq("IdOrganization", currentUserData.IdOrganization)
+			.eq("Status", "active")
+			.order("CreatedAt", { ascending: false })
+			.limit(1)
+			.single();
+
+		// If subscription exists, schedule quantity decrease at period end
+		if (!subError && subscription && subscription.StripeSubscriptionId && stripe) {
+			try {
+				// Get the subscription from Stripe
+				const stripeSubscription = await stripe.subscriptions.retrieve(
+					subscription.StripeSubscriptionId,
+					{
+						expand: ["items.data.price"],
+					}
+				);
+
+				// Get current quantity and decrease by 1 (minimum 1 for owner)
+				const currentQuantity = stripeSubscription.items.data[0]?.quantity || subscription.Quantity || 1;
+				const newQuantity = Math.max(1, currentQuantity - 1);
+
+				if (currentQuantity > 1) {
+					// Create a subscription schedule to decrease quantity at period end
+					try {
+						const schedule = await stripe.subscriptionSchedules.create({
+							from_subscription: subscription.StripeSubscriptionId,
+						});
+
+						// Update the schedule to decrease quantity at the end of current period
+						await stripe.subscriptionSchedules.update(schedule.id, {
+							phases: [
+								{
+									items: [
+										{
+											price: stripeSubscription.items.data[0].price.id,
+											quantity: currentQuantity,
+										},
+									],
+									start_date: stripeSubscription.current_period_start,
+									end_date: stripeSubscription.current_period_end,
+								},
+								{
+									items: [
+										{
+											price: stripeSubscription.items.data[0].price.id,
+											quantity: newQuantity,
+										},
+									],
+									start_date: stripeSubscription.current_period_end,
+								},
+							],
+						});
+					} catch (scheduleError) {
+						// If schedule creation fails, update immediately with no proration
+						console.error("Error creating subscription schedule, updating immediately:", scheduleError);
+						await stripe.subscriptions.update(
+							subscription.StripeSubscriptionId,
+							{
+								items: [
+									{
+										id: stripeSubscription.items.data[0].id,
+										quantity: newQuantity,
+									},
+								],
+								proration_behavior: "none", // No proration, no refund
+							}
+						);
+
+						// Update subscription in database
+						await supabase
+							.from("subscriptions")
+							.update({
+								Quantity: newQuantity,
+								UpdatedAt: new Date().toISOString(),
+							})
+							.eq("IdSubscription", subscription.IdSubscription);
+					}
+				}
+			} catch (stripeError) {
+				console.error("Error updating subscription quantity:", stripeError);
+				// Continue with user removal even if subscription update fails
+			}
 		}
 
 		// Soft delete: Set Enabled to false
