@@ -281,10 +281,16 @@ export async function previewAddSeat(): Promise<{
 /**
  * Format price for display
  */
-export function formatPrice(amount: number | null, currency: string | null): string {
+export function formatPrice(amount: number | null, currency: string | null, priceId?: string | null): string {
 	if (!amount || !currency) return "—";
+	
+	// For monthly price ID, don't show decimals
+	const isMonthlyPrice = priceId === 'price_1SssqwKFRZRd0A1rf1wdOELZ';
+	
 	return new Intl.NumberFormat("en-US", {
 		style: "currency",
 		currency: currency.toUpperCase(),
+		minimumFractionDigits: isMonthlyPrice ? 0 : 2,
+		maximumFractionDigits: isMonthlyPrice ? 0 : 2,
 	}).format(amount / 100);
 }

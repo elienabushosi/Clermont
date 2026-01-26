@@ -596,7 +596,7 @@ export default function SearchAddressPage() {
 																</div>
 																<div className="text-right">
 																	<div className="font-bold text-lg text-[#37322F]">
-																		{formatPrice(monthlyPrice.amount, monthlyPrice.currency)}
+																		{formatPrice(monthlyPrice.amount, monthlyPrice.currency, monthlyPrice.priceId)}
 																	</div>
 																</div>
 															</div>

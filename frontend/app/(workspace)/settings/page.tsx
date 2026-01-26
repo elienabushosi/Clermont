@@ -383,7 +383,7 @@ export default function SettingsPage() {
 	if (isLoading) {
 		return (
 			<div className="p-8">
-				<div className="max-w-4xl mx-auto">
+				<div className="max-w-2xl mx-auto">
 					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
 						Settings
 					</h1>
@@ -421,7 +421,7 @@ export default function SettingsPage() {
 
 	return (
 		<div className="p-8">
-			<div className="max-w-4xl mx-auto">
+			<div className="max-w-2xl mx-auto">
 				<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
 					Settings
 				</h1>
@@ -707,7 +707,7 @@ export default function SettingsPage() {
 														</div>
 														<div className="text-right">
 															<p className="text-2xl font-bold text-[#37322F]">
-																{formatPrice(totalPrice, currentSubscriptionProduct.currency)}
+																{formatPrice(totalPrice, currentSubscriptionProduct.currency, currentSubscriptionProduct.priceId)}
 															</p>
 															<p className="text-xs text-[#605A57]">
 																{currentSubscriptionProduct.interval === 'month' ? 'per month' : 'per year'}
@@ -719,10 +719,10 @@ export default function SettingsPage() {
 													<div className="pt-3 border-t border-[#E0DEDB]">
 														<div className="flex items-center justify-between text-sm">
 															<span className="text-[#605A57]">
-																{quantity} {quantity === 1 ? 'seat' : 'seats'} @ {formatPrice(perSeatPrice, currentSubscriptionProduct.currency)}/{currentSubscriptionProduct.interval === 'month' ? 'month' : 'year'}
+																{quantity} {quantity === 1 ? 'seat' : 'seats'} @ {formatPrice(perSeatPrice, currentSubscriptionProduct.currency, currentSubscriptionProduct.priceId)}/{currentSubscriptionProduct.interval === 'month' ? 'month' : 'year'}
 															</span>
 															<span className="font-semibold text-[#37322F]">
-																= {formatPrice(totalPrice, currentSubscriptionProduct.currency)}/{currentSubscriptionProduct.interval === 'month' ? 'month' : 'year'}
+																= {formatPrice(totalPrice, currentSubscriptionProduct.currency, currentSubscriptionProduct.priceId)}/{currentSubscriptionProduct.interval === 'month' ? 'month' : 'year'}
 															</span>
 														</div>
 													</div>
@@ -877,7 +877,7 @@ export default function SettingsPage() {
 																<div>
 																	<div className="text-3xl font-bold text-[#37322F]">
 																		{selectedBillingInterval === "month" && selectedPrice
-																			? formatPrice(selectedPrice.amount, selectedPrice.currency)
+																			? formatPrice(selectedPrice.amount, selectedPrice.currency, selectedPrice.priceId)
 																			: "$249"
 																		}
 																	</div>
