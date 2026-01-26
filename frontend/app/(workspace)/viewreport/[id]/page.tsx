@@ -2102,7 +2102,7 @@ export default function ViewReportPage() {
 							}
 
 							return (
-								<Card>
+								<Card className="mb-6">
 									<CardContent className="pt-6">
 										<div>
 											<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
@@ -2155,7 +2155,7 @@ export default function ViewReportPage() {
 							}
 
 							return (
-								<Card>
+								<Card className="mb-6">
 									<CardContent className="pt-6">
 										<div>
 											<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
