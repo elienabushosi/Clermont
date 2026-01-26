@@ -13,6 +13,7 @@ backend/
 │       ├── base-agent.js       # Abstract base class for all agents
 │       ├── geoservice.js        # Geoservice agent (NYC Planning Geoservice API)
 │       ├── transit-zones.js    # Transit Zones agent (ArcGIS Transit Zones API)
+│       ├── fema-flood.js        # FEMA Flood agent (ArcGIS FEMA Flood Zones API)
 │       ├── zola.js             # Zola agent (CARTO MapPLUTO API)
 │       ├── tax-lot-finder.js   # Tax lot finder (placeholder/disabled)
 │       └── zoning-resolution.js # Zoning resolution
@@ -73,7 +74,7 @@ backend/
     - **Critical**: If Geoservice fails, report status set to `'failed'` and process stops
     - **Update Report**: Extracts BBL, normalizedAddress, lat, lng and updates main `reports` record
 
-3. **Execute TransitZonesAgent (Sequential - Uses lat/lng from Geoservice)**
+3. **Execute TransitZonesAgent and FemaFloodAgent (Parallel - Uses lat/lng from Geoservice)**
 
     - **Purpose**: Determine transit zone classification for parking requirements
     - **API**: ArcGIS Transit Zones FeatureServer (point-in-polygon query)
@@ -95,6 +96,25 @@ backend/
         - "Manhattan Core and Long Island City Parking Areas" → `"manhattan_core_lic"`
         - No features found → `"beyond_gtz"`
         - Error/timeout → `"unknown"`
+
+3.5. **Execute FemaFloodAgent (Parallel with TransitZonesAgent - Uses lat/lng from Geoservice)**
+
+    - **Purpose**: Determine FEMA flood zone classification for property location
+    - **API**: ArcGIS FEMA Flood Hazard Zones FeatureServer (point-in-polygon query)
+    - **Input**: `{ address, bbl, normalizedAddress, location: { lat, lng } }` (lat/lng from Geoservice)
+    - **Endpoint**: `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Flood_Hazard_Reduced_Set_gdb/FeatureServer/0/query`
+    - **Query Method**: Point-in-polygon spatial query using lat/lng coordinates
+    - **Output**:
+        - `floodZone`: FEMA flood zone code (e.g., "AE", "X", "V", etc.) or `null` if not in a flood zone
+        - `floodZoneLabel`: Human-readable flood zone label
+        - `matched`: Boolean indicating if polygon match was found
+        - `input`: Original lat/lng coordinates used
+        - `sourceUrl`: Full ArcGIS query URL
+        - `notes`: Error messages or special notes (if any)
+        - `features`: Array of matched features with geometry (for map visualization)
+    - **Storage**: Result stored in `report_sources` table with SourceKey: `'fema_flood'`
+    - **Non-Critical**: FemaFloodAgent failure does not fail the report; returns `floodZone: null` on failure
+    - **Lat/Lng Requirement**: Must receive `lat` and `lng` from GeoserviceAgent (cannot run without coordinates)
 
 4. **Execute ZolaAgent (Sequential - Uses BBL from Geoservice)**
 
@@ -179,6 +199,22 @@ backend/
 -   **Lat/Lng Requirement**: Must receive `lat` and `lng` from GeoserviceAgent (cannot run without coordinates)
 -   **Normalization**: Converts ArcGIS string values to internal enum for consistent use by ZoningResolutionAgent
 
+**FemaFloodAgent (fema-flood.js):**
+
+-   **Data Source**: ArcGIS FEMA Flood Hazard Zones FeatureServer
+-   **Endpoint**: `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Flood_Hazard_Reduced_Set_gdb/FeatureServer/0/query`
+-   **Method**: GET request with point-in-polygon spatial query
+-   **Query Parameters**:
+    -   `geometryType`: `"esriGeometryPoint"`
+    -   `geometry`: JSON point with `{ x: lng, y: lat, spatialReference: { wkid: 4326 } }`
+    -   `inSR`: `"4326"` (WGS84)
+    -   `spatialRel`: `"esriSpatialRelIntersects"`
+    -   `outFields`: `"*"` (all fields to capture flood zone classification)
+    -   `returnGeometry`: `"true"` (returns geometry for map visualization)
+-   **Response Format**: GeoJSON with `features` array containing flood zone attributes
+-   **Lat/Lng Requirement**: Must receive `lat` and `lng` from GeoserviceAgent (cannot run without coordinates)
+-   **Flood Zone Fields**: Checks multiple common field names (`FLOODZONE`, `ZONE_SUBTYPE`, `ZONE`, `FLD_ZONE`, `ZONE_TYPE`) to extract zone classification
+
 **ZolaAgent (zola.js):**
 
 -   **Data Source**: Planning Labs CARTO MapPLUTO
@@ -250,20 +286,21 @@ backend/
 
 1. **Sequential Execution**: 
     - GeoserviceAgent must run first and succeed (provides BBL and coordinates)
-    - TransitZonesAgent runs after Geoservice (requires lat/lng)
+    - TransitZonesAgent and FemaFloodAgent run in parallel after Geoservice (both require lat/lng)
     - ZolaAgent runs after Geoservice (requires BBL)
     - ZoningResolutionAgent runs after Zola, TransitZones, and Geoservice (reads stored sources)
 2. **Minimal Frontend Payload**: Frontend only sends address string; backend handles all normalization
 3. **BBL as Canonical Identifier**: BBL is extracted by Geoservice and used for all subsequent data lookups
-4. **Coordinates for Transit Zones**: lat/lng from Geoservice used for ArcGIS point-in-polygon queries
-5. **Structured Data Extraction**: GeoserviceAgent extracts and structures all available data fields for future use
-6. **Non-Critical Agents**: TransitZonesAgent, ZolaAgent, and ZoningResolutionAgent failures don't fail the report (for V1 - may change in future)
+4. **Coordinates for Spatial Queries**: lat/lng from Geoservice used for ArcGIS point-in-polygon queries (TransitZonesAgent and FemaFloodAgent)
+5. **Parallel Execution**: TransitZonesAgent and FemaFloodAgent run in parallel after Geoservice since both only require coordinates
+6. **Structured Data Extraction**: GeoserviceAgent extracts and structures all available data fields for future use
+7. **Non-Critical Agents**: TransitZonesAgent, FemaFloodAgent, ZolaAgent, and ZoningResolutionAgent failures don't fail the report (for V1 - may change in future)
 7. **Database Storage**: All agent results stored in `report_sources` with full JSON payload for audit/debugging
 8. **Agent Independence**: ZoningResolutionAgent reads stored sources rather than calling external APIs directly, keeping it deterministic and testable
 
 ## Future Enhancements
 
--   Parallel execution of non-dependent agents after Geoservice (TransitZonesAgent and ZolaAgent can run in parallel)
+-   Parallel execution of non-dependent agents after Geoservice (TransitZonesAgent and FemaFloodAgent already run in parallel; ZolaAgent could also run in parallel)
 -   AI report generator to synthesize agent results into human-readable summary
 -   Additional agents: Tax Lot Finder
 -   WebSocket/SSE for real-time report generation updates

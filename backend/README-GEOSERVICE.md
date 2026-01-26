@@ -10,9 +10,10 @@ This backend now integrates with NYC Planning Geoservice and CARTO MapPLUTO APIs
 
 1. **Frontend** sends `{ address: "2847 Broadway, Manhattan, NY 10025" }`
 2. **GeoserviceAgent** resolves address → BBL + normalized address + coordinates
-3. **ZolaAgent** uses BBL → fetches MapPLUTO parcel data from CARTO
-4. Results stored in `report_sources` table
-5. Report status updated to 'ready' or 'failed'
+3. **TransitZonesAgent** and **FemaFloodAgent** use lat/lng → determine transit zone and flood zone classifications (run in parallel)
+4. **ZolaAgent** uses BBL → fetches MapPLUTO parcel data from CARTO
+5. Results stored in `report_sources` table
+6. Report status updated to 'ready' or 'failed'
 
 ### Agents
 
@@ -23,6 +24,20 @@ This backend now integrates with NYC Planning Geoservice and CARTO MapPLUTO APIs
 -   **Input**: `{ address: string }`
 -   **Output**: `{ bbl, normalizedAddress, lat, lng, borough, block, lot }`
 -   **Required**: Must succeed for report generation to continue
+
+#### TransitZonesAgent (`transit_zones`)
+
+-   **Purpose**: Determine transit zone classification for parking requirements
+-   **API**: ArcGIS Transit Zones FeatureServer
+-   **Input**: `{ lat, lng }` (from GeoserviceAgent)
+-   **Output**: Transit zone classification (inner, outer, manhattan_core_lic, beyond_gtz, unknown)
+
+#### FemaFloodAgent (`fema_flood`)
+
+-   **Purpose**: Determine FEMA flood zone classification
+-   **API**: ArcGIS FEMA Flood Hazard Zones FeatureServer
+-   **Input**: `{ lat, lng }` (from GeoserviceAgent)
+-   **Output**: FEMA flood zone classification and zone code
 
 #### ZolaAgent (`zola`)
 
@@ -102,6 +117,7 @@ Examples:
 ## Error Handling
 
 -   If GeoserviceAgent fails → Report status = 'failed', process stops
+-   If TransitZonesAgent or FemaFloodAgent fails → Report status = 'ready' (Geoservice succeeded), but transit zone/flood zone data missing
 -   If ZolaAgent fails → Report status = 'ready' (Geoservice succeeded), but Zola data missing
 -   All errors stored in `report_sources` table with `ErrorMessage` field
 

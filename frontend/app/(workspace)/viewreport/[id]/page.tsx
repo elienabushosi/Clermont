@@ -28,6 +28,7 @@ import {
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
 import { config } from "@/lib/config";
 import FemaFloodMap from "@/components/fema-flood-map";
+import TransitZoneMap from "@/components/transit-zone-map";
 
 function getStatusColor(status: string) {
 	switch (status) {
@@ -48,9 +49,6 @@ export default function ViewReportPage() {
 	const params = useParams();
 	const router = useRouter();
 	const reportId = params.id as string;
-	const arcgisMapRef = useRef<HTMLDivElement>(null);
-	const [arcgisScriptLoaded, setArcgisScriptLoaded] = useState(false);
-	const [mapElementCreated, setMapElementCreated] = useState(false);
 
 	const [reportData, setReportData] = useState<ReportWithSources | null>(
 		null
@@ -84,308 +82,6 @@ export default function ViewReportPage() {
 		fetchReport();
 	}, [reportId]);
 
-	// Create map element in DOM first (before script loads) so custom element can upgrade it
-	// Check periodically until ref is available and we have coordinates
-	useEffect(() => {
-		if (!reportData) return; // Wait for report data to be loaded
-
-		const sources = reportData.sources || [];
-		const geoserviceSource = sources.find((s) => s.SourceKey === "geoservice");
-		const zolaSource = sources.find((s) => s.SourceKey === "zola");
-		
-		const geoserviceData = geoserviceSource?.ContentJson || {};
-		const zolaData = zolaSource?.ContentJson?.contentJson || zolaSource?.ContentJson || {};
-		
-		// Get coordinates (prefer Zola, fallback to Geoservice)
-		const lat = zolaData.lat || geoserviceData.lat || null;
-		const lng = zolaData.lon || zolaData.lng || geoserviceData.lng || null;
-		
-		// Default to NYC center if no coordinates available
-		const centerLat = lat || 40.696281660383654;
-		const centerLng = lng || -73.96328347161334;
-		const centerString = `${centerLng},${centerLat}`;
-
-		const checkAndCreate = () => {
-			if (arcgisMapRef.current && !arcgisMapRef.current.querySelector("arcgis-embedded-map")) {
-				console.log("Creating map element in DOM before script loads with center:", centerString);
-				arcgisMapRef.current.innerHTML = `<arcgis-embedded-map style="height:600px;width:100%;" item-id="51d6d85803264b2a81a95ec7b59b9ead" theme="light" heading-enabled legend-enabled share-enabled center="${centerString}" scale="144447.638572" portal-url="https://www.arcgis.com"></arcgis-embedded-map>`;
-				return true; // Element created
-			}
-			return false; // Ref not available yet
-		};
-
-		// Try immediately
-		if (checkAndCreate()) {
-			return;
-		}
-
-		// If ref not available, check periodically
-		const interval = setInterval(() => {
-			if (checkAndCreate()) {
-				clearInterval(interval);
-			}
-		}, 100);
-
-		// Cleanup after 5 seconds max
-		const timeout = setTimeout(() => {
-			clearInterval(interval);
-		}, 5000);
-
-		return () => {
-			clearInterval(interval);
-			clearTimeout(timeout);
-		};
-	}, [reportData]);
-
-	// Load ArcGIS embeddable components script and wait for custom element to be defined
-	useEffect(() => {
-		// Check if script is already loaded
-		const existingScript = document.querySelector(
-			'script[src="https://js.arcgis.com/4.34/embeddable-components/"]'
-		);
-
-		const initializeMap = () => {
-			if (customElements.get("arcgis-embedded-map")) {
-				console.log("arcgis-embedded-map custom element already defined");
-				setArcgisScriptLoaded(true);
-			} else {
-				customElements
-					.whenDefined("arcgis-embedded-map")
-					.then(() => {
-						console.log("arcgis-embedded-map custom element is now defined");
-						setArcgisScriptLoaded(true);
-					})
-					.catch((error) => {
-						console.log("Custom element not defined, retrying...", error);
-						setTimeout(() => {
-							if (customElements.get("arcgis-embedded-map")) {
-								setArcgisScriptLoaded(true);
-							} else {
-								// Force set loaded after delay
-								setTimeout(() => setArcgisScriptLoaded(true), 2000);
-							}
-						}, 2000);
-					});
-			}
-		};
-
-		if (existingScript) {
-			// Script already exists
-			setTimeout(initializeMap, 500);
-		} else {
-			// Create and load script
-			const script = document.createElement("script");
-			script.type = "module";
-			script.src = "https://js.arcgis.com/4.34/embeddable-components/";
-			script.onload = () => {
-				console.log("ArcGIS script loaded, waiting for custom element definition");
-				setTimeout(initializeMap, 1000);
-			};
-			script.onerror = () => {
-				console.error("Failed to load ArcGIS embeddable components");
-			};
-			document.head.appendChild(script);
-		}
-	}, []);
-
-	// Remove loading message when script is loaded and inspect element API
-	// This runs whenever arcgisScriptLoaded changes, and checks periodically for ref availability
-	useEffect(() => {
-		if (!arcgisScriptLoaded || !reportData) {
-			return;
-		}
-
-		// Get coordinates from report data
-		const sources = reportData.sources || [];
-		const geoserviceSource = sources.find((s) => s.SourceKey === "geoservice");
-		const zolaSource = sources.find((s) => s.SourceKey === "zola");
-		
-		const geoserviceData = geoserviceSource?.ContentJson || {};
-		const zolaData = zolaSource?.ContentJson?.contentJson || zolaSource?.ContentJson || {};
-		
-		const lat = zolaData.lat || geoserviceData.lat || null;
-		const lng = zolaData.lon || zolaData.lng || geoserviceData.lng || null;
-
-		const performInspection = () => {
-			if (!arcgisMapRef.current) {
-				return false; // Ref not available yet
-			}
-
-			const loadingDiv = arcgisMapRef.current.querySelector("div");
-			if (loadingDiv && loadingDiv.textContent?.includes("Loading transit zone map")) {
-				loadingDiv.remove();
-			}
-			
-			// Wait a bit for element to be fully upgraded
-			setTimeout(() => {
-				// Verify element exists and inspect its API
-				const mapElement = arcgisMapRef.current?.querySelector("arcgis-embedded-map");
-				
-				if (mapElement) {
-					// Update center property if we have coordinates
-					if (lat && lng && mapElement.center) {
-						try {
-							(mapElement as any).center = [lng, lat];
-							console.log("Updated map center to property coordinates:", [lng, lat]);
-						} catch (error) {
-							console.log("Could not update center property:", error);
-						}
-					}
-					console.log("=== ArcGIS Map Element Inspection ===");
-					console.log("Element:", mapElement);
-					console.log("Element tagName:", mapElement.tagName);
-					console.log("Element constructor:", mapElement.constructor.name);
-					
-					// Check for Shadow DOM
-					if (mapElement.shadowRoot) {
-						console.log("Shadow DOM found:", mapElement.shadowRoot);
-						
-						// Search for standard inputs
-						const shadowInputs = mapElement.shadowRoot.querySelectorAll("input");
-						console.log("Standard inputs in Shadow DOM:", shadowInputs.length, shadowInputs);
-						
-						// Search for custom elements that might be search inputs (ArcGIS/Calcite components)
-						const customSearchElements = mapElement.shadowRoot.querySelectorAll(
-							'calcite-input, calcite-search, calcite-combobox, esri-search, esri-search-widget, [role="search"], [aria-label*="search" i], [placeholder*="search" i]'
-						);
-						console.log("Custom search elements found:", customSearchElements.length, customSearchElements);
-						
-						// Look for any elements with search-related attributes
-						const allElements = mapElement.shadowRoot.querySelectorAll("*");
-						const searchRelatedElements: Element[] = [];
-						allElements.forEach((el) => {
-							const ariaLabel = el.getAttribute("aria-label")?.toLowerCase() || "";
-							const placeholder = el.getAttribute("placeholder")?.toLowerCase() || "";
-							const role = el.getAttribute("role")?.toLowerCase() || "";
-							const id = el.id?.toLowerCase() || "";
-							const className = el.className?.toString().toLowerCase() || "";
-							
-							if (
-								ariaLabel.includes("search") ||
-								placeholder.includes("search") ||
-								role.includes("search") ||
-								id.includes("search") ||
-								className.includes("search")
-							) {
-								searchRelatedElements.push(el);
-							}
-						});
-						console.log("Elements with search-related attributes:", searchRelatedElements.length, searchRelatedElements);
-						
-						// Log details of search-related elements
-						searchRelatedElements.forEach((el, idx) => {
-							console.log(`Search-related element ${idx}:`, {
-								tagName: el.tagName,
-								id: el.id,
-								className: el.className,
-								ariaLabel: el.getAttribute("aria-label"),
-								placeholder: el.getAttribute("placeholder"),
-								role: el.getAttribute("role"),
-								value: (el as any).value,
-								textContent: el.textContent?.substring(0, 50)
-							});
-						});
-						
-						// Try to find the ArcGIS Search widget specifically
-						const esriWidgets = mapElement.shadowRoot.querySelectorAll("[class*='esri'], [class*='search'], [id*='search']");
-						console.log("Potential ESRI widgets:", esriWidgets.length);
-						esriWidgets.forEach((widget, idx) => {
-							if (idx < 5) { // Limit to first 5
-								console.log(`Widget ${idx}:`, {
-									tagName: widget.tagName,
-									id: widget.id,
-									className: widget.className,
-									innerHTML: widget.innerHTML?.substring(0, 100)
-								});
-							}
-						});
-						
-						// Check if we can access nested Shadow DOMs
-						const allCustomElements = mapElement.shadowRoot.querySelectorAll("*");
-						allCustomElements.forEach((el) => {
-							if (el.shadowRoot) {
-								console.log(`Nested Shadow DOM found in ${el.tagName}:`, el.shadowRoot);
-								const nestedInputs = el.shadowRoot.querySelectorAll("input");
-								if (nestedInputs.length > 0) {
-									console.log(`Found ${nestedInputs.length} inputs in nested Shadow DOM of ${el.tagName}`);
-								}
-							}
-						});
-					} else {
-						console.log("No Shadow DOM found");
-					}
-					
-					// Check for properties
-					console.log("Element properties:", Object.getOwnPropertyNames(mapElement));
-					console.log("Element prototype:", Object.getOwnPropertyNames(Object.getPrototypeOf(mapElement)));
-					
-					// Check for common ArcGIS properties
-					const possibleProps = ['itemId', 'item-id', 'center', 'scale', 'address', 'searchAddress', 'currentAddress'];
-					possibleProps.forEach(prop => {
-						if (prop in mapElement) {
-							console.log(`Property "${prop}":`, (mapElement as any)[prop]);
-						}
-					});
-					
-					// Check for methods
-					const possibleMethods = ['search', 'searchAddress', 'getAddress', 'getCurrentAddress', 'setAddress'];
-					possibleMethods.forEach(method => {
-						if (typeof (mapElement as any)[method] === 'function') {
-							console.log(`Method "${method}" exists`);
-						}
-					});
-					
-					// Check for event listeners or events
-					console.log("Checking for events...");
-					const testEvents = ['addresschange', 'address-selected', 'search', 'search-complete'];
-					testEvents.forEach(eventName => {
-						mapElement.addEventListener(eventName, (e) => {
-							console.log(`Event "${eventName}" fired:`, e);
-						});
-					});
-					
-					// Try to access all attributes
-					console.log("All attributes:", Array.from(mapElement.attributes).map(attr => `${attr.name}="${attr.value}"`));
-					
-					// Check for internal properties (might be prefixed with _ or $)
-					const allKeys = Object.keys(mapElement);
-					const internalKeys = allKeys.filter(key => key.startsWith('_') || key.startsWith('$'));
-					if (internalKeys.length > 0) {
-						console.log("Internal properties found:", internalKeys);
-					}
-					
-					console.log("=== End Inspection ===");
-					return true; // Inspection completed
-				} else {
-					console.log("Map element not found yet, ref content:", arcgisMapRef.current?.innerHTML);
-					return false; // Element not found yet
-				}
-			}, 500); // Wait 500ms for element to be fully upgraded
-			return true; // Started inspection
-		};
-
-		// Try immediately
-		if (performInspection()) {
-			return;
-		}
-
-		// If ref not available, check periodically (ref is attached when parking section renders)
-		const interval = setInterval(() => {
-			if (performInspection()) {
-				clearInterval(interval);
-			}
-		}, 200);
-
-		// Stop checking after 10 seconds
-		const timeout = setTimeout(() => {
-			clearInterval(interval);
-		}, 10000);
-
-		return () => {
-			clearInterval(interval);
-			clearTimeout(timeout);
-		};
-	}, [arcgisScriptLoaded, reportData]);
 
 	if (isLoading) {
 		return (
@@ -2030,17 +1726,8 @@ export default function ViewReportPage() {
 															)}
 														<div className="mt-3">
 															<p className="text-xs text-[#605A57] mb-2">
-																View & open this page to verify transit zone information.
+																Transit zone map is now displayed above in the main report view.
 															</p>
-															<div className="border border-[rgba(55,50,47,0.12)] rounded-md overflow-hidden">
-																<div ref={arcgisMapRef} style={{ minHeight: "600px", width: "100%" }}>
-																	{!arcgisScriptLoaded && (
-																		<div className="flex items-center justify-center h-[600px] text-[#605A57]">
-																			Loading transit zone map...
-																		</div>
-																	)}
-																</div>
-															</div>
 														</div>
 													</div>
 												</div>
@@ -2427,6 +2114,59 @@ export default function ViewReportPage() {
 												lng={lng}
 												address={report.Address}
 												floodZoneData={femaFloodData}
+											/>
+										</div>
+									</CardContent>
+								</Card>
+							);
+						})()}
+
+						{/* Transit Zone Map */}
+						{(() => {
+							const transitZoneSource = sources.find(
+								(s) => s.SourceKey === "transit_zones"
+							);
+							const geoserviceSource = sources.find(
+								(s) => s.SourceKey === "geoservice"
+							);
+							const zolaSource = sources.find((s) => s.SourceKey === "zola");
+
+							const geoserviceData =
+								geoserviceSource?.ContentJson?.extracted ||
+								geoserviceSource?.ContentJson ||
+								{};
+							const zolaData =
+								zolaSource?.ContentJson?.contentJson ||
+								zolaSource?.ContentJson ||
+								{};
+
+							// Get coordinates (prefer Zola, fallback to Geoservice)
+							const lat = zolaData.lat || geoserviceData.lat || null;
+							const lng = zolaData.lon || zolaData.lng || geoserviceData.lng || null;
+
+							// Get transit zone data
+							const transitZoneData =
+								transitZoneSource?.ContentJson?.contentJson ||
+								transitZoneSource?.ContentJson ||
+								null;
+
+							if (!lat || !lng) {
+								return null; // Don't show map if no coordinates
+							}
+
+							return (
+								<Card>
+									<CardContent className="pt-6">
+										<div>
+											<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
+												<MapPinCheck className="w-5 h-5 text-[#4090C2]" />
+												Transit Zone Map
+											</h3>
+											<TransitZoneMap
+												lat={lat}
+												lng={lng}
+												address={report.Address}
+												transitZoneData={transitZoneData}
 											/>
 										</div>
 									</CardContent>
