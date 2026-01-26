@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
 import { config } from "@/lib/config";
+import FemaFloodMap from "@/components/fema-flood-map";
 
 function getStatusColor(status: string) {
 	switch (status) {
@@ -2379,6 +2380,59 @@ export default function ViewReportPage() {
 									</CardContent>
 								</Card>
 							)}
+
+						{/* FEMA Flood Map */}
+						{(() => {
+							const femaFloodSource = sources.find(
+								(s) => s.SourceKey === "fema_flood"
+							);
+							const geoserviceSource = sources.find(
+								(s) => s.SourceKey === "geoservice"
+							);
+							const zolaSource = sources.find((s) => s.SourceKey === "zola");
+
+							const geoserviceData =
+								geoserviceSource?.ContentJson?.extracted ||
+								geoserviceSource?.ContentJson ||
+								{};
+							const zolaData =
+								zolaSource?.ContentJson?.contentJson ||
+								zolaSource?.ContentJson ||
+								{};
+
+							// Get coordinates (prefer Zola, fallback to Geoservice)
+							const lat = zolaData.lat || geoserviceData.lat || null;
+							const lng = zolaData.lon || zolaData.lng || geoserviceData.lng || null;
+
+							// Get FEMA flood data
+							const femaFloodData =
+								femaFloodSource?.ContentJson?.contentJson ||
+								femaFloodSource?.ContentJson ||
+								null;
+
+							if (!lat || !lng) {
+								return null; // Don't show map if no coordinates
+							}
+
+							return (
+								<Card>
+									<CardContent className="pt-6">
+										<div>
+											<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
+												<MapPin className="w-5 h-5 text-[#4090C2]" />
+												FEMA Flood Map
+											</h3>
+											<FemaFloodMap
+												lat={lat}
+												lng={lng}
+												address={report.Address}
+												floodZoneData={femaFloodData}
+											/>
+										</div>
+									</CardContent>
+								</Card>
+							);
+						})()}
 
 						{/* Neighborhood Information */}
 						<Card>

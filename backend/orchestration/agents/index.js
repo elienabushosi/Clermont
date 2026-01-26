@@ -4,6 +4,7 @@ import { ZolaAgent } from "./zola.js";
 import { TaxLotFinderAgent } from "./tax-lot-finder.js";
 import { ZoningResolutionAgent } from "./zoning-resolution.js";
 import { TransitZonesAgent } from "./transit-zones.js";
+import { FemaFloodAgent } from "./fema-flood.js";
 
 // Initialize all agents
 const agents = {
@@ -12,6 +13,7 @@ const agents = {
 	taxLotFinder: new TaxLotFinderAgent(),
 	zoningResolution: new ZoningResolutionAgent(),
 	transitZones: new TransitZonesAgent(),
+	femaFlood: new FemaFloodAgent(),
 };
 
 /**

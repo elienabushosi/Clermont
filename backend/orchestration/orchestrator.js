@@ -101,44 +101,95 @@ export async function generateReport(
 
 		console.log(`Geoservice succeeded. BBL: ${bbl}, Address: ${normalizedAddress}`);
 
-		// 3.5. Run TransitZonesAgent using lat/lng from Geoservice (non-critical)
+		// 3.5. Run TransitZonesAgent and FemaFloodAgent in parallel using lat/lng from Geoservice (non-critical)
 		const transitZonesAgent = getAgentBySourceKey("transit_zones");
-		if (!transitZonesAgent) {
-			console.warn("TransitZonesAgent not found, skipping...");
-		} else {
-			console.log("Executing TransitZonesAgent with lat/lng:", lat, lng);
-			try {
-				const transitZonesResult = await transitZonesAgent.execute(
-					{
-						address: addressData.address,
-						bbl: bbl,
-						normalizedAddress: normalizedAddress,
-						location: { lat, lng },
-					},
-					report.IdReport
-				);
+		const femaFloodAgent = getAgentBySourceKey("fema_flood");
 
-				// Store TransitZones result (non-critical - failure doesn't fail report)
-				await storeAgentResult(
-					report.IdReport,
-					"transit_zones",
-					transitZonesResult
-				);
-			} catch (transitZonesError) {
-				console.error(
-					"TransitZonesAgent failed (non-critical):",
-					transitZonesError
-				);
-				// Store failed result but don't fail the report
-				await storeAgentResult(report.IdReport, "transit_zones", {
-					status: "failed",
-					data: null,
-					error:
-						transitZonesError.message ||
-						"Unknown error in TransitZonesAgent",
-				});
-			}
+		// Execute both agents in parallel
+		const parallelAgentPromises = [];
+
+		if (transitZonesAgent) {
+			console.log("Executing TransitZonesAgent with lat/lng:", lat, lng);
+			parallelAgentPromises.push(
+				transitZonesAgent
+					.execute(
+						{
+							address: addressData.address,
+							bbl: bbl,
+							normalizedAddress: normalizedAddress,
+							location: { lat, lng },
+						},
+						report.IdReport
+					)
+					.then(async (transitZonesResult) => {
+						// Store TransitZones result (non-critical - failure doesn't fail report)
+						await storeAgentResult(
+							report.IdReport,
+							"transit_zones",
+							transitZonesResult
+						);
+					})
+					.catch(async (transitZonesError) => {
+						console.error(
+							"TransitZonesAgent failed (non-critical):",
+							transitZonesError
+						);
+						// Store failed result but don't fail the report
+						await storeAgentResult(report.IdReport, "transit_zones", {
+							status: "failed",
+							data: null,
+							error:
+								transitZonesError.message ||
+								"Unknown error in TransitZonesAgent",
+						});
+					})
+			);
+		} else {
+			console.warn("TransitZonesAgent not found, skipping...");
 		}
+
+		if (femaFloodAgent) {
+			console.log("Executing FemaFloodAgent with lat/lng:", lat, lng);
+			parallelAgentPromises.push(
+				femaFloodAgent
+					.execute(
+						{
+							address: addressData.address,
+							bbl: bbl,
+							normalizedAddress: normalizedAddress,
+							location: { lat, lng },
+						},
+						report.IdReport
+					)
+					.then(async (femaFloodResult) => {
+						// Store FEMA Flood result (non-critical - failure doesn't fail report)
+						await storeAgentResult(
+							report.IdReport,
+							"fema_flood",
+							femaFloodResult
+						);
+					})
+					.catch(async (femaFloodError) => {
+						console.error(
+							"FemaFloodAgent failed (non-critical):",
+							femaFloodError
+						);
+						// Store failed result but don't fail the report
+						await storeAgentResult(report.IdReport, "fema_flood", {
+							status: "failed",
+							data: null,
+							error:
+								femaFloodError.message ||
+								"Unknown error in FemaFloodAgent",
+						});
+					})
+			);
+		} else {
+			console.warn("FemaFloodAgent not found, skipping...");
+		}
+
+		// Wait for both agents to complete (or fail)
+		await Promise.all(parallelAgentPromises);
 
 		// 4. Run ZolaAgent using BBL from Geoservice
 		const zolaAgent = getAgentBySourceKey("zola");
@@ -235,6 +286,20 @@ export async function generateReport(
 				agent: "transit_zones",
 				status:
 					transitZonesSource.Status === "succeeded"
+						? "succeeded"
+						: "failed",
+			});
+		}
+
+		// Add FEMA Flood result if it exists
+		const femaFloodSource = allSources.find(
+			(s) => s.SourceKey === "fema_flood"
+		);
+		if (femaFloodSource) {
+			agentResults.push({
+				agent: "fema_flood",
+				status:
+					femaFloodSource.Status === "succeeded"
 						? "succeeded"
 						: "failed",
 			});
