@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { config } from "@/lib/config";
 import { useForm } from "react-hook-form";
@@ -44,7 +44,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
 
-export default function LoginPage() {
+function LoginPageContent() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const [isLoading, setIsLoading] = useState(false);
@@ -510,5 +510,17 @@ export default function LoginPage() {
 				</div>
 			</div>
 		</div>
+	);
+}
+
+export default function LoginPage() {
+	return (
+		<Suspense fallback={
+			<div className="w-full min-h-screen bg-[#F7F5F3] flex items-center justify-center">
+				<div className="text-[#37322F]">Loading...</div>
+			</div>
+		}>
+			<LoginPageContent />
+		</Suspense>
 	);
 }
