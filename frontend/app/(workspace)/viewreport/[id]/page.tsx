@@ -1177,16 +1177,6 @@ export default function ViewReportPage() {
 													)}
 												</div>
 											)}
-
-										{/* Required Yards */}
-										<div>
-											<p className="text-sm text-[#605A57] mb-2">
-												Required Yards
-											</p>
-											<Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">
-												Pending Zoning Agent
-											</Badge>
-										</div>
 									</div>
 								</CardContent>
 							</Card>
