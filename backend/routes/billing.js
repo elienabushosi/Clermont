@@ -314,6 +314,14 @@ router.post("/create-checkout-session", async (req, res) => {
 		// Get current team member count (owner + team members)
 		const teamMemberCount = await getTeamMemberCount(userData.IdOrganization);
 
+		// Check if price is recurring (subscription) or one-time (payment)
+		const price = await stripe.prices.retrieve(priceId);
+		const isRecurring = price.recurring !== null;
+		const mode = isRecurring ? "subscription" : "payment";
+
+		console.log(`Price type: ${isRecurring ? "Subscription (recurring)" : "One-time payment"}`);
+		console.log(`Checkout mode: ${mode}`);
+
 		// Create checkout session
 		const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
 		console.log("Creating checkout session with metadata:", {
@@ -321,16 +329,18 @@ router.post("/create-checkout-session", async (req, res) => {
 			userId: userData.IdUser,
 			quantity: teamMemberCount,
 		});
-		const session = await stripe.checkout.sessions.create({
+
+		// Base session configuration
+		const sessionConfig = {
 			customer: customerId,
 			payment_method_types: ["card"],
 			line_items: [
 				{
 					price: priceId,
-					quantity: teamMemberCount, // Set quantity based on team member count
+					quantity: isRecurring ? teamMemberCount : 1, // Quantity only applies to subscriptions
 				},
 			],
-			mode: "subscription",
+			mode: mode,
 			success_url: `${frontendUrl}/settings?session_id={CHECKOUT_SESSION_ID}`,
 			cancel_url: `${frontendUrl}/settings?canceled=true`,
 			metadata: {
@@ -338,16 +348,25 @@ router.post("/create-checkout-session", async (req, res) => {
 				userId: userData.IdUser,
 				quantity: teamMemberCount.toString(),
 			},
-			subscription_data: {
+		};
+
+		// Only add subscription_data for subscription mode
+		if (mode === "subscription") {
+			sessionConfig.subscription_data = {
 				metadata: {
 					organizationId: userData.IdOrganization,
 					userId: userData.IdUser,
 					quantity: teamMemberCount.toString(),
 				},
-			},
-		});
+			};
+		}
+
+		const session = await stripe.checkout.sessions.create(sessionConfig);
 		console.log("Checkout session created:", session.id);
 		console.log("Session metadata:", session.metadata);
+		console.log("Price ID used:", priceId);
+		console.log("Mode:", mode, isRecurring ? "(Subscription)" : "(One-time payment)");
+		console.log("Amount total:", session.amount_total, "cents = $", (session.amount_total / 100).toFixed(2));
 
 		res.json({
 			status: "success",
@@ -1561,7 +1580,7 @@ router.post("/webhook", async (req, res) => {
 						SubscriptionStatus: orgStatus,
 						UpdatedAt: new Date().toISOString(),
 					})
-					.eq("IdOrganization", orgId);
+					.eq("IdOrganization", organizationId);
 				
 				if (orgUpdateError) {
 					console.error("  ✗ Error updating organization:", orgUpdateError.message);
