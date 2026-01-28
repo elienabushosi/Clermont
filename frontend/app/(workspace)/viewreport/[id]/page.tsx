@@ -721,6 +721,36 @@ export default function ViewReportPage() {
 															.zoningResolution
 															.height
 															.min_base_height
+															.source_url && (
+															<a
+																href={
+																	formattedData
+																		.zoningResolution
+																		.height
+																		.min_base_height
+																		.source_url
+																}
+																target="_blank"
+																rel="noopener noreferrer"
+																className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-1"
+															>
+																{formattedData
+																	.zoningResolution
+																	.height
+																	.min_base_height
+																	.source_section || "See citation"}
+																<ExternalLink className="size-3" />
+															</a>
+														)}
+														{!formattedData
+															.zoningResolution
+															.height
+															.min_base_height
+															.source_url &&
+														formattedData
+															.zoningResolution
+															.height
+															.min_base_height
 															.source_section && (
 															<p className="text-xs text-[#605A57] mt-1">
 																{
@@ -874,6 +904,38 @@ export default function ViewReportPage() {
 																.zoningResolution
 																.height.envelope
 																.candidates[0]
+																.source_url && (
+																<a
+																	href={
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_url
+																	}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-1"
+																>
+																	{formattedData
+																		.zoningResolution
+																		.height
+																		.envelope
+																		.candidates[0]
+																		.source_section || "See citation"}
+																	<ExternalLink className="size-3" />
+																</a>
+															)}
+															{!formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_url &&
+															formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
 																.source_section && (
 																<p className="text-xs text-[#605A57] mt-1">
 																	{
@@ -992,6 +1054,38 @@ export default function ViewReportPage() {
 																ft
 															</p>
 															{formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_url && (
+																<a
+																	href={
+																		formattedData
+																			.zoningResolution
+																			.height
+																			.envelope
+																			.candidates[0]
+																			.source_url
+																	}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	className="flex items-center gap-1 text-xs text-[#4090C2] hover:underline mt-1"
+																>
+																	{formattedData
+																		.zoningResolution
+																		.height
+																		.envelope
+																		.candidates[0]
+																		.source_section || "See citation"}
+																	<ExternalLink className="size-3" />
+																</a>
+															)}
+															{!formattedData
+																.zoningResolution
+																.height.envelope
+																.candidates[0]
+																.source_url &&
+															formattedData
 																.zoningResolution
 																.height.envelope
 																.candidates[0]
