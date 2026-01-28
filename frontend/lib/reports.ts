@@ -13,7 +13,6 @@ export interface Report {
 	CreatedBy: string | null;
 	CreatedByName: string | null;
 	CreatedByEmail: string | null;
-	District: string | null;
 	// Source data fields
 	LandUse: string | null;
 	BuildingClass: string | null;

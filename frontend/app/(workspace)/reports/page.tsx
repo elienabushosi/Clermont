@@ -130,12 +130,12 @@ export default function ReportsPage() {
 											{report.Address}
 										</TableCell>
 										<TableCell>
-											{report.District ? (
+											{report.ZoningDistricts ? (
 												<Badge
 													variant="outline"
 													className="bg-blue-100 text-blue-700 border-blue-300 text-xs"
 												>
-													{report.District}
+													{report.ZoningDistricts}
 												</Badge>
 											) : (
 												<span className="text-[#605A57]">

@@ -233,10 +233,10 @@ export default function ViewReportPage() {
 						<ArrowLeft className="size-4 mr-2" />
 						Back to Your Reports
 					</Button>
-					<Button variant="outline">
+					{/* <Button variant="outline">
 						<Send className="size-4 mr-2" />
 						Share
-					</Button>
+					</Button> */}
 				</div>
 
 				{/* Report Header */}

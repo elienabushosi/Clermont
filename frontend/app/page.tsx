@@ -34,30 +34,33 @@ export default function LandingPage() {
 	const [activeCard, setActiveCard] = useState(0);
 	const [progress, setProgress] = useState(0);
 	const mountedRef = useRef(true);
+	const activeCardRef = useRef(0);
+
+	// Keep ref in sync with state
+	useEffect(() => {
+		activeCardRef.current = activeCard;
+	}, [activeCard]);
 
 	useEffect(() => {
+		// Ensure mountedRef is true when effect runs
+		mountedRef.current = true;
+		
 		const progressInterval = setInterval(() => {
-			if (!mountedRef.current) return;
-
 			setProgress((prev) => {
-				if (prev >= 100) {
-					if (mountedRef.current) {
-						setActiveCard((current) => (current + 1) % 3);
-					}
+				const newProgress = prev + 2; // 2% every 100ms = 5 seconds total
+				if (newProgress >= 100) {
+					// Use ref to get current value and ensure correct rotation order
+					const current = activeCardRef.current;
+					const next = (current + 1) % 3;
+					setActiveCard(next);
 					return 0;
 				}
-				return prev + 2; // 2% every 100ms = 5 seconds total
+				return newProgress;
 			});
 		}, 100);
 
 		return () => {
 			clearInterval(progressInterval);
-			mountedRef.current = false;
-		};
-	}, []);
-
-	useEffect(() => {
-		return () => {
 			mountedRef.current = false;
 		};
 	}, []);
@@ -122,7 +125,7 @@ export default function LandingPage() {
 											className="h-5 sm:h-6 md:h-7 lg:h-8 w-auto"
 										/>
 									</div>
-									<div className="pl-3 sm:pl-4 md:pl-5 lg:pl-5 flex justify-start items-start hidden sm:flex flex-row gap-2 sm:gap-3 md:gap-4 lg:gap-4">
+									{/* <div className="pl-3 sm:pl-4 md:pl-5 lg:pl-5 flex justify-start items-start hidden sm:flex flex-row gap-2 sm:gap-3 md:gap-4 lg:gap-4">
 										<div className="flex justify-start items-center">
 											<div className="flex flex-col justify-center text-[rgba(49,45,43,0.80)] text-xs md:text-[13px] font-medium leading-[14px] font-sans">
 												Demo
@@ -138,7 +141,7 @@ export default function LandingPage() {
 												Pricing
 											</div>
 										</div>
-									</div>
+									</div> */}
 								</div>
 								<div className="h-6 sm:h-7 md:h-8 flex justify-start items-start gap-2 sm:gap-3">
 									<button
@@ -174,7 +177,7 @@ export default function LandingPage() {
 										Streamline your parcel research with
 										seamless automation
 										<br className="hidden sm:block" />
-										for every client & address.
+										for every address.
 									</div>
 								</div>
 							</div>
@@ -208,7 +211,7 @@ export default function LandingPage() {
 										{/* Main Content */}
 										<div className="w-full h-full flex items-center justify-center">
 											<div className="relative w-full h-full overflow-hidden">
-												{/* Product Image 1 - Plan your schedules */}
+												{/* Product Image 1 - Address Research */}
 												<div
 													className={`absolute inset-0 transition-all duration-500 ease-in-out ${
 														activeCard === 0
@@ -217,8 +220,8 @@ export default function LandingPage() {
 													}`}
 												>
 													<img
-														src="/Linderoreportimage4.png"
-														alt="Schedules Dashboard - Customer Subscription Management"
+														src="/reportview.png"
+														alt="Address Research - Property Report View"
 														className="w-full h-full object-cover scale-[1.01]"
 													/>
 												</div>
@@ -232,13 +235,13 @@ export default function LandingPage() {
 													}`}
 												>
 													<img
-														src="/analytics-dashboard-with-charts-graphs-and-data-vi.jpg"
-														alt="Analytics Dashboard"
+														src="/samplereportview.png"
+														alt="Data & Insights - Sample Report View with Allowed and Restricted Uses"
 														className="w-full h-full object-cover"
 													/>
 												</div>
 
-												{/* Product Image 3 - Data visualization */}
+												{/* Product Image 3 - Automated Reports */}
 												<div
 													className={`absolute inset-0 transition-all duration-500 ease-in-out ${
 														activeCard === 2
@@ -247,9 +250,9 @@ export default function LandingPage() {
 													}`}
 												>
 													<img
-														src="/data-visualization-dashboard-with-interactive-char.jpg"
-														alt="Data Visualization Dashboard"
-														className="w-full h-full object-contain" // Changed from object-cover to object-contain to preserve landscape aspect ratio
+														src="/dashboardview.png"
+														alt="Automated Reports - Reports Dashboard View"
+														className="w-full h-full object-cover"
 													/>
 												</div>
 											</div>
