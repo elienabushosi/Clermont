@@ -18,8 +18,9 @@ dotenv.config({ path: join(__dirname, '..', envFile) });
 // Also load base .env if it exists (for local overrides)
 dotenv.config({ path: join(__dirname, '..', '.env'), override: false });
 
-const supabaseUrl = process.env.SUPABASE_URL || 'https://navarlhgtpvdgutcsfhj.supabase.co';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'sb_publishable_pCqZ-f4i-JjUjhj1wJ2U1Q_Ulct2mk-';
+// Clermont: no fallbacks – use .env.development / .env.production
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {

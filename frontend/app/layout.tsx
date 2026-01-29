@@ -20,7 +20,7 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-	title: "Lindero - Property Feasibility Analysis for Developers & Architects",
+	title: "Clermont - Property Feasibility Analysis for Developers & Architects",
 	description:
 		"Client-intake and asset-analysis tool for developers & architects that automatically generates property feasibility snapshots using just a client's address.",
 	generator: "v0.app",
