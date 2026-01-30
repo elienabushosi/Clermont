@@ -338,7 +338,7 @@ export default function HomePage() {
 							<MapPin className="h-12 w-12 text-[#605A57] mx-auto mb-4" />
 							<p className="text-[#605A57] mb-4">No reports found</p>
 							<Button
-								onClick={() => router.push("/search")}
+								onClick={() => router.push("/search-address")}
 								className="bg-[#37322F] hover:bg-[#37322F]/90 text-white"
 							>
 								Create Your First Report

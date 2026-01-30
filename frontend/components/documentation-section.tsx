@@ -25,7 +25,7 @@ export default function DocumentationSection() {
 		{
 			title: "Address Research",
 			description: "Enter an address, get a report in minutes.",
-			image: "/Addressresearch2.png",
+			image: "/addressresearchlower2.png",
 		},
 		{
 			title: "Parcel Feasibility Analysis",
@@ -37,7 +37,7 @@ export default function DocumentationSection() {
 			title: "Reliable and Accurate",
 			description:
 				"Our reports are based on the latest zoning and land-use codes, and are updated regularly.",
-			image: "/activityfeed.png",
+			image: "/Reliableandaccuratelower.png",
 		},
 	];
 

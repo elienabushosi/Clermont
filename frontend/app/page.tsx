@@ -220,7 +220,7 @@ export default function LandingPage() {
 													}`}
 												>
 													<img
-														src="/reportview.png"
+														src="/Addressresearchtop.png"
 														alt="Address Research - Property Report View"
 														className="w-full h-full object-cover scale-[1.01]"
 													/>
@@ -235,7 +235,7 @@ export default function LandingPage() {
 													}`}
 												>
 													<img
-														src="/samplereportview.png"
+														src="/Datainsightstop.png"
 														alt="Data & Insights - Sample Report View with Allowed and Restricted Uses"
 														className="w-full h-full object-cover"
 													/>
@@ -250,7 +250,7 @@ export default function LandingPage() {
 													}`}
 												>
 													<img
-														src="/dashboardview.png"
+														src="/Automatedreports.png"
 														alt="Automated Reports - Reports Dashboard View"
 														className="w-full h-full object-cover"
 													/>
