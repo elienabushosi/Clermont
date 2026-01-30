@@ -28,6 +28,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { config } from "@/lib/config";
 
+const STRIPE_PRODUCT_ID = process.env.NEXT_PUBLIC_STRIPE_PRODUCT_ID ?? "";
+const STRIPE_ANNUAL_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_ANNUAL_PRICE_ID ?? "";
+const STRIPE_MONTHLY_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID ?? "";
+
 export default function SearchAddressPage() {
 	const router = useRouter();
 	const [addressData, setAddressData] = useState<AddressData | null>(null);
@@ -62,9 +66,9 @@ export default function SearchAddressPage() {
 						const productsList = await getProducts();
 						setProducts(productsList);
 						
-						// Auto-select annual Pro plan (price_1SssqwKFRZRd0A1rexXIA41g) by default
+						// Auto-select annual Pro plan by default
 						const annualProPrice = productsList.find(
-							p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+							p => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID
 						);
 						if (annualProPrice) {
 							setSelectedPriceId(annualProPrice.priceId);
@@ -87,7 +91,7 @@ export default function SearchAddressPage() {
 	useEffect(() => {
 		if (showSubscriptionModal && currentUser?.user.Role === "Owner" && products.length > 0 && !selectedPriceId) {
 			const annualProPrice = products.find(
-				p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+				p => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID
 			);
 			if (annualProPrice) {
 				setSelectedPriceId(annualProPrice.priceId);
@@ -275,7 +279,7 @@ export default function SearchAddressPage() {
 					toast.dismiss("generate-report");
 					// Auto-select annual Pro plan when opening modal
 					const annualProPrice = products.find(
-						p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+						p => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID
 					);
 					if (annualProPrice && !selectedPriceId) {
 						setSelectedPriceId(annualProPrice.priceId);
@@ -317,7 +321,7 @@ export default function SearchAddressPage() {
 	const handleSelectPlan = async () => {
 		// Use selected price or default to annual Pro
 		const priceIdToUse = selectedPriceId || products.find(
-			p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+			p => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID
 		)?.priceId;
 
 		if (!priceIdToUse) {
@@ -426,12 +430,12 @@ export default function SearchAddressPage() {
 											<span className="text-sm font-medium text-[#37322F] truncate">
 												{report.Address}
 											</span>
-											{report.District && (
+											{report.ZoningDistricts && (
 												<Badge
 													variant="outline"
 													className="bg-blue-100 text-blue-700 border-blue-300 text-xs shrink-0"
 												>
-													{report.District}
+													{report.ZoningDistricts}
 												</Badge>
 											)}
 										</div>
@@ -470,8 +474,8 @@ export default function SearchAddressPage() {
 							<AlertDialogHeader>
 								<div className="flex flex-col items-center text-center mb-4">
 									<Image
-										src="/logos/linderpaymentmodallogo.png"
-										alt="Lindero"
+										src="/logos/clermontpaymentmodallogo.png"
+										alt="Clermont"
 										width={120}
 										height={40}
 										className="mb-3"
@@ -509,7 +513,7 @@ export default function SearchAddressPage() {
 									<div className="space-y-3">
 										{(() => {
 											// Filter for the specific product and group prices
-											const proProduct = products.find(p => p.id === 'prod_Tqa06S4Qy1ya2w');
+											const proProduct = products.find(p => p.id === STRIPE_PRODUCT_ID);
 											if (!proProduct) {
 												// If product not found, show all products
 												return products.map((product) => {
@@ -559,8 +563,8 @@ export default function SearchAddressPage() {
 											}
 
 											// Group prices for the Pro product
-											const monthlyPrice = products.find(p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rf1wdOELZ');
-											const annualPrice = products.find(p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g');
+											const monthlyPrice = products.find(p => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_MONTHLY_PRICE_ID);
+											const annualPrice = products.find(p => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID);
 
 											// Use annual as default if no selection
 											const defaultPriceId = selectedPriceId || annualPrice?.priceId || monthlyPrice?.priceId;
@@ -631,10 +635,20 @@ export default function SearchAddressPage() {
 																</div>
 																<div className="text-right">
 																	<div className="font-bold text-lg text-[#37322F]">
-																		{formatPrice(annualPrice.amount, annualPrice.currency)}
+																		{annualPrice.amount != null
+																			? new Intl.NumberFormat("en-US", {
+																					style: "currency",
+																					currency: (annualPrice.currency || "usd").toUpperCase(),
+																					minimumFractionDigits: 0,
+																					maximumFractionDigits: 0,
+																				}).format(Math.floor(annualPrice.amount / 1200))
+																			: "—"}
+																	</div>
+																	<div className="text-xs text-[#605A57] mt-0.5">
+																		per month
 																	</div>
 																	<div className="text-xs text-green-600 font-medium mt-1">
-																		Save $589 annually
+																		Save $586 annually
 																	</div>
 																</div>
 															</div>
@@ -679,7 +693,7 @@ export default function SearchAddressPage() {
 								</AlertDialogCancel>
 								<AlertDialogAction
 									onClick={handleSelectPlan}
-									disabled={!selectedPriceId && !products.find(p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g')?.priceId || isCreatingCheckout}
+									disabled={!selectedPriceId && !products.find(p => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID)?.priceId || isCreatingCheckout}
 									className="bg-[#37322F] hover:bg-[#37322F]/90"
 								>
 									{isCreatingCheckout ? (

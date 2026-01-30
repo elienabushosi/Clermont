@@ -72,7 +72,7 @@ export default function DocumentationSection() {
 					<div className="self-stretch text-center text-[#605A57] text-base font-normal leading-7 font-sans">
 						Manage intakes, analyze parcels, close deals faster
 						<br />
-						with Lindero.
+						with Clermont.
 					</div>
 				</div>
 			</div>
@@ -89,10 +89,10 @@ export default function DocumentationSection() {
 								<div
 									key={index}
 									onClick={() => handleCardClick(index)}
-									className={`w-full overflow-hidden flex flex-col justify-start items-start transition-all duration-300 cursor-pointer ${
+									className={`w-full overflow-hidden flex flex-col justify-start items-start transition-all duration-300 cursor-pointer bg-[#685954] ${
 										isActive
-											? "bg-white shadow-[0px_0px_0px_0.75px_#E0DEDB_inset]"
-											: "border border-[rgba(2,6,23,0.08)]"
+											? "shadow-[0px_0px_0px_0.75px_rgba(232,230,223,0.3)_inset]"
+											: "border border-[#5a4d49]"
 									}`}
 								>
 									<div
@@ -104,14 +104,14 @@ export default function DocumentationSection() {
 									>
 										<div
 											key={animationKey}
-											className="h-0.5 bg-[#322D2B] animate-[progressBar_5s_linear_forwards] will-change-transform"
+											className="h-0.5 bg-[#e8e6df] animate-[progressBar_5s_linear_forwards] will-change-transform"
 										/>
 									</div>
 									<div className="px-6 py-5 w-full flex flex-col gap-2">
-										<div className="self-stretch flex justify-center flex-col text-[#49423D] text-sm font-semibold leading-6 font-sans">
+										<div className="self-stretch flex justify-center flex-col text-[#e8e6df] text-sm font-semibold leading-6 font-sans">
 											{card.title}
 										</div>
-										<div className="self-stretch text-[#605A57] text-[13px] font-normal leading-[22px] font-sans whitespace-pre-line">
+										<div className="self-stretch text-[#e8e6df] text-[13px] font-normal leading-[22px] font-sans whitespace-pre-line">
 											{card.description}
 										</div>
 									</div>

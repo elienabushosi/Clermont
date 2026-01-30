@@ -52,8 +52,8 @@ function SidebarHeaderContent({
 				}`}
 			>
 				<img
-					src="/logos/linderoworkspacelogo.png"
-					alt="Logo"
+					src="/logos/clermontworkspacelogo.png"
+					alt="Clermont"
 					className={`object-contain ${
 						isCollapsed ? "h-8" : "h-auto w-full"
 					}`}

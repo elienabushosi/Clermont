@@ -240,7 +240,7 @@ function LoginPageContent() {
 				</button>
 				<div className="bg-white rounded-lg shadow-sm border border-[rgba(55,50,47,0.12)] p-8">
 					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
-						Log in to Lindero
+						Log in to Clermont
 					</h1>
 					<Form {...form}>
 						<form

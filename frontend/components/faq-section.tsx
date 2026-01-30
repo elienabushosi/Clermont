@@ -9,29 +9,29 @@ interface FAQItem {
 
 const faqData: FAQItem[] = [
 	{
-		question: "What is Lindero and who is it for?",
-		answer: "Lindero is a feasibility and site-intelligence tool built for developers & architects. It helps developers & architects quickly understand what is possible on a property by generating a zoning and land-use feasibility summary from a client’s address. Lindero is designed for developers & architects who want clarity before design begins.",
+		question: "What is Clermont and who is it for?",
+		answer: "Clermont is a feasibility and site-intelligence tool built for developers & architects. It helps developers & architects quickly understand what is possible on a property by generating a zoning and land-use feasibility summary from a client’s address. Clermont is designed for developers & architects who want clarity before design begins.",
 	},
 	{
-		question: "How does Lindero work?",
-		answer: "Lindero starts with a property address. Using that address, it pulls parcel-level data such as zoning classification, land use, and lot characteristics, then interprets what is allowed or restricted on the site. The result is a clear, architect-friendly feasibility summary that can be reviewed before the first client meeting.",
+		question: "How does Clermont work?",
+		answer: "Clermont starts with a property address. Using that address, it pulls parcel-level data such as zoning classification, land use, and lot characteristics, then interprets what is allowed or restricted on the site. The result is a clear, architect-friendly feasibility summary that can be reviewed before the first client meeting.",
 	},
 	{
-		question: "What kind of questions does Lindero help answer?",
-		answer: "Lindero helps answer early feasibility questions like whether a site can be built on, what types of uses are allowed, and whether a property can be converted between single-family and multi-residential use. It is designed to support go/no-go decisions before investing in design work.",
+		question: "What kind of questions does Clermont help answer?",
+		answer: "Clermont helps answer early feasibility questions like whether a site can be built on, what types of uses are allowed, and whether a property can be converted between single-family and multi-residential use. It is designed to support go/no-go decisions before investing in design work.",
 	},
 	{
-		question: "Is Lindero a replacement for full zoning or legal review?",
-		answer: "No. Lindero is intended for early-stage feasibility and decision-making. It provides clarity and direction, but it does not replace detailed zoning analysis, legal review, or consultation with local authorities during permitting.",
+		question: "Is Clermont a replacement for full zoning or legal review?",
+		answer: "No. Clermont is intended for early-stage feasibility and decision-making. It provides clarity and direction, but it does not replace detailed zoning analysis, legal review, or consultation with local authorities during permitting.",
 	},
 	{
 		question:
-			"How is Lindero different from using ChatGPT or public zoning sites?",
-		answer: "Lindero centralizes parcel data and zoning interpretation into a single, repeatable workflow. Instead of manually pulling data from multiple tools and interpreting it each time, Lindero provides a structured feasibility summary tied directly to a specific property and client.",
+			"How is Clermont different from using ChatGPT or public zoning sites?",
+		answer: "Clermont centralizes parcel data and zoning interpretation into a single, repeatable workflow. Instead of manually pulling data from multiple tools and interpreting it each time, Clermont provides a structured feasibility summary tied directly to a specific property and client.",
 	},
 	{
-		question: "How do I get started with Lindero?",
-		answer: "Getting started is simple. Create an account and log in, then you can search for different property addresses and generate feasibility reports instantly. You can also connect Lindero to your client intake flow, letting you organize multiple projects or clients. For each address you enter, Lindero will generate a feasibility snapshot you can reference during your client conversations.",
+		question: "How do I get started with Clermont?",
+		answer: "Getting started is simple. Create an account and log in, then you can search for different property addresses and generate feasibility reports instantly. You can also connect Clermont to your client intake flow, letting you organize multiple projects or clients. For each address you enter, Clermont will generate a feasibility snapshot you can reference during your client conversations.",
 	},
 ];
 

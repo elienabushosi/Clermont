@@ -32,10 +32,22 @@ Development setup for Clermont was done in a separate IDE:
 - **Frontend:** `.env.development` and `.env.local` – `NEXT_PUBLIC_API_URL=http://localhost:3002`, Google Maps API key, GEO Service API key, Stripe dev.
 - **Local dev:** Backend on port 3002, frontend on port 3000; Stripe dev/sandbox and dev webhooks work; Supabase is connected to the **Clermont** database.
 
-So in this repo, **dev is fully set up and working**. The next phase is **production**: deploy backend and frontend, then switch to production Stripe and production webhooks.
+So in this repo, **dev is fully set up and working**, and **production is live** (Railway + Vercel + Stripe live + webhooks).
 
 ---
 
+## Production URLs
+
+| Service   | URL |
+|----------|-----|
+| **Frontend** | `https://clermont-one.vercel.app` |
+| **Backend**  | `https://clermont-backend-production-cc72.up.railway.app` |
+| **Stripe webhook** | `https://clermont-backend-production-cc72.up.railway.app/api/billing/webhook` |
+
+Use these for `FRONTEND_URL` (Railway), `NEXT_PUBLIC_API_URL` (Vercel), and Stripe checkout/redirect URLs. If you add a custom domain later, update this table and the env vars.
+
+
+---
 ## What’s Done (Dev)
 
 - [x] Clermont repo created and filled from Lindero codebase
@@ -49,11 +61,21 @@ So in this repo, **dev is fully set up and working**. The next phase is **produc
 
 ---
 
-## Next Steps (Production)
+## What's Done (Production)
 
-Use this as a checklist. Order can be adjusted (e.g. commit first, then Railway/Vercel).
+- [x] Dev setup committed and pushed
+- [x] Backend deployed on Railway (Clermont Supabase connected)
+- [x] Frontend deployed on Vercel (root directory `frontend`, Next.js)
+- [x] `NEXT_PUBLIC_API_URL` and `FRONTEND_URL` set (production URLs)
+- [x] Stripe live keys and production webhook configured; checkout and webhooks verified
 
-### 1. Commit recent dev setup
+---
+
+## Next Steps (Production) – reference checklist
+
+Use this as a reference for how production was set up. Order can be adjusted (e.g. commit first, then Railway/Vercel).
+
+### 1. Commit recent dev setup ✓
 
 - Commit any uncommitted changes (env examples, setup docs, etc.).  
 - **Do not commit** `.env.development`, `.env.production`, or `.env.local` (they are gitignored).  
@@ -73,15 +95,15 @@ Use this as a checklist. Order can be adjusted (e.g. commit first, then Railway/
   - `FRONTEND_URL` = production frontend URL (from Vercel, e.g. `https://clermont.vercel.app` or your custom domain)
   - `PORT` (Railway often sets this; keep default if so)
   - `GEOSERVICE_API_KEY` (production geo key when you switch)
-- Deploy and note the **backend URL** (e.g. `https://clermont-api.up.railway.app`).  
+- Deploy and note the **backend URL** (e.g. `https://clermont-backend-production-cc72.up.railway.app`).  
 - This URL becomes **`NEXT_PUBLIC_API_URL`** for the frontend in production.
 
-### 3. Get `NEXT_PUBLIC_API_URL` (frontend production)
+### 3. Get `NEXT_PUBLIC_API_URL` (frontend production) ✓
 
-- After Railway deploy: **NEXT_PUBLIC_API_URL** = your Railway backend URL (e.g. `https://clermont-api.up.railway.app`).
+- After Railway deploy: **NEXT_PUBLIC_API_URL** = your Railway backend URL (e.g. `https://clermont-backend-production-cc72.up.railway.app`).
 - No trailing slash. Set this in **Vercel** (and in `frontend/.env.production` if you build locally for prod).
 
-### 4. Vercel (frontend)
+### 4. Vercel (frontend) ✓
 
 - Create a **Vercel** project for Clermont.
 - Connect the project to GitHub repo **`elienabushosi/Clermont`**.
@@ -92,17 +114,17 @@ Use this as a checklist. Order can be adjusted (e.g. commit first, then Railway/
   - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` = Clermont Stripe **live** publishable key (e.g. `pk_live_...`)
   - Stripe product/price IDs for production if you use them in frontend env:  
     `NEXT_PUBLIC_STRIPE_PRODUCT_ID`, `NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID`, `NEXT_PUBLIC_STRIPE_ANNUAL_PRICE_ID` (Clermont Stripe live product/prices when ready)
-- Deploy and note the **frontend URL** (e.g. `https://clermont.vercel.app` or custom domain).  
+- Deploy and note the **frontend URL** (e.g. `https://clermont-one.vercel.app` or custom domain).  
 - This URL is **FRONTEND_URL** for the backend (Railway) and for Stripe (checkout success/cancel, etc.).
 
-### 5. Get frontend URL
+### 5. Get frontend URL ✓
 
-- From Vercel: the deployed app URL (e.g. `https://clermont.vercel.app`).
+- From Vercel: the deployed app URL (e.g. `https://clermont-one.vercel.app`).
 - Use it as:
   - **FRONTEND_URL** in Railway (backend) so redirects and links point to production.
   - **Stripe** dashboard: set it in product/checkout success/cancel URLs if needed.
 
-### 6. Stripe production keys and webhooks
+### 6. Stripe production keys and webhooks ✓
 
 - **Stripe Dashboard** → switch to **Live** mode for Clermont (or use a separate Stripe account for Clermont).
 - **Keys:**
@@ -112,8 +134,8 @@ Use this as a checklist. Order can be adjusted (e.g. commit first, then Railway/
   - Frontend: `NEXT_PUBLIC_STRIPE_PRODUCT_ID`, `NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID`, `NEXT_PUBLIC_STRIPE_ANNUAL_PRICE_ID`.
   - Backend: same IDs if read from env; otherwise ensure backend uses Stripe API with live keys.
 - **Production webhooks:**
-  - Stripe Dashboard → Developers → Webhooks → Add endpoint.
-  - **Endpoint URL:** `https://<your-railway-backend-url>/api/billing/webhook` (your Railway backend URL + `/api/billing/webhook`).
+  - Stripe Dashboard → Developers → Webhooks (or Event destinations) → Add endpoint.
+  - **Endpoint URL:** `https://clermont-backend-production-cc72.up.railway.app/api/billing/webhook`.
   - Select **live** mode and the events you need (e.g. `customer.subscription.*`, `invoice.*`, etc. – match what Lindero uses).
   - Copy the **signing secret** (`whsec_...`) and set it in Railway as **`STRIPE_WEBHOOK_SECRET`** (production).
 
@@ -139,9 +161,9 @@ Use this as a checklist. Order can be adjusted (e.g. commit first, then Railway/
 | Backend     | SUPABASE_URL / ANON_KEY / SERVICE_ROLE_KEY | Clermont Supabase        | Clermont Supabase                   |
 | Backend     | STRIPE_SECRET_KEY                    | Lindero dev (sandbox)    | Clermont Stripe live                |
 | Backend     | STRIPE_WEBHOOK_SECRET                | Lindero dev webhook      | Clermont prod webhook               |
-| Backend     | FRONTEND_URL                         | http://localhost:3000    | Vercel frontend URL                 |
+| Backend     | FRONTEND_URL                         | http://localhost:3000    | `https://clermont-one.vercel.app`   |
 | Backend     | GEOSERVICE_API_KEY                   | Lindero key (for now)    | Clermont/prod key when ready        |
-| Frontend    | NEXT_PUBLIC_API_URL                  | http://localhost:3002    | Railway backend URL                 |
+| Frontend    | NEXT_PUBLIC_API_URL                  | http://localhost:3002    | `https://clermont-backend-production-cc72.up.railway.app` |
 | Frontend    | NEXT_PUBLIC_GOOGLE_MAPS_API_KEY      | Dev key                  | Prod key if different               |
 | Frontend    | NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY   | Dev publishable (if used)| Clermont Stripe live publishable    |
 | Frontend    | NEXT_PUBLIC_STRIPE_* (product/price) | Lindero dev IDs          | Clermont live product/price IDs     |

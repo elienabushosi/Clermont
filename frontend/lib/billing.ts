@@ -285,7 +285,7 @@ export function formatPrice(amount: number | null, currency: string | null, pric
 	if (!amount || !currency) return "—";
 	
 	// For monthly price ID, don't show decimals
-	const isMonthlyPrice = priceId === 'price_1SssqwKFRZRd0A1rf1wdOELZ';
+	const isMonthlyPrice = priceId === (process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID ?? "");
 	
 	return new Intl.NumberFormat("en-US", {
 		style: "currency",

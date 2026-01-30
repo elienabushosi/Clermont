@@ -50,6 +50,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 
+const STRIPE_PRODUCT_ID = process.env.NEXT_PUBLIC_STRIPE_PRODUCT_ID ?? "";
+const STRIPE_ANNUAL_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_ANNUAL_PRICE_ID ?? "";
+const STRIPE_MONTHLY_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID ?? "";
+
 const passwordResetSchema = z.object({
 	code: z.string().min(6, "Code must be at least 6 characters").max(10, "Code must be 10 characters or less"),
 	newPassword: z
@@ -293,7 +297,7 @@ export default function SettingsPage() {
 	const handleUpgradeClick = async () => {
 		// Find annual price ID
 		const annualPriceId = products.find(
-			p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+			p => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID
 		)?.priceId;
 
 		if (!annualPriceId) {
@@ -325,7 +329,7 @@ export default function SettingsPage() {
 	const handleConfirmUpgrade = async () => {
 		// Find annual price ID
 		const annualPriceId = products.find(
-			p => p.id === 'prod_Tqa06S4Qy1ya2w' && p.priceId === 'price_1SssqwKFRZRd0A1rexXIA41g'
+			p => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID
 		)?.priceId;
 
 		if (!annualPriceId) {
@@ -728,7 +732,7 @@ export default function SettingsPage() {
 													</div>
 													
 													{/* Upgrade Button - Only show for monthly subscribers */}
-													{currentSubscriptionProduct.priceId === 'price_1SssqwKFRZRd0A1rf1wdOELZ' && (
+													{currentSubscriptionProduct.priceId === STRIPE_MONTHLY_PRICE_ID && (
 														<Button
 															onClick={handleUpgradeClick}
 															disabled={isPreviewingUpgrade || isUpgrading}
@@ -755,7 +759,7 @@ export default function SettingsPage() {
 							{isOwner && (() => {
 								// Hide available plans if user is on monthly subscription
 								const isMonthlySubscriber = subscriptionStatus?.status === "active" && 
-									subscriptionStatus.plan === 'price_1SssqwKFRZRd0A1rf1wdOELZ';
+									subscriptionStatus.plan === STRIPE_MONTHLY_PRICE_ID;
 								
 								if (isMonthlySubscriber) {
 									return null; // Don't show available plans for monthly subscribers

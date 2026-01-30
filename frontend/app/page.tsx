@@ -120,8 +120,8 @@ export default function LandingPage() {
 								<div className="flex justify-center items-center">
 									<div className="flex justify-start items-center">
 										<img
-											src="/logos/linderlandingpageheaderlogo.png"
-											alt="Lindero"
+											src="/logos/Clermontlogo-text-removebg.png"
+											alt="Clermont"
 											className="h-5 sm:h-6 md:h-7 lg:h-8 w-auto"
 										/>
 									</div>
@@ -146,7 +146,7 @@ export default function LandingPage() {
 								<div className="h-6 sm:h-7 md:h-8 flex justify-start items-start gap-2 sm:gap-3">
 									<button
 										onClick={() => router.push("/signup")}
-										className="px-2 sm:px-3 md:px-[14px] py-1 sm:py-[6px] bg-[#37322F] text-white shadow-[0px_1px_2px_rgba(55,50,47,0.12)] overflow-hidden rounded-full flex justify-center items-center hover:bg-[#37322F]/90 transition-colors cursor-pointer"
+										className="px-2 sm:px-3 md:px-[14px] py-1 sm:py-[6px] bg-[#D09376] text-white shadow-[0px_1px_2px_rgba(55,50,47,0.12)] overflow-hidden rounded-full flex justify-center items-center hover:bg-[#D09376]/90 transition-colors cursor-pointer"
 									>
 										<div className="flex flex-col justify-center text-white text-xs md:text-[13px] font-medium leading-5 font-sans">
 											Get started
@@ -171,7 +171,7 @@ export default function LandingPage() {
 									<div className="w-full max-w-[748.71px] lg:w-[748.71px] text-center flex justify-center flex-col text-[#37322F] text-[24px] xs:text-[28px] sm:text-[36px] md:text-[52px] lg:text-[80px] font-normal leading-[1.1] sm:leading-[1.15] md:leading-[1.2] lg:leading-24 font-serif px-2 sm:px-4 md:px-0">
 										Get parcel feasibility reports
 										<br />
-										with Lindero
+										with Clermont
 									</div>
 									<div className="w-full max-w-[506.08px] lg:w-[506.08px] text-center flex justify-center flex-col text-[rgba(55,50,47,0.80)] sm:text-lg md:text-xl leading-[1.4] sm:leading-[1.45] md:leading-[1.5] lg:leading-7 font-sans px-2 sm:px-4 md:px-0 lg:text-lg font-medium text-sm">
 										Streamline your parcel research with
@@ -185,9 +185,9 @@ export default function LandingPage() {
 								<div className="backdrop-blur-[8.25px] flex justify-start items-center gap-4">
 									<button
 										onClick={() => router.push("/signup")}
-										className="h-10 sm:h-11 md:h-12 px-6 sm:px-8 md:px-10 lg:px-12 py-2 sm:py-[6px] relative bg-[#37322F] shadow-[0px_0px_0px_2.5px_rgba(255,255,255,0.08)_inset] overflow-hidden rounded-full flex justify-center items-center cursor-pointer"
+										className="h-10 sm:h-11 md:h-12 px-6 sm:px-8 md:px-10 lg:px-12 py-2 sm:py-[6px] relative bg-[#D09376] shadow-[0px_0px_0px_2.5px_rgba(255,255,255,0.08)_inset] overflow-hidden rounded-full flex justify-center items-center hover:bg-[#D09376]/90 transition-colors cursor-pointer"
 									>
-										<div className="w-20 sm:w-24 md:w-28 lg:w-44 h-[41px] absolute left-0 top-[-0.5px] bg-gradient-to-b from-[rgba(255,255,255,0)] to-[rgba(0,0,0,0.10)] mix-blend-multiply"></div>
+										<div className="w-20 sm:w-24 md:w-28 lg:w-44 h-[41px] absolute left-0 top-[-0.5px] bg-gradient-to-b from-[rgba(255,255,255,0)] to-[rgba(0,0,0,0.05)] mix-blend-multiply"></div>
 										<div className="flex flex-col justify-center text-white text-sm sm:text-base md:text-[15px] font-medium leading-5 font-sans">
 											Start for free
 										</div>
@@ -205,7 +205,7 @@ export default function LandingPage() {
 								/>
 							</div>
 							<div className="w-full max-w-[960px] lg:w-[960px] pt-2 sm:pt-4 pb-6 sm:pb-8 md:pb-10 px-2 sm:px-4 md:px-6 lg:px-11 flex flex-col justify-center items-center gap-2 relative z-5 my-8 sm:my-12 md:my-16 lg:my-16 mb-0 lg:pb-0">
-								<div className="w-full max-w-[960px] lg:w-[960px] aspect-[3438/1888] bg-white border-4 border-black shadow-md overflow-hidden rounded-[6px] sm:rounded-[8px] lg:rounded-[9.06px] flex flex-col justify-start items-start">
+								<div className="w-full max-w-[960px] lg:w-[960px] aspect-[3438/1888] bg-white border-4 border-[#685954] shadow-md overflow-hidden rounded-[6px] sm:rounded-[8px] lg:rounded-[9.06px] flex flex-col justify-start items-start">
 									{/* Dashboard Content */}
 									<div className="self-stretch flex-1 flex justify-start items-start">
 										{/* Main Content */}
@@ -342,12 +342,12 @@ export default function LandingPage() {
 										{/* Top Left - Smart. Simple. Brilliant. */}
 										<div className="border-b border-r-0 md:border-r border-[rgba(55,50,47,0.12)] p-4 sm:p-6 md:p-8 lg:p-12 flex flex-col justify-start items-start gap-4 sm:gap-6">
 											<div className="flex flex-col gap-2">
-												<h3 className="text-[#37322F] text-lg sm:text-xl font-semibold leading-tight font-sans">
+												<h3 className="text-[#685954] text-lg sm:text-xl font-semibold leading-tight font-sans">
 													Fast. Simple. Accurate.
 												</h3>
 												<p className="text-[#605A57] text-sm md:text-base font-normal leading-relaxed font-sans">
 													Get parcel feasibility
-													reports with Lindero in
+													reports with Clermont in
 													minutes, not hours.
 												</p>
 											</div>
@@ -364,7 +364,7 @@ export default function LandingPage() {
 										{/* Top Right - Your work, in sync */}
 										<div className="border-b border-[rgba(55,50,47,0.12)] p-4 sm:p-6 md:p-8 lg:p-12 flex flex-col justify-start items-start gap-4 sm:gap-6">
 											<div className="flex flex-col gap-2">
-												<h3 className="text-[#37322F] font-semibold leading-tight font-sans text-lg sm:text-xl">
+												<h3 className="text-[#685954] font-semibold leading-tight font-sans text-lg sm:text-xl">
 													From intro to contract,
 													faster!
 												</h3>
@@ -494,26 +494,26 @@ function FeatureCard({
 }) {
 	return (
 		<div
-			className={`w-full md:flex-1 self-stretch px-6 py-5 overflow-hidden flex flex-col justify-start items-start gap-2 cursor-pointer relative border-b md:border-b-0 last:border-b-0 ${
+			className={`w-full md:flex-1 self-stretch px-6 py-5 overflow-hidden flex flex-col justify-start items-start gap-2 cursor-pointer relative border-b md:border-b-0 last:border-b-0 bg-[#685954] ${
 				isActive
-					? "bg-white shadow-[0px_0px_0px_0.75px_#E0DEDB_inset]"
-					: "border-l-0 border-r-0 md:border border-[#E0DEDB]/80"
+					? "shadow-[0px_0px_0px_0.75px_rgba(232,230,223,0.3)_inset]"
+					: "border-l-0 border-r-0 md:border border-[#5a4d49]"
 			}`}
 			onClick={onClick}
 		>
 			{isActive && (
 				<div className="absolute top-0 left-0 w-full h-0.5 bg-[rgba(50,45,43,0.08)]">
 					<div
-						className="h-full bg-[#322D2B] transition-all duration-100 ease-linear"
+						className="h-full bg-[#e8e6df] transition-all duration-100 ease-linear"
 						style={{ width: `${progress}%` }}
 					/>
 				</div>
 			)}
 
-			<div className="self-stretch flex justify-center flex-col text-[#49423D] text-sm md:text-sm font-semibold leading-6 md:leading-6 font-sans">
+			<div className="self-stretch flex justify-center flex-col text-[#e8e6df] text-sm md:text-sm font-semibold leading-6 md:leading-6 font-sans">
 				{title}
 			</div>
-			<div className="self-stretch text-[#605A57] text-[13px] md:text-[13px] font-normal leading-[22px] md:leading-[22px] font-sans">
+			<div className="self-stretch text-[#e8e6df] text-[13px] md:text-[13px] font-normal leading-[22px] md:leading-[22px] font-sans">
 				{description}
 			</div>
 		</div>
