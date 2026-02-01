@@ -4,6 +4,7 @@ import { generateReport } from "../orchestration/orchestrator.js";
 import { getReportsByOrganization } from "../services/report-service.js";
 import { getUserFromToken } from "../lib/auth-utils.js";
 import { supabase } from "../lib/supabase.js";
+import { sendAdminReportAttemptedNotification, sendAdminReportCreatedNotification } from "../lib/email.js";
 
 const router = express.Router();
 
@@ -116,6 +117,24 @@ router.post("/generate", async (req, res) => {
 			placeId: req.body.placeId || null,
 		};
 
+		// Notify admin of report attempted (production only; before generateReport so we know request was received)
+		const attemptedAtEst = new Date().toLocaleString("en-US", { timeZone: "America/New_York" }) + " EST";
+		const { data: orgForNotify } = await supabase
+			.from("organizations")
+			.select("Name")
+			.eq("IdOrganization", userData.IdOrganization)
+			.single();
+		const orgName = orgForNotify?.Name ?? "—";
+		const attemptedResult = await sendAdminReportAttemptedNotification(
+			attemptedAtEst,
+			userData.Name ?? "—",
+			orgName,
+			addressData.address
+		);
+		if (!attemptedResult.success) {
+			console.error("Admin report-attempted notification failed:", attemptedResult.error);
+		}
+
 		// Generate report
 		const result = await generateReport(
 			addressData,
@@ -124,16 +143,30 @@ router.post("/generate", async (req, res) => {
 			req.body.clientId || null
 		);
 
+		// Notify admin of report result (production only; does not block response)
+		const createdAtEst = new Date().toLocaleString("en-US", { timeZone: "America/New_York" }) + " EST";
+		const notifyResult = await sendAdminReportCreatedNotification(
+			createdAtEst,
+			userData.Name ?? "—",
+			orgName,
+			addressData.address,
+			result.borough ?? null,
+			result.status ?? "ready"
+		);
+		if (!notifyResult.success) {
+			console.error("Admin report-created notification failed:", notifyResult.error);
+		}
+
 		// If owner and no subscription, increment free reports counter after successful generation
 		if (userData.Role === "Owner" && !hasActiveSubscription) {
-			const { data: org } = await supabase
+			const { data: orgForFree } = await supabase
 				.from("organizations")
 				.select("FreeReportsUsed")
 				.eq("IdOrganization", userData.IdOrganization)
 				.single();
 
-			if (org) {
-				const newCount = (org.FreeReportsUsed || 0) + 1;
+			if (orgForFree) {
+				const newCount = (orgForFree.FreeReportsUsed || 0) + 1;
 				await supabase
 					.from("organizations")
 					.update({

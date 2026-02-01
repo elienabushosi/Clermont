@@ -68,6 +68,7 @@ export async function generateReport(
 			return {
 				reportId: report.IdReport,
 				status: "failed",
+				borough: null,
 				error: `Geoservice failed: ${geoserviceResult.error}`,
 				agentResults: [
 					{
@@ -85,7 +86,7 @@ export async function generateReport(
 			throw new Error("GeoserviceAgent did not return extracted data");
 		}
 
-		const { bbl, normalizedAddress, lat, lng } = geoserviceData.extracted;
+		const { bbl, normalizedAddress, lat, lng, borough } = geoserviceData.extracted;
 
 		if (!bbl) {
 			throw new Error("GeoserviceAgent did not return BBL");
@@ -319,6 +320,7 @@ export async function generateReport(
 			status: finalStatus,
 			bbl: bbl,
 			normalizedAddress: normalizedAddress,
+			borough: borough || null,
 			agentResults: agentResults,
 		};
 	} catch (error) {

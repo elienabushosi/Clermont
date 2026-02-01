@@ -93,4 +93,93 @@ export async function sendAdminNewSignupNotification(userEmail, userName, orgNam
 	return { success: true, id: data?.id };
 }
 
+/**
+ * Send admin a "report attempted" notification (user clicked Generate). Only sends when NODE_ENV === 'production'.
+ * @param {string} attemptedAtEst - Date/time of attempt in EST (formatted string)
+ * @param {string} userName - User who started the report
+ * @param {string} orgName - Organization name
+ * @param {string} address - Address they entered
+ * @returns {{ success: boolean, id?: string, error?: string }}
+ */
+export async function sendAdminReportAttemptedNotification(
+	attemptedAtEst,
+	userName,
+	orgName,
+	address
+) {
+	if (process.env.NODE_ENV !== "production") {
+		return { success: true };
+	}
+	const adminEmail = process.env.ADMIN_EMAIL;
+	if (!adminEmail || !resend) {
+		return { success: true };
+	}
+	const safeName = (userName && String(userName).trim()) ? userName : "—";
+	const html = `
+		<p>A report was attempted in Clermont.</p>
+		<ul>
+			<li><strong>Date/Time (EST):</strong> ${attemptedAtEst}</li>
+			<li><strong>User name:</strong> ${safeName}</li>
+			<li><strong>Organization:</strong> ${orgName}</li>
+			<li><strong>Address:</strong> ${address}</li>
+		</ul>
+	`;
+	const { data, error } = await resend.emails.send({
+		from: fromEmail,
+		to: [adminEmail],
+		subject: `Clermont – ${safeName} report attempted`,
+		html,
+	});
+	if (error) return { success: false, error: error.message };
+	return { success: true, id: data?.id };
+}
+
+/**
+ * Send admin a "report created" notification (result). Only sends when NODE_ENV === 'production'.
+ * @param {string} createdAtEst - Date/time of report completion in EST (formatted string)
+ * @param {string} userName - User who created the report
+ * @param {string} orgName - Organization name
+ * @param {string} address - Report address
+ * @param {string|null} borough - NYC borough from first service that provides it (e.g. Geoservice)
+ * @param {string} reportStatus - "ready" or "failed"
+ * @returns {{ success: boolean, id?: string, error?: string }}
+ */
+export async function sendAdminReportCreatedNotification(
+	createdAtEst,
+	userName,
+	orgName,
+	address,
+	borough,
+	reportStatus
+) {
+	if (process.env.NODE_ENV !== "production") {
+		return { success: true };
+	}
+	const adminEmail = process.env.ADMIN_EMAIL;
+	if (!adminEmail || !resend) {
+		return { success: true };
+	}
+	const boroughDisplay = borough && String(borough).trim() ? borough : "—";
+	const safeName = (userName && String(userName).trim()) ? userName : "—";
+	const html = `
+		<p>Report result in Clermont.</p>
+		<ul>
+			<li><strong>Date/Time (EST):</strong> ${createdAtEst}</li>
+			<li><strong>User name:</strong> ${safeName}</li>
+			<li><strong>Organization:</strong> ${orgName}</li>
+			<li><strong>Address:</strong> ${address}</li>
+			<li><strong>NYC Borough:</strong> ${boroughDisplay}</li>
+			<li><strong>Report Status:</strong> ${reportStatus}</li>
+		</ul>
+	`;
+	const { data, error } = await resend.emails.send({
+		from: fromEmail,
+		to: [adminEmail],
+		subject: `Clermont – ${safeName} report result`,
+		html,
+	});
+	if (error) return { success: false, error: error.message };
+	return { success: true, id: data?.id };
+}
+
 export { resend };
