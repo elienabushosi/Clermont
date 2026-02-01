@@ -3,6 +3,7 @@ import express from "express";
 import Stripe from "stripe";
 import { supabase, supabaseAdmin } from "../lib/supabase.js";
 import { getUserFromToken } from "../lib/auth-utils.js";
+import { sendPasswordResetEmail, sendAdminNewSignupNotification } from "../lib/email.js";
 
 const router = express.Router();
 
@@ -211,6 +212,17 @@ router.post("/signup", async (req, res) => {
 				console.error("Error marking join code as used:", updateCodeError);
 				// Don't fail the signup, just log the error
 			}
+		}
+
+		// Notify admin of new signup (production only; does not block signup)
+		const notifyResult = await sendAdminNewSignupNotification(
+			user.Email,
+			user.Name,
+			organization.Name,
+			user.CreatedAt
+		);
+		if (!notifyResult.success) {
+			console.error("Admin new-signup notification failed:", notifyResult.error);
 		}
 
 		res.status(201).json({
@@ -1061,28 +1073,19 @@ router.post("/password/request-reset", async (req, res) => {
 		console.log(`Reset code stored: ${code}`);
 		console.log(`Attempting to send password reset email to: ${normalizedEmail}`);
 
-		// Send password reset email with our code in the URL
-		// The email template should show the code from the URL, not Supabase's token
 		const redirectUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/settings?resetCode=${code}`;
-		const { error: emailError } = await supabase.auth.resetPasswordForEmail(
-			normalizedEmail,
-			{
-				redirectTo: redirectUrl,
-			}
-		);
+		const emailResult = await sendPasswordResetEmail(normalizedEmail, redirectUrl, code);
 
-		if (emailError) {
-			console.error("Error sending password reset email:", emailError);
-			// Delete the code we just created since email failed
+		if (!emailResult.success) {
+			console.error("Error sending password reset email:", emailResult.error);
 			await supabase
 				.from("password_reset_codes")
 				.delete()
 				.eq("IdPasswordResetCode", resetCode.IdPasswordResetCode);
-			
 			return res.status(400).json({
 				status: "error",
 				message: "Failed to send password reset email",
-				error: emailError.message,
+				error: emailResult.error,
 			});
 		}
 
@@ -1310,25 +1313,15 @@ router.post("/password/forgot", async (req, res) => {
 
 		console.log(`Forgot password - Reset code stored: ${code} for ${normalizedEmail}`);
 
-		// Ensure user exists in Supabase Auth for email sending
-		// Try to send the email
 		const redirectUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/login?resetCode=${code}`;
-		const { error: emailError } = await supabase.auth.resetPasswordForEmail(
-			normalizedEmail,
-			{
-				redirectTo: redirectUrl,
-			}
-		);
+		const emailResult = await sendPasswordResetEmail(normalizedEmail, redirectUrl, code);
 
-		if (emailError) {
-			console.error("Error sending password reset email:", emailError);
-			// Delete the code we just created since email failed
+		if (!emailResult.success) {
+			console.error("Error sending password reset email:", emailResult.error);
 			await supabase
 				.from("password_reset_codes")
 				.delete()
 				.eq("IdPasswordResetCode", resetCode.IdPasswordResetCode);
-			
-			// Still return success (don't reveal email delivery failure)
 			return res.json({
 				status: "success",
 				message: "If an account exists with this email, a password reset code has been sent",

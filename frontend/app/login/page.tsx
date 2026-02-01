@@ -239,104 +239,109 @@ function LoginPageContent() {
 					Back
 				</button>
 				<div className="bg-white rounded-lg shadow-sm border border-[rgba(55,50,47,0.12)] p-8">
-					<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
-						Log in to Clermont
-					</h1>
-					<Form {...form}>
-						<form
-							onSubmit={form.handleSubmit(onSubmit)}
-							className="space-y-6"
-						>
-							<FormField
-								control={form.control}
-								name="email"
-								render={({ field }) => (
-									<FormItem>
-										<FormLabel className="text-[#37322F]">
-											Email
-										</FormLabel>
-										<FormControl>
-											<Input
-												type="email"
-												placeholder="Enter your email"
-												{...field}
-											/>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-							<FormField
-								control={form.control}
-								name="password"
-								render={({ field }) => (
-									<FormItem>
-										<div className="flex items-center justify-between">
-											<FormLabel className="text-[#37322F]">
-												Password
-											</FormLabel>
-											<button
-												type="button"
-												onClick={() => setShowForgotPassword(true)}
-												className="text-sm text-[#4090C2] hover:text-[#37322F] transition-colors"
-											>
-												Forgot Password?
-											</button>
+					{/* Login form – only when not in forgot-password flow */}
+					{!showForgotPassword && (
+						<>
+							<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
+								Log in to Clermont
+							</h1>
+							<Form {...form}>
+								<form
+									onSubmit={form.handleSubmit(onSubmit)}
+									className="space-y-6"
+								>
+									<FormField
+										control={form.control}
+										name="email"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel className="text-[#37322F]">
+													Email
+												</FormLabel>
+												<FormControl>
+													<Input
+														type="email"
+														placeholder="Enter your email"
+														{...field}
+													/>
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={form.control}
+										name="password"
+										render={({ field }) => (
+											<FormItem>
+												<div className="flex items-center justify-between">
+													<FormLabel className="text-[#37322F]">
+														Password
+													</FormLabel>
+													<button
+														type="button"
+														onClick={() => setShowForgotPassword(true)}
+														className="text-sm text-[#4090C2] hover:text-[#37322F] transition-colors"
+													>
+														Forgot Password?
+													</button>
+												</div>
+												<FormControl>
+													<Input
+														type="password"
+														placeholder="Enter your password"
+														{...field}
+													/>
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									{error && (
+										<div className="text-sm text-red-600">
+											{error}
 										</div>
-										<FormControl>
-											<Input
-												type="password"
-												placeholder="Enter your password"
-												{...field}
-											/>
-										</FormControl>
-										<FormMessage />
-									</FormItem>
-								)}
-							/>
-							{error && (
-								<div className="text-sm text-red-600">
-									{error}
+									)}
+									<Button
+										type="submit"
+										disabled={isLoading || isSuccess}
+										className={`w-full text-white ${
+											isSuccess
+												? "bg-green-600 hover:bg-green-700"
+												: "bg-[#37322F] hover:bg-[#37322F]/90"
+										}`}
+									>
+										{isLoading
+											? "Logging in..."
+											: isSuccess
+											? "Access granted"
+											: "Log in"}
+									</Button>
+								</form>
+								<div className="mt-6 text-center">
+									<Link
+										href="/signup"
+										className="text-sm text-[#37322F] hover:text-[#4090C2] transition-colors underline"
+									>
+										Create an account
+									</Link>
 								</div>
-							)}
-							<Button
-								type="submit"
-								disabled={isLoading || isSuccess}
-								className={`w-full text-white ${
-									isSuccess
-										? "bg-green-600 hover:bg-green-700"
-										: "bg-[#37322F] hover:bg-[#37322F]/90"
-								}`}
-							>
-								{isLoading
-									? "Logging in..."
-									: isSuccess
-									? "Access granted"
-									: "Log in"}
-							</Button>
-						</form>
-						<div className="mt-6 text-center">
-							<Link
-								href="/signup"
-								className="text-sm text-[#37322F] hover:text-[#4090C2] transition-colors underline"
-							>
-								Create an account
-							</Link>
-						</div>
-					</Form>
+							</Form>
+						</>
+					)}
 
-					{/* Forgot Password Flow */}
+					{/* Forgot Password flow – only this when user clicked Forgot Password */}
 					{showForgotPassword && (
-						<div className="mt-6 pt-6 border-t border-[rgba(55,50,47,0.12)]">
+						<>
 							{!codeSent ? (
 								<>
-									<h2 className="text-xl font-semibold text-[#37322F] mb-4">
+									<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
 										Forgot Password
-									</h2>
+									</h1>
 									<Form {...forgotPasswordForm}>
 										<form
 											onSubmit={forgotPasswordForm.handleSubmit(onForgotPasswordSubmit)}
-											className="space-y-4"
+											className="space-y-6"
 										>
 											<FormField
 												control={forgotPasswordForm.control}
@@ -377,7 +382,7 @@ function LoginPageContent() {
 														setError(null);
 													}}
 												>
-													Cancel
+													Back to login
 												</Button>
 											</div>
 										</form>
@@ -385,9 +390,9 @@ function LoginPageContent() {
 								</>
 							) : (
 								<>
-									<h2 className="text-xl font-semibold text-[#37322F] mb-4">
+									<h1 className="text-2xl font-semibold text-[#37322F] mb-6">
 										Reset Password
-									</h2>
+									</h1>
 									{resetSuccess && (
 										<div className="p-3 bg-green-50 border border-green-200 rounded-md flex items-center gap-2 text-green-700 text-sm mb-4">
 											<CheckCircle2 className="h-4 w-4" />
@@ -505,7 +510,7 @@ function LoginPageContent() {
 									</Form>
 								</>
 							)}
-						</div>
+						</>
 					)}
 				</div>
 			</div>

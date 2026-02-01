@@ -5,6 +5,7 @@ import { supabase } from "./lib/supabase.js";
 import authRoutes from "./routes/auth.js";
 import reportRoutes from "./routes/reports.js";
 import billingRoutes from "./routes/billing.js";
+import emailRoutes from "./routes/email.js";
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -30,6 +31,7 @@ app.use((req, res, next) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/billing", billingRoutes);
+app.use("/api/email", emailRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
