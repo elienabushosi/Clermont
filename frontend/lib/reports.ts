@@ -6,6 +6,7 @@ export interface Report {
 	Address: string;
 	AddressNormalized: string | null;
 	Status: "pending" | "ready" | "failed";
+	ReportType?: "single" | "assemblage";
 	CreatedAt: string;
 	UpdatedAt: string;
 	ClientName: string | null;
@@ -72,6 +73,7 @@ export interface ReportWithSources {
 		Name: string;
 		Description: string | null;
 		Status: "pending" | "ready" | "failed";
+		ReportType?: "single" | "assemblage";
 		CreatedAt: string;
 		UpdatedAt: string;
 		CreatedBy: string | null;

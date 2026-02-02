@@ -16,7 +16,6 @@ import { getReports, type Report } from "@/lib/reports";
 import { getBuildingClassDescriptionText } from "@/lib/building-class";
 import { getLandUseDescriptionText } from "@/lib/land-use";
 import {
-	MapPin,
 	FileText,
 	Calendar,
 	User,
@@ -26,6 +25,8 @@ import {
 	Ruler,
 	Home,
 	Search,
+	SquareDashed,
+	SquareStack,
 } from "lucide-react";
 
 function getStatusColor(status: string) {
@@ -58,15 +59,36 @@ function formatLotCoverage(coverage: number | null): string {
 
 function ReportCard({ report }: { report: Report }) {
 	const router = useRouter();
+	const isAssemblage = report.ReportType === "assemblage";
+	const addresses = isAssemblage && report.Address
+		? report.Address.split(";").map((a) => a.trim()).filter(Boolean)
+		: [report.Address];
 
 	return (
 		<Card className="hover:shadow-md transition-shadow">
 			<CardHeader>
 				<div className="flex items-start justify-between">
 					<div className="flex-1">
-						<CardTitle className="text-lg font-semibold text-[#37322F] mb-2">
-							{report.Address}
-						</CardTitle>
+						<div className="flex items-center gap-2 mb-2">
+							{isAssemblage ? (
+								<SquareStack className="h-5 w-5 text-[#4090C2] shrink-0" />
+							) : (
+								<SquareDashed className="h-5 w-5 text-[#4090C2] shrink-0" />
+							)}
+							<CardTitle className="text-lg font-semibold text-[#37322F]">
+								{isAssemblage && addresses.length > 1 ? (
+									<div className="flex flex-col gap-1">
+										{addresses.map((addr, i) => (
+											<span key={i} className="text-base">
+												{addr}
+											</span>
+										))}
+									</div>
+								) : (
+									report.Address
+								)}
+							</CardTitle>
+						</div>
 						<div className="flex items-center gap-2 flex-wrap">
 							<Badge
 								variant="outline"
@@ -74,6 +96,11 @@ function ReportCard({ report }: { report: Report }) {
 							>
 								{report.Status}
 							</Badge>
+							{isAssemblage && (
+								<Badge variant="outline" className="text-xs bg-amber-50 text-amber-800 border-amber-200">
+									Assemblage
+								</Badge>
+							)}
 							{report.CreatedByName && (
 								<Badge variant="outline" className="text-xs">
 									<User className="h-3 w-3 mr-1" />
@@ -128,7 +155,9 @@ function ReportCard({ report }: { report: Report }) {
 						<div className="flex items-start gap-2 text-sm">
 							<Ruler className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
 							<div>
-								<span className="text-[#605A57]">Lot Area: </span>
+								<span className="text-[#605A57]">
+									{isAssemblage ? "Combined Lot Area: " : "Lot Area: "}
+								</span>
 								<span className="text-[#37322F] font-medium">
 									{formatLotArea(report.LotArea)}
 								</span>
@@ -139,7 +168,9 @@ function ReportCard({ report }: { report: Report }) {
 						<div className="flex items-start gap-2 text-sm">
 							<Building2 className="h-4 w-4 text-[#605A57] mt-0.5 shrink-0" />
 							<div>
-								<span className="text-[#605A57]">Max FAR: </span>
+								<span className="text-[#605A57]">
+									{isAssemblage ? "Combined Max FAR: " : "Max FAR: "}
+								</span>
 								<span className="text-[#37322F] font-medium">
 									{formatFAR(report.MaxFAR)}
 								</span>
@@ -182,7 +213,11 @@ function ReportCard({ report }: { report: Report }) {
 				</div>
 				<div className="pt-3 border-t border-[#E0DEDB]">
 					<Button
-						onClick={() => router.push(`/viewreport/${report.IdReport}`)}
+						onClick={() => router.push(
+							isAssemblage
+								? `/assemblagereportview/${report.IdReport}`
+								: `/viewreport/${report.IdReport}`
+						)}
 						className="w-full bg-[#37322F] hover:bg-[#37322F]/90 text-white"
 					>
 						<FileText className="h-4 w-4 mr-2" />
@@ -328,7 +363,7 @@ export default function HomePage() {
 						className="bg-[#37322F] hover:bg-[#37322F]/90 text-white"
 					>
 						<Search className="h-4 w-4 mr-2" />
-						Search Address
+						Single Parcel
 					</Button>
 				</div>
 

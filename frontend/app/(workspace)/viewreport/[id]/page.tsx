@@ -24,9 +24,12 @@ import {
 	ExternalLink,
 	Ruler,
 	MapPinCheck,
+	Share2,
+	FileDown,
 } from "lucide-react";
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
 import { config } from "@/lib/config";
+import { toast } from "sonner";
 import FemaFloodMap from "@/components/fema-flood-map";
 import TransitZoneMap from "@/components/transit-zone-map";
 
@@ -221,6 +224,14 @@ export default function ViewReportPage() {
 
 	const formattedData = getFormattedData();
 
+	const handleShare = () => {
+		toast.info("Share coming soon");
+	};
+
+	const handleDownloadPdf = () => {
+		toast.info("PDF download coming soon");
+	};
+
 	return (
 		<div className="p-8 bg-[#F7F5F3] min-h-screen">
 			<div className="max-w-4xl mx-auto">
@@ -233,10 +244,16 @@ export default function ViewReportPage() {
 						<ArrowLeft className="size-4 mr-2" />
 						Back to Your Reports
 					</Button>
-					{/* <Button variant="outline">
-						<Send className="size-4 mr-2" />
-						Share
-					</Button> */}
+					<div className="flex items-center gap-2">
+						<Button variant="outline" size="sm" onClick={handleShare} className="gap-1.5">
+							<Share2 className="size-4" />
+							Share
+						</Button>
+						<Button variant="outline" size="sm" onClick={handleDownloadPdf} className="gap-1.5">
+							<FileDown className="size-4" />
+							Download as PDF
+						</Button>
+					</div>
 				</div>
 
 				{/* Report Header */}

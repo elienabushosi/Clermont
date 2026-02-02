@@ -10,12 +10,14 @@ import { supabase } from "../lib/supabase.js";
  * @param {string} reportData.clientId - Client ID (optional)
  * @param {string} reportData.createdBy - User ID who created the report (optional)
  * @param {string} reportData.name - Report name
+ * @param {string} reportData.reportType - Report type: "single" (default) or "assemblage"
  * @param {string} reportData.bbl - BBL identifier (optional, will be set by Geoservice)
  * @param {number} reportData.latitude - Latitude (optional)
  * @param {number} reportData.longitude - Longitude (optional)
  * @returns {Promise<Object>} Created report
  */
 export async function createReport(reportData) {
+	const reportType = reportData.reportType === "assemblage" ? "assemblage" : "single";
 	const { data, error } = await supabase
 		.from("reports")
 		.insert({
@@ -30,6 +32,7 @@ export async function createReport(reportData) {
 			Longitude: reportData.longitude || null,
 			Status: "pending",
 			Enabled: true,
+			ReportType: reportType,
 		})
 		.select()
 		.single();
@@ -258,6 +261,7 @@ export async function getReportWithSources(reportId, organizationId) {
 			Name: report.Name,
 			Description: report.Description,
 			Status: report.Status,
+			ReportType: report.ReportType ?? "single",
 			CreatedAt: report.CreatedAt,
 			UpdatedAt: report.UpdatedAt,
 			CreatedBy: report.CreatedBy || null,
@@ -278,7 +282,7 @@ export async function getReportsByOrganization(organizationId) {
 	const { data: reports, error: reportsError } = await supabase
 		.from("reports")
 		.select(
-			"IdReport, Address, AddressNormalized, Status, CreatedAt, UpdatedAt, IdClient, CreatedBy"
+			"IdReport, Address, AddressNormalized, Status, CreatedAt, UpdatedAt, IdClient, CreatedBy, ReportType"
 		)
 		.eq("IdOrganization", organizationId)
 		.eq("Enabled", true)
@@ -401,6 +405,7 @@ export async function getReportsByOrganization(organizationId) {
 			Address: report.Address,
 			AddressNormalized: report.AddressNormalized,
 			Status: report.Status,
+			ReportType: report.ReportType ?? "single",
 			CreatedAt: report.CreatedAt,
 			UpdatedAt: report.UpdatedAt,
 			ClientName: client?.Name || null,

@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS reports (
     "Longitude" NUMERIC(11, 8),
     "Description" TEXT,
     "Status" report_status_enum NOT NULL DEFAULT 'pending',
+    "ReportType" TEXT NOT NULL DEFAULT 'single', -- 'single' | 'assemblage'
     "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     "UpdatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     "Enabled" BOOLEAN NOT NULL DEFAULT TRUE
@@ -111,6 +112,7 @@ CREATE INDEX IF NOT EXISTS idx_reports_createdby ON reports("CreatedBy");
 CREATE INDEX IF NOT EXISTS idx_reports_org_createdat ON reports("IdOrganization", "CreatedAt" DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_bbl ON reports("BBL");
 CREATE INDEX IF NOT EXISTS idx_reports_org_bbl ON reports("IdOrganization", "BBL");
+CREATE INDEX IF NOT EXISTS idx_reports_report_type ON reports("ReportType");
 
 -- Trigger to auto-update UpdatedAt for reports
 DROP TRIGGER IF EXISTS update_reports_updated_at ON reports;

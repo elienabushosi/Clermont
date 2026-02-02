@@ -104,6 +104,9 @@ export default function ReportsPage() {
 							<TableHeader>
 								<TableRow>
 									<TableHead className="text-[#37322F]">
+										Type
+									</TableHead>
+									<TableHead className="text-[#37322F]">
 										Address
 									</TableHead>
 									<TableHead className="text-[#37322F]">
@@ -124,10 +127,37 @@ export default function ReportsPage() {
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{reports.map((report) => (
+								{reports.map((report) => {
+									const isAssemblage = report.ReportType === "assemblage";
+									const addresses = isAssemblage && report.Address
+										? report.Address.split(";").map((a) => a.trim()).filter(Boolean)
+										: [report.Address];
+									return (
 									<TableRow key={report.IdReport}>
-										<TableCell className="text-[#37322F]">
-											{report.Address}
+										<TableCell className="text-[#37322F] align-top">
+											<Badge
+												variant="outline"
+												className={
+													isAssemblage
+														? "bg-amber-50 text-amber-800 border-amber-200 text-xs"
+														: "bg-slate-50 text-slate-700 border-slate-200 text-xs"
+												}
+											>
+												{isAssemblage ? "Assemblage" : "Single"}
+											</Badge>
+										</TableCell>
+										<TableCell className="text-[#37322F] align-top">
+											{addresses.length > 1 ? (
+												<div className="flex flex-col gap-1">
+													{addresses.map((addr, i) => (
+														<span key={i} className="block text-sm">
+															{addr}
+														</span>
+													))}
+												</div>
+											) : (
+												<span>{report.Address}</span>
+											)}
 										</TableCell>
 										<TableCell>
 											{report.ZoningDistricts ? (
@@ -168,7 +198,9 @@ export default function ReportsPage() {
 												size="sm"
 												onClick={() =>
 													router.push(
-														`/viewreport/${report.IdReport}`
+														report.ReportType === "assemblage"
+															? `/assemblagereportview/${report.IdReport}`
+															: `/viewreport/${report.IdReport}`
 													)
 												}
 											>
@@ -176,7 +208,8 @@ export default function ReportsPage() {
 											</Button>
 										</TableCell>
 									</TableRow>
-								))}
+									);
+								})}
 							</TableBody>
 						</Table>
 					</div>

@@ -420,16 +420,39 @@ export default function SearchAddressPage() {
 						</div>
 					) : (
 						<div className="space-y-3">
-							{recentReports.map((report) => (
+							{recentReports.map((report) => {
+								const isAssemblage = report.ReportType === "assemblage";
+								const addresses = isAssemblage && report.Address
+									? report.Address.split(";").map((a) => a.trim()).filter(Boolean)
+									: [report.Address];
+								return (
 								<div
 									key={report.IdReport}
 									className="flex items-center justify-between p-4 bg-white rounded-lg border border-[rgba(55,50,47,0.12)] hover:shadow-sm transition-shadow"
 								>
 									<div className="flex-1 min-w-0">
-										<div className="flex items-center gap-3 mb-2">
-											<span className="text-sm font-medium text-[#37322F] truncate">
-												{report.Address}
-											</span>
+										<div className="flex items-center gap-3 mb-2 flex-wrap">
+											{isAssemblage && addresses.length > 1 ? (
+												<div className="flex flex-col gap-1">
+													{addresses.map((addr, i) => (
+														<span key={i} className="text-sm font-medium text-[#37322F]">
+															{addr}
+														</span>
+													))}
+												</div>
+											) : (
+												<span className="text-sm font-medium text-[#37322F] truncate">
+													{report.Address}
+												</span>
+											)}
+											{isAssemblage && (
+												<Badge
+													variant="outline"
+													className="bg-amber-50 text-amber-800 border-amber-200 text-xs shrink-0"
+												>
+													Assemblage
+												</Badge>
+											)}
 											{report.ZoningDistricts && (
 												<Badge
 													variant="outline"
@@ -451,7 +474,9 @@ export default function SearchAddressPage() {
 										size="sm"
 										onClick={() =>
 											router.push(
-												`/viewreport/${report.IdReport}`
+												isAssemblage
+													? `/assemblagereportview/${report.IdReport}`
+													: `/viewreport/${report.IdReport}`
 											)
 										}
 										className="ml-4 shrink-0"
@@ -459,7 +484,8 @@ export default function SearchAddressPage() {
 										View Report
 									</Button>
 								</div>
-							))}
+								);
+							})}
 						</div>
 					)}
 				</div>

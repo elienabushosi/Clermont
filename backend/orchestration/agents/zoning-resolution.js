@@ -111,6 +111,86 @@ export class ZoningResolutionAgent extends BaseAgent {
 	}
 
 	/**
+	 * Normalize district to a profile string for consistency comparison (e.g. "R7-2" -> "R7", "R6B" -> "R6B").
+	 * Reuses same logic as getMaxFAR profile resolution. Used by assemblage zoning consistency.
+	 * @param {string} district - Zoning district code (e.g. "R6B", "R7-2")
+	 * @returns {string|null} Normalized profile or null if not supported
+	 */
+	getNormalizedDistrictProfile(district) {
+		const result = this.getMaxFAR(district);
+		return result ? result.profile : null;
+	}
+
+	/**
+	 * Compute controlling FAR when a lot has multiple zoning districts (zonedist1-4).
+	 * Uses LOWEST FAR as controlling; flags multi-district for manual review.
+	 * @param {Object} zolaData - Zola/MapPLUTO-like data with zonedist1, zonedist2, zonedist3, zonedist4
+	 * @returns {Object} { zoningDistrictCandidates, farCandidates, maxFar, farMethod, requires_manual_review, assumptions }
+	 */
+	computeControllingFARFromZola(zolaData) {
+		const raw = [
+			zolaData?.zonedist1,
+			zolaData?.zonedist2,
+			zolaData?.zonedist3,
+			zolaData?.zonedist4,
+		]
+			.filter((v) => v != null && typeof v === "string" && v.trim().length > 0)
+			.map((v) => v.trim());
+		const zoningDistrictCandidates = [...new Set(raw)];
+
+		const farCandidates = [];
+		const assumptions = [];
+
+		for (const district of zoningDistrictCandidates) {
+			const farResult = this.getMaxFAR(district);
+			if (farResult && farResult.far != null) {
+				farCandidates.push({
+					district,
+					profile: farResult.profile || district,
+					maxFar: farResult.far,
+				});
+				if (farResult.assumption) {
+					assumptions.push(farResult.assumption);
+				}
+			} else {
+				assumptions.push(
+					`District "${district}" could not be resolved to a FAR; excluded from comparison.`
+				);
+			}
+		}
+
+		let maxFar = null;
+		let farMethod = "unknown";
+		let requires_manual_review = true;
+
+		if (farCandidates.length === 0) {
+			farMethod = "unknown";
+			requires_manual_review = true;
+		} else if (farCandidates.length === 1) {
+			maxFar = farCandidates[0].maxFar;
+			farMethod = "single_district";
+			requires_manual_review = false;
+		} else {
+			const fars = farCandidates.map((c) => c.maxFar).filter((n) => n != null);
+			maxFar = fars.length > 0 ? Math.min(...fars) : null;
+			farMethod = "multi_district_conservative";
+			requires_manual_review = true;
+			assumptions.push(
+				"Multiple zoning districts mapped to this lot. FAR calculated conservatively using the lowest applicable FAR. Manual zoning review recommended."
+			);
+		}
+
+		return {
+			zoningDistrictCandidates,
+			farCandidates,
+			maxFar,
+			farMethod,
+			requires_manual_review,
+			assumptions,
+		};
+	}
+
+	/**
 	 * Determine lot type (corner vs interior/through)
 	 * @param {Object} zolaData - Zola source data
 	 * @returns {Object} Lot type with flag and assumption
@@ -1028,6 +1108,27 @@ export class ZoningResolutionAgent extends BaseAgent {
 		}
 
 		return derived;
+	}
+
+	/**
+	 * Round dwelling units per ZR §23-52: fractions >= 0.75 round up, else round down.
+	 * Reused by single-lot and assemblage density calculations.
+	 * @param {number} floorAreaSqft - Residential floor area (sq ft)
+	 * @param {number} duf - DUF value (default 680)
+	 * @returns {{ units_raw: number, units_rounded: number }} Raw and rounded unit count
+	 */
+	roundDwellingUnitsByZR(floorAreaSqft, duf = 680) {
+		if (floorAreaSqft == null || floorAreaSqft <= 0 || !duf) {
+			return { units_raw: 0, units_rounded: 0 };
+		}
+		const ROUNDING_THRESHOLD = 0.75;
+		const unitsRaw = floorAreaSqft / duf;
+		const fractionalPart = unitsRaw - Math.floor(unitsRaw);
+		const unitsRounded =
+			fractionalPart >= ROUNDING_THRESHOLD
+				? Math.ceil(unitsRaw)
+				: Math.floor(unitsRaw);
+		return { units_raw: unitsRaw, units_rounded: Math.max(0, unitsRounded) };
 	}
 
 	/**
@@ -2760,13 +2861,31 @@ export class ZoningResolutionAgent extends BaseAgent {
 			const lotTypeResult = this.determineLotType(zolaData);
 			const buildingTypeResult = this.determineBuildingType(bldgclass);
 
-			// Get max FAR (use the normalized district)
-			const farResult = this.getMaxFAR(districtUpper);
-			const maxFAR = farResult ? farResult.far : null;
+			// Get controlling FAR (supports multiple zoning districts: use lowest FAR, flag for review)
+			const farControl = this.computeControllingFARFromZola(zolaData);
+			const maxFAR = farControl.maxFar;
+			// Backward compat: farResult-like for profile/assumption when single district
+			const farResult =
+				farControl.farCandidates.length === 1
+					? {
+							far: farControl.farCandidates[0].maxFar,
+							profile: farControl.farCandidates[0].profile,
+							assumption: farControl.assumptions[0] || null,
+						}
+					: farControl.farCandidates.length > 1
+						? {
+								far: maxFAR,
+								profile: null,
+								assumption: farControl.assumptions.find((a) =>
+									a.includes("Multiple zoning districts")
+								) || null,
+							}
+						: null;
 
 			console.log("ZoningResolutionAgent - FAR calculation:", {
 				district: districtUpper,
-				farResult: farResult,
+				zoningDistrictCandidates: farControl.zoningDistrictCandidates,
+				farMethod: farControl.farMethod,
 				maxFAR: maxFAR,
 			});
 
@@ -2828,10 +2947,7 @@ export class ZoningResolutionAgent extends BaseAgent {
 			});
 
 			// Build assumptions array
-			const assumptions = [];
-			if (farResult && farResult.assumption) {
-				assumptions.push(farResult.assumption);
-			}
+			const assumptions = [...(farControl.assumptions || [])];
 			if (lotTypeResult.assumption) {
 				assumptions.push(lotTypeResult.assumption);
 			}
@@ -2908,6 +3024,7 @@ export class ZoningResolutionAgent extends BaseAgent {
 					zolaData.zonedist3 ||
 					zolaData.zonedist4
 				),
+				farRequiresManualReview: farControl.requires_manual_review,
 				lotTypeInferred: true,
 				buildingTypeInferred: !!buildingTypeResult.assumption,
 				eligibleSiteNotEvaluated:
@@ -2953,15 +3070,19 @@ export class ZoningResolutionAgent extends BaseAgent {
 				"Yard requirements are best-effort defaults; multiple modifications may apply; see notes and citations."
 			);
 
-			// Build result object
+			// Build result object (do not remove or rename existing fields)
 			const result = {
 				district: district,
-				profile: farResult ? farResult.profile : null,
+				profile: farResult ? farResult.profile : (farControl.farCandidates[0]?.profile ?? null),
 				contextual: farResult ? farResult.contextual : null,
 				lotType: lotTypeResult.lotType,
 				buildingType: buildingTypeResult.buildingType,
 				maxFar: maxFAR,
 				maxLotCoverage: maxLotCoverage,
+				zoningDistrictCandidates: farControl.zoningDistrictCandidates,
+				farCandidates: farControl.farCandidates,
+				farMethod: farControl.farMethod,
+				requires_manual_review: farControl.requires_manual_review,
 				derived: derived,
 				height: {
 					min_base_height: minBaseHeight,

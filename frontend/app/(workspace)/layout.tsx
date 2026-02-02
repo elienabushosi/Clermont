@@ -33,6 +33,8 @@ import {
 	User,
 	FileCheck,
 	Users,
+	SquareStack,
+	SquareDashed,
 } from "lucide-react";
 
 function SidebarHeaderContent({
@@ -75,9 +77,11 @@ function getPageTitle(pathname: string): string {
 	if (pathname === "/home" || pathname === "/") {
 		return "Home";
 	} else if (pathname === "/search-address") {
-		return "Search Address";
+		return "Single Parcel";
 	} else if (pathname === "/reports") {
 		return "Live Reports";
+	} else if (pathname === "/land-assemblage") {
+		return "Land Assemblage";
 	} else if (pathname === "/team") {
 		return "Team";
 	} else if (pathname === "/demo-report-list") {
@@ -185,15 +189,27 @@ export default function WorkspaceLayout({
 								</SidebarMenuItem>
 								<SidebarMenuItem>
 									<SidebarMenuButton
-										tooltip="Search Address"
+										tooltip="Single Parcel"
 										isActive={
 											pathname === "/search-address"
 										}
 										asChild
 									>
-										<Link href="/search-address">
-											<Search className="size-4" />
-											<span>Search Address</span>
+									<Link href="/search-address">
+										<SquareDashed className="size-4" />
+										<span>Single Parcel</span>
+									</Link>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										tooltip="Land Assemblage"
+										isActive={pathname === "/land-assemblage"}
+										asChild
+									>
+										<Link href="/land-assemblage">
+											<SquareStack className="size-4" />
+											<span>Land Assemblage</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>
