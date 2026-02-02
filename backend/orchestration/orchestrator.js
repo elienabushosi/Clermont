@@ -318,12 +318,14 @@ export async function generateReport(
 		}
 
 		// Extract Land Use and Zoning Districts from Zola source for admin email
+		// Zola agent stores data as ContentJson.contentJson (see zola.js return shape)
 		let landUse = null;
 		let zoningDistricts = null;
 		if (zolaSource?.ContentJson) {
-			const z = zolaSource.ContentJson;
-			landUse = z.landuse ?? null;
-			const districts = [z.zonedist1, z.zonedist2, z.zonedist3, z.zonedist4].filter(Boolean);
+			const raw = zolaSource.ContentJson;
+			const z = raw?.contentJson ?? raw;
+			landUse = z?.landuse ?? null;
+			const districts = [z?.zonedist1, z?.zonedist2, z?.zonedist3, z?.zonedist4].filter(Boolean);
 			zoningDistricts = districts.length > 0 ? districts.join(", ") : null;
 		}
 
