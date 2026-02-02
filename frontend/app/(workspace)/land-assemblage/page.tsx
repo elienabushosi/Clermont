@@ -112,7 +112,7 @@ export default function LandAssemblagePage() {
 					</label>
 					<AddressAutocomplete
 						onAddressSelect={handleAddress1Select}
-						placeholder="Add the first address"
+						placeholder="Add the First Address: must be residential & within the 5 boroughs"
 						className="w-full"
 					/>
 					{address1 && (
@@ -129,7 +129,7 @@ export default function LandAssemblagePage() {
 						</label>
 						<AddressAutocomplete
 							onAddressSelect={handleAddress2Select}
-							placeholder="Add your second address"
+							placeholder="Add the Second Address: must be residential & within the 5 boroughs"
 							className="w-full"
 						/>
 						{address2 && (

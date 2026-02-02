@@ -378,7 +378,7 @@ export default function SearchAddressPage() {
 				<div className="flex gap-4 mb-8">
 					<AddressAutocomplete
 						onAddressSelect={handleAddressSelect}
-						placeholder="Add Address"
+						placeholder="Address must be residential & within the 5 boroughs"
 						className="flex-1"
 					/>
 					<Button
