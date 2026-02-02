@@ -1,4 +1,4 @@
-// Assemblage reports routes - generate combined reports for two addresses
+// Assemblage reports routes - generate combined reports for 2 or 3 addresses
 import express from "express";
 import { generateAssemblageReport } from "../orchestration/assemblage-orchestrator.js";
 import { getUserFromToken } from "../lib/auth-utils.js";
@@ -9,8 +9,8 @@ const router = express.Router();
 
 /**
  * POST /api/assemblage-reports/generate
- * Generate an assemblage report for exactly two addresses
- * Body: { addresses: ["addr1", "addr2"] }
+ * Generate an assemblage report for 2 or 3 addresses
+ * Body: { addresses: ["addr1", "addr2"] or ["addr1", "addr2", "addr3"] }
  */
 router.post("/generate", async (req, res) => {
 	try {
@@ -94,10 +94,10 @@ router.post("/generate", async (req, res) => {
 			});
 		}
 
-		if (addresses.length !== 2) {
+		if (addresses.length < 2 || addresses.length > 3) {
 			return res.status(400).json({
 				status: "error",
-				message: "V1 requires exactly 2 addresses",
+				message: "Provide 2 or 3 addresses",
 			});
 		}
 

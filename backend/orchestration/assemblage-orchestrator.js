@@ -12,8 +12,8 @@ import { computeAssemblageContaminationRisk } from "../services/assemblage-conta
 const ASSEMBLAGE_VERSION = "v1";
 
 /**
- * Generate an assemblage report for two addresses
- * @param {string[]} addresses - Exactly 2 address strings
+ * Generate an assemblage report for 2 or 3 addresses
+ * @param {string[]} addresses - 2 or 3 address strings
  * @param {string} organizationId - Organization ID
  * @param {string} userId - User ID
  * @param {string|null} clientId - Client ID (optional)

@@ -712,14 +712,14 @@ export default function AssemblageReportViewPage() {
 					</div>
 				)}
 
-				{/* Pretty mode: one map above both cards, then two property cards + combined lot area */}
+				{/* Pretty mode: one map above cards, then property cards (2 or 3) + combined lot area */}
 				{!showDebugMode && (
 					<div className="space-y-4">
 						{lots.length === 0 ? (
 							<p className="text-[#605A57]">No property data available.</p>
 						) : (
 							<>
-							{/* Single map showing both addresses, labeled 1 and 2 */}
+							{/* Single map showing all addresses, labeled 1, 2, (3) */}
 							<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
 								<p className="text-sm font-medium text-[#37322F] mb-3">Assemblage map</p>
 								<AssemblageMap
@@ -727,7 +727,13 @@ export default function AssemblageReportViewPage() {
 									labels={lots.map((_, i) => String(i + 1))}
 								/>
 							</div>
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<div
+								className={
+									lots.length === 3
+										? "grid grid-cols-1 md:grid-cols-3 gap-4"
+										: "grid grid-cols-1 md:grid-cols-2 gap-4"
+								}
+							>
 								{lots.map((lot) => {
 									const zolaPayload = getZolaPayloadForLot(lot.childIndex);
 									const borough = formatBorough(zolaPayload?.borough ?? zolaPayload?.borocode);
@@ -871,7 +877,16 @@ export default function AssemblageReportViewPage() {
 											{totalBuildableSqft.toLocaleString()} sq ft
 										</span>
 										{farMethod && (
-											<span className="text-xs text-[#605A57]">({farMethod})</span>
+											<Badge
+												variant={farMethod === "shared_district" ? "default" : "secondary"}
+												className={
+													farMethod === "shared_district"
+														? "bg-emerald-600 hover:bg-emerald-600/90 text-white font-medium"
+														: "bg-amber-100 text-amber-800 border-amber-200 font-medium"
+												}
+											>
+												{farMethod === "shared_district" ? "Shared district" : "Per-lot sum"}
+											</Badge>
 										)}
 									</div>
 									<p className="text-sm text-[#605A57] mb-3">

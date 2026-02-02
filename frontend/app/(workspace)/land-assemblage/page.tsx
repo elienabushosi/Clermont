@@ -10,13 +10,14 @@ import { TriangleAlert, HeartHandshake } from "lucide-react";
 import { config } from "@/lib/config";
 
 const ROTATING_DISCLAIMERS = [
-	"Clermont currently supports 2 address max. We're hard at work to support more than 3.",
+	"Add 2 or 3 addresses to generate a combined assemblage report.",
 ];
 
 export default function LandAssemblagePage() {
 	const router = useRouter();
 	const [address1, setAddress1] = useState<AddressData | null>(null);
 	const [address2, setAddress2] = useState<AddressData | null>(null);
+	const [address3, setAddress3] = useState<AddressData | null>(null);
 	const [isGenerating, setIsGenerating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [disclaimerIndex, setDisclaimerIndex] = useState(0);
@@ -32,11 +33,18 @@ export default function LandAssemblagePage() {
 	const handleAddress1Select = (data: AddressData) => {
 		setAddress1(data);
 		setAddress2(null);
+		setAddress3(null);
 		setError(null);
 	};
 
 	const handleAddress2Select = (data: AddressData) => {
 		setAddress2(data);
+		setAddress3(null);
+		setError(null);
+	};
+
+	const handleAddress3Select = (data: AddressData) => {
+		setAddress3(data);
 		setError(null);
 	};
 
@@ -55,6 +63,7 @@ export default function LandAssemblagePage() {
 		const addresses = [
 			address1.normalizedAddress || address1.address,
 			address2.normalizedAddress || address2.address,
+			...(address3 ? [address3.normalizedAddress || address3.address] : []),
 		];
 		try {
 			const res = await fetch(`${config.apiUrl}/api/assemblage-reports/generate`, {
@@ -100,7 +109,7 @@ export default function LandAssemblagePage() {
 					Land Assemblage
 				</h1>
 				<p className="text-[#605A57] text-sm mt-1">
-					Multi-property projects. Add two addresses to generate a combined report
+					Multi-property projects. Add two or three addresses to generate a combined report
 					according to zoning laws.
 				</p>
 			</div>
@@ -135,6 +144,24 @@ export default function LandAssemblagePage() {
 						{address2 && (
 							<p className="text-sm text-[#605A57] mt-1">
 								{address2.normalizedAddress || address2.address}
+							</p>
+						)}
+					</div>
+				)}
+
+				{address1 && address2 && (
+					<div className="space-y-2">
+						<label className="text-sm font-medium text-[#37322F]">
+							Add third address <span className="font-normal text-[#605A57]">(optional)</span>
+						</label>
+						<AddressAutocomplete
+							onAddressSelect={handleAddress3Select}
+							placeholder="Add the Third Address: must be residential & within the 5 boroughs"
+							className="w-full"
+						/>
+						{address3 && (
+							<p className="text-sm text-[#605A57] mt-1">
+								{address3.normalizedAddress || address3.address}
 							</p>
 						)}
 					</div>
