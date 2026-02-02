@@ -151,6 +151,8 @@ router.post("/generate", async (req, res) => {
 			orgName,
 			addressData.address,
 			result.borough ?? null,
+			result.landUse ?? null,
+			result.zoningDistricts ?? null,
 			result.status ?? "ready"
 		);
 		if (!notifyResult.success) {

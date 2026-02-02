@@ -69,6 +69,8 @@ export async function generateReport(
 				reportId: report.IdReport,
 				status: "failed",
 				borough: null,
+				landUse: null,
+				zoningDistricts: null,
 				error: `Geoservice failed: ${geoserviceResult.error}`,
 				agentResults: [
 					{
@@ -315,12 +317,24 @@ export async function generateReport(
 			});
 		}
 
+		// Extract Land Use and Zoning Districts from Zola source for admin email
+		let landUse = null;
+		let zoningDistricts = null;
+		if (zolaSource?.ContentJson) {
+			const z = zolaSource.ContentJson;
+			landUse = z.landuse ?? null;
+			const districts = [z.zonedist1, z.zonedist2, z.zonedist3, z.zonedist4].filter(Boolean);
+			zoningDistricts = districts.length > 0 ? districts.join(", ") : null;
+		}
+
 		return {
 			reportId: report.IdReport,
 			status: finalStatus,
 			bbl: bbl,
 			normalizedAddress: normalizedAddress,
 			borough: borough || null,
+			landUse: landUse || null,
+			zoningDistricts: zoningDistricts || null,
 			agentResults: agentResults,
 		};
 	} catch (error) {

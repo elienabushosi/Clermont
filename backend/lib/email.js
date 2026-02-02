@@ -141,6 +141,8 @@ export async function sendAdminReportAttemptedNotification(
  * @param {string} orgName - Organization name
  * @param {string} address - Report address
  * @param {string|null} borough - NYC borough from first service that provides it (e.g. Geoservice)
+ * @param {string|null} landUse - Land use code/description from Zola
+ * @param {string|null} zoningDistricts - Zoning districts (e.g. from Zola zonedist1-4)
  * @param {string} reportStatus - "ready" or "failed"
  * @returns {{ success: boolean, id?: string, error?: string }}
  */
@@ -150,6 +152,8 @@ export async function sendAdminReportCreatedNotification(
 	orgName,
 	address,
 	borough,
+	landUse,
+	zoningDistricts,
 	reportStatus
 ) {
 	if (process.env.NODE_ENV !== "production") {
@@ -160,6 +164,8 @@ export async function sendAdminReportCreatedNotification(
 		return { success: true };
 	}
 	const boroughDisplay = borough && String(borough).trim() ? borough : "—";
+	const landUseDisplay = landUse != null && String(landUse).trim() ? landUse : "—";
+	const zoningDisplay = zoningDistricts != null && String(zoningDistricts).trim() ? zoningDistricts : "—";
 	const safeName = (userName && String(userName).trim()) ? userName : "—";
 	const html = `
 		<p>Report result in Clermont.</p>
@@ -169,6 +175,8 @@ export async function sendAdminReportCreatedNotification(
 			<li><strong>Organization:</strong> ${orgName}</li>
 			<li><strong>Address:</strong> ${address}</li>
 			<li><strong>NYC Borough:</strong> ${boroughDisplay}</li>
+			<li><strong>Land Use:</strong> ${landUseDisplay}</li>
+			<li><strong>Zoning Districts:</strong> ${zoningDisplay}</li>
 			<li><strong>Report Status:</strong> ${reportStatus}</li>
 		</ul>
 	`;
