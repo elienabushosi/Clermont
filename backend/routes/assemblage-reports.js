@@ -3,6 +3,7 @@ import express from "express";
 import { generateAssemblageReport } from "../orchestration/assemblage-orchestrator.js";
 import { getUserFromToken } from "../lib/auth-utils.js";
 import { supabase } from "../lib/supabase.js";
+import { sendAdminReportAttemptedNotification, sendAdminReportCreatedNotification } from "../lib/email.js";
 
 const router = express.Router();
 
@@ -109,12 +110,47 @@ router.post("/generate", async (req, res) => {
 			});
 		}
 
+		// Notify admin of assemblage report attempted (production only; before generate so we know request was received)
+		const attemptedAtEst = new Date().toLocaleString("en-US", { timeZone: "America/New_York" }) + " EST";
+		const { data: orgForNotify } = await supabase
+			.from("organizations")
+			.select("Name")
+			.eq("IdOrganization", userData.IdOrganization)
+			.single();
+		const orgName = orgForNotify?.Name ?? "—";
+		const addressDisplay = trimmed.join("; ");
+		const attemptedResult = await sendAdminReportAttemptedNotification(
+			attemptedAtEst,
+			userData.Name ?? "—",
+			orgName,
+			`Assemblage: ${addressDisplay}`
+		);
+		if (!attemptedResult.success) {
+			console.error("Admin assemblage report-attempted notification failed:", attemptedResult.error);
+		}
+
 		const result = await generateAssemblageReport(
 			trimmed,
 			userData.IdOrganization,
 			userData.IdUser,
 			req.body.clientId || null
 		);
+
+		// Notify admin of assemblage report result (production only; does not block response)
+		const createdAtEst = new Date().toLocaleString("en-US", { timeZone: "America/New_York" }) + " EST";
+		const notifyResult = await sendAdminReportCreatedNotification(
+			createdAtEst,
+			userData.Name ?? "—",
+			orgName,
+			`Assemblage: ${addressDisplay}`,
+			null,
+			null,
+			null,
+			result.status ?? "ready"
+		);
+		if (!notifyResult.success) {
+			console.error("Admin assemblage report-created notification failed:", notifyResult.error);
+		}
 
 		// If owner and no subscription, increment free reports (mirror reports.js)
 		if (userData.Role === "Owner" && !hasActiveSubscription) {
