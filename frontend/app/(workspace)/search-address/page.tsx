@@ -370,7 +370,7 @@ export default function SearchAddressPage() {
 				) : !hasActiveSubscription && freeReportsRemaining !== null && (
 					<div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
 						<p className="text-sm text-blue-700">
-							<strong>Free Reports:</strong> {freeReportsRemaining} of {subscriptionStatus?.freeReportsLimit || 2} remaining
+							<strong>Test Reports:</strong> {freeReportsRemaining} of {subscriptionStatus?.freeReportsLimit || 2} remaining
 						</p>
 					</div>
 				)}
