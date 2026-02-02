@@ -14,7 +14,7 @@ import AddressMap from "@/components/address-map";
 import { getAuthToken, getCurrentUser } from "@/lib/auth";
 import { getReports, type Report, getReportWithSources } from "@/lib/reports";
 import { getSubscriptionStatus, createCheckoutSession, getProducts, formatPrice, type SubscriptionStatus, type StripeProduct } from "@/lib/billing";
-import { Loader2, AlertTriangle, Check } from "lucide-react";
+import { Loader2, AlertTriangle, Check, HeartHandshake } from "lucide-react";
 import Image from "next/image";
 import {
 	AlertDialog,
@@ -514,6 +514,14 @@ export default function SearchAddressPage() {
 									</AlertDialogDescription>
 								</div>
 							</AlertDialogHeader>
+
+							{/* Friendly design-partner message with icon */}
+							<div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 mb-4">
+								<HeartHandshake className="size-5 shrink-0 text-amber-600 mt-0.5" aria-hidden />
+								<p className="leading-relaxed">
+									You've used your test reports. Please become a design partner to continue generating reports.
+								</p>
+							</div>
 							
 							<div className="py-4">
 								{/* Features List */}

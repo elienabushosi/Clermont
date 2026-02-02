@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import AddressAutocomplete, {
 	AddressData,
 } from "@/components/address-autocomplete";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, HeartHandshake } from "lucide-react";
 import { config } from "@/lib/config";
 
 const ROTATING_DISCLAIMERS = [
@@ -141,7 +141,14 @@ export default function LandAssemblagePage() {
 				)}
 
 				{error && (
-					<p className="text-sm text-red-600">{error}</p>
+					error.includes("design partner") || error.includes("test reports") ? (
+						<div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+							<HeartHandshake className="size-5 shrink-0 text-amber-600 mt-0.5" aria-hidden />
+							<p className="leading-relaxed">{error}</p>
+						</div>
+					) : (
+						<p className="text-sm text-red-600">{error}</p>
+					)
 				)}
 				<Button
 					className="w-full bg-[#37322F] hover:bg-[#37322F]/90 text-white disabled:opacity-50 disabled:pointer-events-none"

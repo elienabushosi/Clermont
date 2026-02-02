@@ -74,7 +74,7 @@ router.post("/generate", async (req, res) => {
 					return res.status(403).json({
 						status: "error",
 						message:
-							"You've used your free reports. Please subscribe to continue generating reports.",
+							"You've used your test reports. Please become a design partner to continue generating reports.",
 						requiresSubscription: true,
 						freeReportsUsed,
 						freeReportsLimit,
