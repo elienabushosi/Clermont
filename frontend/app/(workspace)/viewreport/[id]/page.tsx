@@ -232,9 +232,23 @@ export default function ViewReportPage() {
 		toast.info("PDF download coming soon");
 	};
 
+	const reportSections = [
+		{ id: "property-location", label: "Property Location" },
+		{ id: "property-level-information", label: "Property Level Information" },
+		{ id: "lot-details", label: "Lot Details" },
+		{ id: "zoning-classification", label: "Zoning Classification" },
+		{ id: "zoning-constraints-height", label: "Zoning Constraints (Height)" },
+		{ id: "zoning-constraints", label: "Zoning Constraints" },
+		{ id: "fema-flood-map", label: "FEMA Flood Map" },
+		{ id: "transit-zone-map", label: "Transit Zone Map" },
+		{ id: "neighborhood-information", label: "Neighborhood Information" },
+	];
+
 	return (
 		<div className="p-8 bg-[#F7F5F3] min-h-screen">
-			<div className="max-w-4xl mx-auto">
+			<div className="max-w-6xl mx-auto flex gap-10">
+				{/* Main report content */}
+				<main className="flex-1 min-w-0 max-w-4xl">
 				{/* Top Navigation Bar */}
 				<div className="flex items-center justify-between mb-6">
 					<Button
@@ -410,7 +424,7 @@ export default function ViewReportPage() {
 					<>
 						{/* Property Location Map */}
 						{formattedData.lat && formattedData.lng && (
-							<Card className="mb-6">
+							<Card id="property-location" className="mb-6 scroll-mt-8">
 								<CardContent className="pt-6">
 									<div className="mb-4">
 										<div className="flex items-center gap-2 mb-1">
@@ -435,7 +449,7 @@ export default function ViewReportPage() {
 							</Card>
 						)}
 
-						<Card className="mb-6">
+						<Card id="property-level-information" className="mb-6 scroll-mt-8">
 							<CardContent className="space-y-6 pt-6">
 								{/* Basic Property Information */}
 								<div>
@@ -577,7 +591,7 @@ export default function ViewReportPage() {
 						</Card>
 
 						{/* Lot Details Section */}
-						<Card className="mb-6">
+						<Card id="lot-details" className="mb-6 scroll-mt-8">
 							<CardContent className="pt-6">
 								<div className="mb-4">
 									<div className="flex items-center gap-2 mb-1">
@@ -647,7 +661,7 @@ export default function ViewReportPage() {
 						</Card>
 
 						{/* Zoning Classification Section */}
-						<Card className="mb-6">
+						<Card id="zoning-classification" className="mb-6 scroll-mt-8">
 							<CardContent className="pt-6">
 								<div className="mb-4">
 									<div className="flex items-center gap-2 mb-1">
@@ -696,7 +710,7 @@ export default function ViewReportPage() {
 
 						{/* Zoning Constraints (Height) */}
 						{formattedData.zoningResolution?.height && (
-							<Card className="mb-6">
+							<Card id="zoning-constraints-height" className="mb-6 scroll-mt-8">
 								<CardContent className="pt-6">
 									<div className="mb-4">
 										<div className="flex items-center gap-2 mb-1">
@@ -1202,7 +1216,7 @@ export default function ViewReportPage() {
 						{/* Zoning Constraints Section */}
 						{formattedData.zoningResolution &&
 							formattedData.zoningResolution.maxFar != null && (
-								<Card className="mb-6">
+								<Card id="zoning-constraints" className="mb-6 scroll-mt-8">
 									<CardContent className="pt-6">
 										<div className="mb-4">
 											<div className="flex items-center gap-2 mb-1">
@@ -2227,7 +2241,7 @@ export default function ViewReportPage() {
 							}
 
 							return (
-								<Card className="mb-6">
+								<Card id="fema-flood-map" className="mb-6 scroll-mt-8">
 									<CardContent className="pt-6">
 										<div>
 											<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
@@ -2280,7 +2294,7 @@ export default function ViewReportPage() {
 							}
 
 							return (
-								<Card className="mb-6">
+								<Card id="transit-zone-map" className="mb-6 scroll-mt-8">
 									<CardContent className="pt-6">
 										<div>
 											<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
@@ -2300,7 +2314,7 @@ export default function ViewReportPage() {
 						})()}
 
 						{/* Neighborhood Information */}
-						<Card>
+						<Card id="neighborhood-information" className="scroll-mt-8">
 							<CardContent className="pt-6">
 								<div>
 									<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
@@ -2407,6 +2421,29 @@ export default function ViewReportPage() {
 							</CardContent>
 						</Card>
 					</>
+				)}
+				</main>
+
+				{/* Sticky table of contents - only in Pretty mode */}
+				{!showDebugMode && (
+					<aside className="w-56 shrink-0 hidden lg:block">
+						<div className="sticky top-8 pt-2">
+							<p className="text-xs font-semibold text-[#605A57] uppercase tracking-wider mb-3">
+								On this page
+							</p>
+							<nav className="space-y-1">
+								{reportSections.map(({ id, label }) => (
+									<a
+										key={id}
+										href={`#${id}`}
+										className="block text-sm text-[#37322F] hover:text-[#4090C2] hover:underline py-0.5"
+									>
+										{label}
+									</a>
+								))}
+							</nav>
+						</div>
+					</aside>
 				)}
 			</div>
 		</div>
