@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import AddressAutocomplete, {
 	AddressData,
 } from "@/components/address-autocomplete";
-import { TriangleAlert, HeartHandshake } from "lucide-react";
+import { HeartHandshake } from "lucide-react";
 import { config } from "@/lib/config";
-
-const ROTATING_DISCLAIMERS = [
-	"Add 2 or 3 addresses to generate a combined assemblage report.",
-];
+import { getReports, type Report } from "@/lib/reports";
+import { getCurrentUser } from "@/lib/auth";
 
 export default function LandAssemblagePage() {
 	const router = useRouter();
@@ -20,14 +21,33 @@ export default function LandAssemblagePage() {
 	const [address3, setAddress3] = useState<AddressData | null>(null);
 	const [isGenerating, setIsGenerating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [disclaimerIndex, setDisclaimerIndex] = useState(0);
+	const [recentReports, setRecentReports] = useState<Report[]>([]);
+	const [isLoadingReports, setIsLoadingReports] = useState(true);
 
 	useEffect(() => {
-		if (ROTATING_DISCLAIMERS.length <= 1) return;
-		const id = setInterval(() => {
-			setDisclaimerIndex((i) => (i + 1) % ROTATING_DISCLAIMERS.length);
-		}, 5000);
-		return () => clearInterval(id);
+		const fetchRecentReports = async () => {
+			try {
+				setIsLoadingReports(true);
+				const currentUser = await getCurrentUser();
+				if (!currentUser) {
+					setIsLoadingReports(false);
+					return;
+				}
+				const reports = await getReports();
+				const userAssemblageReports = reports.filter(
+					(r) => r.CreatedBy === currentUser.user.IdUser && r.ReportType === "assemblage"
+				);
+				const sorted = userAssemblageReports
+					.sort((a, b) => new Date(b.CreatedAt).getTime() - new Date(a.CreatedAt).getTime())
+					.slice(0, 6);
+				setRecentReports(sorted);
+			} catch (err) {
+				console.error("Error fetching recent assemblage reports:", err);
+			} finally {
+				setIsLoadingReports(false);
+			}
+		};
+		fetchRecentReports();
 	}, []);
 
 	const handleAddress1Select = (data: AddressData) => {
@@ -81,6 +101,18 @@ export default function LandAssemblagePage() {
 				return;
 			}
 			if (data.reportId) {
+				// Refresh recent assemblage reports so the new one appears
+				const currentUser = await getCurrentUser();
+				if (currentUser) {
+					const reports = await getReports();
+					const userAssemblageReports = reports.filter(
+						(r) => r.CreatedBy === currentUser.user.IdUser && r.ReportType === "assemblage"
+					);
+					const sorted = userAssemblageReports
+						.sort((a, b) => new Date(b.CreatedAt).getTime() - new Date(a.CreatedAt).getTime())
+						.slice(0, 6);
+					setRecentReports(sorted);
+				}
 				router.push(`/assemblagereportview/${data.reportId}`);
 				return;
 			}
@@ -93,17 +125,7 @@ export default function LandAssemblagePage() {
 	};
 
 	return (
-		<div className="w-full max-w-4xl mx-auto p-6 space-y-8">
-			{/* Yellow rotating disclaimer banner — above heading */}
-			<div
-				className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 w-full"
-				role="status"
-				aria-live="polite"
-			>
-				<TriangleAlert className="size-5 shrink-0 text-amber-600" aria-hidden />
-				<span>{ROTATING_DISCLAIMERS[disclaimerIndex]}</span>
-			</div>
-
+		<div className="w-full max-w-4xl mr-auto ml-0 p-6 space-y-8 text-left">
 			<div>
 				<h1 className="text-2xl font-semibold text-[#37322F]">
 					Land Assemblage
@@ -184,6 +206,77 @@ export default function LandAssemblagePage() {
 				>
 					{isGenerating ? "Generating…" : "Generate report"}
 				</Button>
+			</div>
+
+			{/* Your recent assemblage searches */}
+			<div>
+				<h2 className="text-xl font-semibold text-[#37322F] mb-4">
+					Your Recent Assemblage Searches
+				</h2>
+				{isLoadingReports ? (
+					<div className="space-y-3">
+						{Array.from({ length: 4 }).map((_, i) => (
+							<Skeleton key={i} className="h-16 w-full rounded-lg" />
+						))}
+					</div>
+				) : recentReports.length === 0 ? (
+					<div className="bg-white rounded-lg border border-[rgba(55,50,47,0.12)] p-6 text-center">
+						<p className="text-[#605A57] text-sm">
+							No recent assemblage reports
+						</p>
+					</div>
+				) : (
+					<div className="space-y-3">
+						{recentReports.map((report) => {
+							const addresses = report.Address
+								? report.Address.split(";").map((a) => a.trim()).filter(Boolean)
+								: [];
+							return (
+								<div
+									key={report.IdReport}
+									className="flex items-center justify-between p-4 bg-white rounded-lg border border-[rgba(55,50,47,0.12)] hover:shadow-sm transition-shadow"
+								>
+									<div className="flex-1 min-w-0">
+										<div className="flex items-center gap-3 mb-2 flex-wrap">
+											{addresses.length > 1 ? (
+												<div className="flex flex-col gap-1">
+													{addresses.map((addr, i) => (
+														<span key={i} className="text-sm font-medium text-[#37322F]">
+															{addr}
+														</span>
+													))}
+												</div>
+											) : (
+												<span className="text-sm font-medium text-[#37322F] truncate">
+													{report.Address}
+												</span>
+											)}
+											{report.ZoningDistricts && (
+												<Badge
+													variant="outline"
+													className="bg-blue-100 text-blue-700 border-blue-300 text-xs shrink-0"
+												>
+													{report.ZoningDistricts}
+												</Badge>
+											)}
+										</div>
+										<p className="text-xs text-[#605A57]">
+											{format(new Date(report.CreatedAt), "MMM d, yyyy 'at' h:mm a")}
+										</p>
+									</div>
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => router.push(`/assemblagereportview/${report.IdReport}`)}
+										className="ml-4 shrink-0"
+									>
+										View Report
+									</Button>
+								</div>
+							);
+						})}
+					</div>
+				)}
 			</div>
 		</div>
 	);

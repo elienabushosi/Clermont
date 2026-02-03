@@ -79,7 +79,7 @@ function getPageTitle(pathname: string): string {
 	} else if (pathname === "/search-address") {
 		return "Single Parcel";
 	} else if (pathname === "/reports") {
-		return "Live Reports";
+		return "All Live Reports";
 	} else if (pathname === "/land-assemblage") {
 		return "Land Assemblage";
 	} else if (pathname === "/team") {
@@ -215,13 +215,13 @@ export default function WorkspaceLayout({
 								</SidebarMenuItem>
 								<SidebarMenuItem>
 									<SidebarMenuButton
-										tooltip="Live Reports"
+										tooltip="All Live Reports"
 										isActive={pathname === "/reports"}
 										asChild
 									>
 										<Link href="/reports">
 											<FileText className="size-4" />
-											<span>Live Reports</span>
+											<span>All Live Reports</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>
