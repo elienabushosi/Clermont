@@ -2429,7 +2429,7 @@ export default function ViewReportPage() {
 					<aside className="w-56 shrink-0 hidden lg:block">
 						<div className="sticky top-8 pt-2">
 							<p className="text-xs font-semibold text-[#605A57] uppercase tracking-wider mb-3">
-								On this page
+								On this report
 							</p>
 							<nav className="space-y-1">
 								{reportSections.map(({ id, label }) => (

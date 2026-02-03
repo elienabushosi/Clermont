@@ -544,9 +544,22 @@ export default function AssemblageReportViewPage() {
 		toast.info("PDF download coming soon");
 	};
 
+	const reportSections = [
+		{ id: "assemblage-map", label: "Assemblage map" },
+		{ id: "property-address-details", label: "Property Address Details" },
+		{ id: "combined-lot-area", label: "Combined Lot Area" },
+		{ id: "total-buildable-far", label: "Total Buildable (FAR)" },
+		{ id: "density-duf", label: "Density (DUF)" },
+		{ id: "zoning-district-consistency", label: "Zoning District Consistency" },
+		{ id: "assemblage-contamination-risk", label: "Assemblage Contamination Risk" },
+		{ id: "fema-flood-map", label: "FEMA Flood Map" },
+		{ id: "transit-zone-map", label: "Transit Zone Map" },
+	];
+
 	return (
 		<div className="p-8">
-			<div className="max-w-5xl mx-auto space-y-6">
+			<div className="max-w-6xl mx-auto flex gap-10">
+				<main className="flex-1 min-w-0 max-w-5xl space-y-6">
 				<Button
 					variant="ghost"
 					onClick={() => router.push("/reports")}
@@ -816,15 +829,16 @@ export default function AssemblageReportViewPage() {
 						) : (
 							<>
 							{/* Single map showing all addresses, labeled 1, 2, (3) */}
-							<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
+							<div id="assemblage-map" className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4 scroll-mt-8">
 								<p className="text-sm font-medium text-[#37322F] mb-3">Assemblage map</p>
 								<AssemblageMap addresses={assemblageAddresses} />
 							</div>
 							<div
+								id="property-address-details"
 								className={
-									displayItems.length === 3
+									`scroll-mt-8 ${displayItems.length === 3
 										? "grid grid-cols-1 md:grid-cols-3 gap-4"
-										: "grid grid-cols-1 md:grid-cols-2 gap-4"
+										: "grid grid-cols-1 md:grid-cols-2 gap-4"}`
 								}
 							>
 								{displayItems.map((item) => {
@@ -1025,7 +1039,7 @@ export default function AssemblageReportViewPage() {
 							) : (
 							<>
 							{/* Combined Lot Area */}
-							<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
+							<div id="combined-lot-area" className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4 scroll-mt-8">
 								<div className="flex flex-wrap items-baseline gap-2 mb-1">
 									<span className="text-[#37322F] font-medium">Combined Lot Area</span>
 									<span className="text-xl font-semibold text-[#37322F]">
@@ -1052,7 +1066,7 @@ export default function AssemblageReportViewPage() {
 
 							{/* Total Buildable (FAR) */}
 							{totalBuildableSqft > 0 && (
-								<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
+								<div id="total-buildable-far" className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4 scroll-mt-8">
 									<div className="flex flex-wrap items-baseline gap-2 mb-1">
 										<span className="text-[#37322F] font-medium">Total Buildable (FAR)</span>
 										<span className="text-xl font-semibold text-[#37322F]">
@@ -1131,7 +1145,7 @@ export default function AssemblageReportViewPage() {
 								const dufCandidate = aggregation.density!.candidates!.find((c) => c.id === defaultId) ?? aggregation.density!.candidates![0];
 								if (!dufCandidate) return null;
 								return (
-									<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
+									<div id="density-duf" className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4 scroll-mt-8">
 										<div className="flex flex-wrap items-baseline gap-2 mb-1">
 											<span className="text-[#37322F] font-medium">Density (DUF)</span>
 											{dufCandidate.duf_applicable && dufCandidate.max_dwelling_units != null ? (
@@ -1237,7 +1251,7 @@ export default function AssemblageReportViewPage() {
 							})()}
 							{/* Zoning Consistency */}
 							{zoningConsistency && (
-								<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
+								<div id="zoning-district-consistency" className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4 scroll-mt-8">
 									<div className="flex flex-wrap items-baseline gap-2 mb-3">
 										<span className="text-[#37322F] font-medium">Zoning District Consistency</span>
 										<Badge
@@ -1358,7 +1372,7 @@ export default function AssemblageReportViewPage() {
 							)}
 							{/* Assemblage Contamination Risk */}
 							{contaminationRiskData && (
-								<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
+								<div id="assemblage-contamination-risk" className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4 scroll-mt-8">
 									<div className="flex flex-wrap items-baseline gap-2 mb-3">
 										<span className="text-[#37322F] font-medium">Assemblage Contamination Risk</span>
 										<Badge
@@ -1451,7 +1465,7 @@ export default function AssemblageReportViewPage() {
 										: null;
 								if (lat == null || lng == null) return null;
 								return (
-									<div className="pt-6 border-t border-[rgba(55,50,47,0.08)]">
+									<div id="fema-flood-map" className="pt-6 border-t border-[rgba(55,50,47,0.08)] scroll-mt-8">
 										<Card className="bg-[#F9F8F6] border-[rgba(55,50,47,0.12)]">
 											<CardContent className="pt-6">
 												<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
@@ -1487,7 +1501,7 @@ export default function AssemblageReportViewPage() {
 										: null;
 								if (lat == null || lng == null) return null;
 								return (
-									<div className="pt-6 border-t border-[rgba(55,50,47,0.12)]">
+									<div id="transit-zone-map" className="pt-6 border-t border-[rgba(55,50,47,0.12)] scroll-mt-8">
 										<Card className="bg-[#F9F8F6] border-[rgba(55,50,47,0.12)]">
 											<CardContent className="pt-6">
 												<h3 className="text-lg font-semibold text-[#37322F] mb-4 flex items-center gap-2">
@@ -1507,6 +1521,29 @@ export default function AssemblageReportViewPage() {
 							})()}
 						</div>
 					</div>
+				)}
+				</main>
+
+				{/* Sticky table of contents - only in Pretty mode */}
+				{!showDebugMode && (
+					<aside className="w-56 shrink-0 hidden lg:block">
+						<div className="sticky top-8 pt-2">
+							<p className="text-xs font-semibold text-[#605A57] uppercase tracking-wider mb-3">
+								On this report
+							</p>
+							<nav className="space-y-1">
+								{reportSections.map(({ id, label }) => (
+									<a
+										key={id}
+										href={`#${id}`}
+										className="block text-sm text-[#37322F] hover:text-[#4090C2] hover:underline py-0.5"
+									>
+										{label}
+									</a>
+								))}
+							</nav>
+						</div>
+					</aside>
 				)}
 			</div>
 		</div>
