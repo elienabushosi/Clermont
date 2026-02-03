@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -134,31 +134,65 @@ function getStatusColor(status: string) {
 	}
 }
 
-// Single map above both cards: both addresses marked and labeled (e.g. "1", "2")
-function AssemblageMap({
-	positions,
-	labels,
-}: {
-	positions: { lat: number; lng: number }[];
-	labels?: string[];
-}) {
+// Map above cards: geocode addresses from input (Google) and show one marker per address
+function AssemblageMap({ addresses }: { addresses: string[] }) {
 	const { isLoaded, loadError } = useLoadScript({
 		googleMapsApiKey: config.googleMapsApiKey || "",
 		libraries: ["places"],
 	});
 
+	type PositionWithAddress = { position: { lat: number; lng: number }; address: string; index: number };
+	const [markers, setMarkers] = useState<PositionWithAddress[]>([]);
+	const mapRef = useRef<google.maps.Map | null>(null);
 	const onLoad = useCallback((map: google.maps.Map) => {
+		mapRef.current = map;
+	}, []);
+
+	// Geocode each address so we always have a marker for every address; keep (position, address) in sync
+	useEffect(() => {
+		if (!isLoaded || typeof google === "undefined" || !addresses.length) {
+			setMarkers([]);
+			return;
+		}
+		const geocoder = new google.maps.Geocoder();
+		let cancelled = false;
+		Promise.all(
+			addresses.map(
+				(addr, index) =>
+					new Promise<PositionWithAddress | null>((resolve) => {
+						geocoder.geocode({ address: addr }, (results, status) => {
+							if (cancelled || status !== "OK" || !results?.[0]) {
+								resolve(null);
+								return;
+							}
+							const loc = results[0].geometry.location;
+							resolve({ position: { lat: loc.lat(), lng: loc.lng() }, address: addr, index });
+						});
+					})
+			)
+		).then((results) => {
+			if (!cancelled) setMarkers(results.filter((r): r is PositionWithAddress => r != null));
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [isLoaded, addresses]);
+	const positions = useMemo(() => markers.map((m) => m.position), [markers]);
+
+	// Fit bounds when geocoded positions arrive (map may have loaded before positions were ready)
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map || positions.length === 0) return;
 		if (positions.length >= 2) {
 			const bounds = new google.maps.LatLngBounds();
 			positions.forEach((p) => bounds.extend(p));
 			map.fitBounds(bounds, { top: 80, right: 80, bottom: 80, left: 80 });
-			// Zoom out a bit from fitBounds default
 			const listener = google.maps.event.addListener(map, "idle", () => {
 				google.maps.event.removeListener(listener);
 				const z = map.getZoom();
 				if (z != null && z > 14) map.setZoom(Math.max(14, z - 1));
 			});
-		} else if (positions.length === 1) {
+		} else {
 			map.setCenter(positions[0]);
 			map.setZoom(17);
 		}
@@ -166,13 +200,13 @@ function AssemblageMap({
 
 	const height = 280;
 
-	if (positions.length === 0) {
+	if (addresses.length === 0) {
 		return (
 			<div
 				className="w-full rounded-lg bg-[#EEECEA] border border-[rgba(55,50,47,0.12)] flex items-center justify-center"
 				style={{ height: `${height}px` }}
 			>
-				<p className="text-sm text-[#605A57]">Map unavailable</p>
+				<p className="text-sm text-[#605A57]">No addresses to show</p>
 			</div>
 		);
 	}
@@ -221,15 +255,17 @@ function AssemblageMap({
 					],
 				}}
 			>
-				{positions.map((pos, i) => (
+				{markers.map((m, i) => (
 					<Marker
-						key={i}
-						position={pos}
-						label={
-							labels != null && labels[i] != null
-								? { text: labels[i], color: "white", fontWeight: "bold", fontSize: "14px" }
-								: undefined
-						}
+						key={m.index}
+						position={m.position}
+						title={m.address}
+						label={{
+							text: String(m.index + 1),
+							color: "white",
+							fontWeight: "bold",
+							fontSize: "14px",
+						}}
 					/>
 				))}
 			</GoogleMap>
@@ -368,13 +404,18 @@ export default function AssemblageReportViewPage() {
 	// Helpers for debug view: get sources by key; for multi-child keys, by childIndex
 	const getSourceByKey = (key: string) =>
 		sources.find((s) => s.SourceKey === key) ?? null;
-	// Per-lot Zola (MapPLUTO) payload for property cards
+	// Per-lot Zola (MapPLUTO) payload for property cards; returns null if Zola failed or missing
 	const getZolaPayloadForLot = (childIndex: number): Record<string, unknown> | null => {
 		const { byIndex } = getSourcesByKeyWithChildIndex("zola");
 		const source = byIndex[childIndex];
 		if (!source?.ContentJson || source.Status !== "succeeded") return null;
 		const cj = source.ContentJson as { contentJson?: Record<string, unknown>; [key: string]: unknown };
 		return (cj.contentJson ?? cj) as Record<string, unknown>;
+	};
+	// Per-lot Zola source (succeeded or failed) for showing error when parcel data unavailable
+	const getZolaSourceForLot = (childIndex: number): ReportSource | null => {
+		const { byIndex } = getSourcesByKeyWithChildIndex("zola");
+		return byIndex[childIndex] ?? null;
 	};
 	const formatBorough = (boroughOrCode: string | number | null | undefined): string | null => {
 		if (boroughOrCode == null || boroughOrCode === "") return null;
@@ -398,13 +439,75 @@ export default function AssemblageReportViewPage() {
 		return { list, byIndex };
 	};
 
-	// Lat/lng for a lot: geoservice extracted first, then Zola centroid
+	// Geoservice ContentJson shape (extracted may have bbl, or noBbl + errorMessage + partial segment data)
+	type GeoserviceContentJson = {
+		childIndex?: number;
+		address?: string;
+		extracted?: {
+			bbl?: string | null;
+			lat?: number | null;
+			lng?: number | null;
+			errorMessage?: string | null;
+			partial?: {
+				borough?: string | null;
+				streetName?: string | null;
+				zipCode?: string | null;
+				uspsCityName?: string | null;
+				communityDistrict?: string | null;
+				assemblyDistrict?: string | null;
+				schoolDistrict?: string | null;
+				policePrecinct?: string | null;
+				fireCompany?: string | null;
+				fireDivision?: string | null;
+				noParkingLanes?: string | null;
+				noTotalLanes?: string | null;
+				noTravelingLanes?: string | null;
+				lat?: number | null;
+				lng?: number | null;
+			};
+		};
+		noBbl?: boolean;
+		errorMessage?: string | null;
+	};
+
+	// All address slots: from assemblage_input.addresses, or from geoservice sources (Option B: report always has addresses)
+	const assemblageInput = getSourceByKey("assemblage_input")?.ContentJson as { addresses?: string[] } | null;
+	const { byIndex: geoByIndex } = getSourcesByKeyWithChildIndex("geoservice");
+	const addressIndices = assemblageInput?.addresses?.length != null
+		? Array.from({ length: assemblageInput.addresses!.length }, (_, i) => i)
+		: Object.keys(geoByIndex).map(Number).sort((a, b) => a - b);
+	const addressesList: string[] = assemblageInput?.addresses ?? addressIndices.map(
+		(i) => (geoByIndex[i]?.ContentJson as GeoserviceContentJson)?.address ?? `Address ${i + 1}`
+	);
+
+	// One display item per address: hasBbl + lot (if any) + geoservice data for no-BBL messaging
+	const displayItems = addressIndices.map((childIndex) => {
+		const geo = geoByIndex[childIndex]?.ContentJson as GeoserviceContentJson | null;
+		const extracted = geo?.extracted;
+		const hasBbl = !!(extracted?.bbl != null && String(extracted.bbl).trim() !== "");
+		const lot = lots.find((l) => l.childIndex === childIndex) ?? null;
+		return {
+			childIndex,
+			address: addressesList[childIndex] ?? geo?.address ?? `Address ${childIndex + 1}`,
+			hasBbl,
+			lot,
+			geoservice: geo,
+			extracted,
+		};
+	});
+	const addressesMissingBbl = displayItems.filter((item) => !item.hasBbl).map((item) => item.address);
+	const hasMissingBbl = addressesMissingBbl.length > 0;
+
+	// Lat/lng: geoservice extracted (or partial segment coords when no BBL), then Zola centroid
 	const getCoordsForLot = (childIndex: number): { lat: number; lng: number } | null => {
-		const { byIndex: geoByIndex } = getSourcesByKeyWithChildIndex("geoservice");
-		const geo = geoByIndex[childIndex];
-		const extracted = (geo?.ContentJson as { extracted?: { lat?: number; lng?: number } } | null)?.extracted;
+		const geo = geoByIndex[childIndex]?.ContentJson as GeoserviceContentJson | null;
+		const extracted = geo?.extracted;
 		if (extracted?.lat != null && extracted?.lng != null && !Number.isNaN(extracted.lat) && !Number.isNaN(extracted.lng)) {
 			return { lat: extracted.lat, lng: extracted.lng };
+		}
+		const partial = extracted?.partial;
+		if (partial?.lat != null && partial?.lng != null && !Number.isNaN(partial.lat) && !Number.isNaN(partial.lng)) {
+			return { lat: partial.lat, lng: partial.lng };
 		}
 		const zola = getZolaPayloadForLot(childIndex);
 		const lat = zola?.lat != null ? Number(zola.lat) : null;
@@ -415,9 +518,8 @@ export default function AssemblageReportViewPage() {
 		return null;
 	};
 
-	const assemblageMapPositions = lots
-		.map((l) => getCoordsForLot(l.childIndex))
-		.filter((c): c is { lat: number; lng: number } => c != null);
+	// Addresses from input (always 2 or 3); map geocodes them so both markers always show
+	const assemblageAddresses = displayItems.map((item) => item.address);
 
 	const DebugJsonBlock = ({ data }: { data: unknown }) => (
 		<div className="bg-[#F7F5F3] rounded-lg p-3 border border-[rgba(55,50,47,0.12)] overflow-x-auto">
@@ -540,53 +642,46 @@ export default function AssemblageReportViewPage() {
 							</CardContent>
 						</Card>
 
-						{/* Geoservice: Property 1 | Property 2 */}
+						{/* Geoservice: Property 1 | Property 2 | Property 3 — Debug shows raw error; "partial succeeded" (yellow) when no BBL */}
 						<Card>
 							<CardHeader>
 								<CardTitle className="text-base">geoservice</CardTitle>
 							</CardHeader>
 							<CardContent>
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-									<div>
-										<p className="text-sm font-medium text-[#605A57] mb-2">Property 1</p>
-										{getSourcesByKeyWithChildIndex("geoservice").byIndex[0] ? (
-											<>
-												<Badge
-													variant="outline"
-													className={`text-xs mb-2 ${getStatusColor(
-														getSourcesByKeyWithChildIndex("geoservice").byIndex[0].Status
-													)}`}
-												>
-													{getSourcesByKeyWithChildIndex("geoservice").byIndex[0].Status}
-												</Badge>
-												<DebugJsonBlock
-													data={getSourcesByKeyWithChildIndex("geoservice").byIndex[0].ContentJson}
-												/>
-											</>
-										) : (
-											<DebugPlaceholder />
-										)}
-									</div>
-									<div>
-										<p className="text-sm font-medium text-[#605A57] mb-2">Property 2</p>
-										{getSourcesByKeyWithChildIndex("geoservice").byIndex[1] ? (
-											<>
-												<Badge
-													variant="outline"
-													className={`text-xs mb-2 ${getStatusColor(
-														getSourcesByKeyWithChildIndex("geoservice").byIndex[1].Status
-													)}`}
-												>
-													{getSourcesByKeyWithChildIndex("geoservice").byIndex[1].Status}
-												</Badge>
-												<DebugJsonBlock
-													data={getSourcesByKeyWithChildIndex("geoservice").byIndex[1].ContentJson}
-												/>
-											</>
-										) : (
-											<DebugPlaceholder />
-										)}
-									</div>
+									{displayItems.map((item) => {
+										const src = getSourcesByKeyWithChildIndex("geoservice").byIndex[item.childIndex];
+										const cj = src?.ContentJson as { Status?: string; noBbl?: boolean; errorMessage?: string; extracted?: { errorMessage?: string } } | null;
+										const isPartialSucceeded = src?.Status === "succeeded" && cj?.noBbl === true;
+										const rawError = cj?.errorMessage ?? cj?.extracted?.errorMessage;
+										return (
+											<div key={item.childIndex}>
+												<p className="text-sm font-medium text-[#605A57] mb-2">Property {item.childIndex + 1}</p>
+												{src ? (
+													<>
+														<Badge
+															variant="outline"
+															className={`text-xs mb-2 ${
+																isPartialSucceeded
+																	? "bg-amber-100 text-amber-800 border-amber-200"
+																	: getStatusColor(src.Status)
+															}`}
+														>
+															{isPartialSucceeded ? "partial succeeded" : src.Status}
+														</Badge>
+														{rawError && (
+															<p className="text-xs text-amber-800 mb-2 font-mono bg-amber-50/80 rounded px-2 py-1">
+																{rawError}
+															</p>
+														)}
+														<DebugJsonBlock data={src.ContentJson} />
+													</>
+												) : (
+													<DebugPlaceholder />
+												)}
+											</div>
+										);
+									})}
 								</div>
 							</CardContent>
 						</Card>
@@ -712,126 +807,193 @@ export default function AssemblageReportViewPage() {
 					</div>
 				)}
 
-				{/* Pretty mode: one map above cards, then property cards (2 or 3) + combined lot area */}
+				{/* Pretty mode: one map above cards, then one card per address (Option B: always show all addresses; red disclaimer when no BBL) */}
 				{!showDebugMode && (
 					<div className="space-y-4">
-						{lots.length === 0 ? (
+						{displayItems.length === 0 ? (
 							<p className="text-[#605A57]">No property data available.</p>
 						) : (
 							<>
 							{/* Single map showing all addresses, labeled 1, 2, (3) */}
 							<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
 								<p className="text-sm font-medium text-[#37322F] mb-3">Assemblage map</p>
-								<AssemblageMap
-									positions={assemblageMapPositions}
-									labels={lots.map((_, i) => String(i + 1))}
-								/>
+								<AssemblageMap addresses={assemblageAddresses} />
 							</div>
 							<div
 								className={
-									lots.length === 3
+									displayItems.length === 3
 										? "grid grid-cols-1 md:grid-cols-3 gap-4"
 										: "grid grid-cols-1 md:grid-cols-2 gap-4"
 								}
 							>
-								{lots.map((lot) => {
-									const zolaPayload = getZolaPayloadForLot(lot.childIndex);
-									const borough = formatBorough(zolaPayload?.borough ?? zolaPayload?.borocode);
+								{displayItems.map((item) => {
+									const { childIndex, address, hasBbl, lot, extracted } = item;
+									const zolaPayload = getZolaPayloadForLot(childIndex);
+									const zolaSource = getZolaSourceForLot(childIndex);
+									const zolaFailed = zolaSource != null && zolaSource.Status !== "succeeded";
+									const borough = formatBorough(zolaPayload?.borough ?? zolaPayload?.borocode ?? extracted?.partial?.borough ?? extracted?.borough);
 									const landUse = zolaPayload?.landuse != null ? String(zolaPayload.landuse) : null;
 									const buildingClass = zolaPayload?.bldgclass != null ? String(zolaPayload.bldgclass) : null;
 									const unitsres = zolaPayload?.unitsres != null ? Number(zolaPayload.unitsres) : null;
 									const numfloors = zolaPayload?.numfloors != null ? Number(zolaPayload.numfloors) : null;
+									const partial = extracted?.partial;
+									const errorMessage = extracted?.errorMessage ?? (item.geoservice as { errorMessage?: string })?.errorMessage;
+
 									return (
-									<Card key={lot.childIndex} className="bg-[#F9F8F6] border-[rgba(55,50,47,0.12)]">
+									<Card key={childIndex} className="bg-[#F9F8F6] border-[rgba(55,50,47,0.12)]">
 										<CardContent className="pt-5 pb-5">
 											<div className="flex items-center gap-2 mb-4">
 												<Home className="size-5 text-[#4090C2] shrink-0" />
 												<h3 className="text-lg font-semibold text-[#37322F]">
-													Address {lot.childIndex + 1}
+													Address {childIndex + 1}
 												</h3>
 											</div>
+											{/* Red disclaimer when no BBL was found (Pretty: user-friendly message only; raw error is in Debug) */}
+											{!hasBbl && (
+												<div className="mb-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+													<strong>No BBL was found for this property.</strong>
+													<span className="mt-1 block font-normal text-red-700">
+														The city&apos;s address database could not return a parcel (BBL) for this address. Only segment-level street data is shown below.
+													</span>
+												</div>
+											)}
+											{zolaFailed && hasBbl && (
+												<div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+													<strong>Parcel data unavailable</strong> for this address.
+													{zolaSource?.ErrorMessage && (
+														<span className="mt-1 block font-normal text-amber-700">
+															{zolaSource.ErrorMessage}
+														</span>
+													)}
+												</div>
+											)}
 											<div className="space-y-4">
 												<div>
 													<p className="text-sm text-[#605A57] mb-1">Address</p>
 													<p className="text-[#37322F] font-medium break-words whitespace-pre-wrap">
-														{lot.normalizedAddress || lot.address}
+														{lot?.normalizedAddress ?? address}
 													</p>
 												</div>
-												<div>
-													<p className="text-sm text-[#605A57] mb-1">BBL</p>
-													<p className="text-[#37322F] font-medium font-mono text-sm">
-														{lot.bbl}
-													</p>
-												</div>
+												{hasBbl && lot && (
+													<div>
+														<p className="text-sm text-[#605A57] mb-1">BBL</p>
+														<p className="text-[#37322F] font-medium font-mono text-sm">
+															{lot.bbl}
+														</p>
+													</div>
+												)}
 												<div>
 													<p className="text-sm text-[#605A57] mb-1">Borough</p>
-													<p className="text-[#37322F] font-medium">{borough ?? "—"}</p>
+													<p className="text-[#37322F] font-medium">{borough ?? (partial?.uspsCityName?.trim() || "—")}</p>
 												</div>
-												<div>
-													<p className="text-sm text-[#605A57] mb-1">Land Use</p>
-													<p className="text-[#37322F] font-medium">
-														{landUse != null ? (getLandUseDescriptionText(landUse) || landUse) : "—"}
-													</p>
-												</div>
-												<div>
-													<p className="text-sm text-[#605A57] mb-1">Building Class</p>
-													<p className="text-[#37322F] font-medium">
-														{buildingClass != null ? (getBuildingClassDescriptionText(buildingClass) || buildingClass) : "—"}
-													</p>
-												</div>
-												<div>
-													<p className="text-sm text-[#605A57] mb-1">Residential Units</p>
-													<p className="text-[#37322F] font-medium">
-														{unitsres != null && !Number.isNaN(unitsres) ? unitsres : "—"}
-													</p>
-												</div>
-												<div>
-													<p className="text-sm text-[#605A57] mb-1">Number of Floors</p>
-													<p className="text-[#37322F] font-medium">
-														{numfloors != null && !Number.isNaN(numfloors) ? numfloors : "—"}
-													</p>
-												</div>
-												{lot.zonedist1 && (
-													<div>
-														<p className="text-sm text-[#605A57] mb-1">Zoning district</p>
-														<Badge variant="outline" className="text-xs font-medium text-[#37322F]">
-															{lot.zonedist1}
-														</Badge>
-													</div>
-												)}
-												<div>
-													<p className="text-sm text-[#605A57] mb-1">Lot area</p>
-													<p className="text-[#37322F] font-medium">
-														{lot.lotarea > 0
-															? `${lot.lotarea.toLocaleString()} sq ft`
-															: "—"}
-														{lot.status === "missing_lotarea" && (
-															<span className="text-amber-600 ml-2 text-xs font-normal">
-																(missing)
-															</span>
+												{/* Segment-level data when no BBL */}
+												{!hasBbl && partial && (
+													<>
+														{partial.uspsCityName && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">USPS city</p>
+																<p className="text-[#37322F] font-medium">{partial.uspsCityName.trim()}</p>
+															</div>
 														)}
-													</p>
-												</div>
-												{lot.maxFar != null && (
-													<div>
-														<p className="text-sm text-[#605A57] mb-1">Max FAR</p>
-														<p className="text-[#37322F] font-medium">
-															{lot.maxFar}
-															{lot.requires_manual_review && (
-																<span className="text-amber-600 ml-2 text-xs font-normal">
-																	(manual review)
-																</span>
-															)}
-														</p>
-													</div>
+														{partial.zipCode && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">ZIP code</p>
+																<p className="text-[#37322F] font-medium">{partial.zipCode.trim()}</p>
+															</div>
+														)}
+														{partial.streetName && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">Street (segment)</p>
+																<p className="text-[#37322F] font-medium">{partial.streetName.trim()}</p>
+															</div>
+														)}
+														{(partial.communityDistrict ?? partial.assemblyDistrict) && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">Community / Assembly district</p>
+																<p className="text-[#37322F] font-medium">
+																	{[partial.communityDistrict?.trim(), partial.assemblyDistrict?.trim()].filter(Boolean).join(" / ") || "—"}
+																</p>
+															</div>
+														)}
+														{(partial.noParkingLanes ?? partial.noTotalLanes ?? partial.noTravelingLanes) && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">Lanes (segment)</p>
+																<p className="text-[#37322F] font-medium text-sm">
+																	Parking: {partial.noParkingLanes?.trim() ?? "—"} · Total: {partial.noTotalLanes?.trim() ?? "—"} · Travel: {partial.noTravelingLanes?.trim() ?? "—"}
+																</p>
+															</div>
+														)}
+													</>
 												)}
-												{lot.lotBuildableSqft != null && lot.lotBuildableSqft > 0 && (
-													<div>
-														<p className="text-sm text-[#605A57] mb-1">Buildable (FAR)</p>
-														<p className="text-[#37322F] font-medium">
-															{lot.lotBuildableSqft.toLocaleString()} sq ft
-														</p>
-													</div>
+												{hasBbl && (
+													<>
+														<div>
+															<p className="text-sm text-[#605A57] mb-1">Land Use</p>
+															<p className="text-[#37322F] font-medium">
+																{landUse != null ? (getLandUseDescriptionText(landUse) || landUse) : "—"}
+															</p>
+														</div>
+														<div>
+															<p className="text-sm text-[#605A57] mb-1">Building Class</p>
+															<p className="text-[#37322F] font-medium">
+																{buildingClass != null ? (getBuildingClassDescriptionText(buildingClass) || buildingClass) : "—"}
+															</p>
+														</div>
+														<div>
+															<p className="text-sm text-[#605A57] mb-1">Residential Units</p>
+															<p className="text-[#37322F] font-medium">
+																{unitsres != null && !Number.isNaN(unitsres) ? unitsres : "—"}
+															</p>
+														</div>
+														<div>
+															<p className="text-sm text-[#605A57] mb-1">Number of Floors</p>
+															<p className="text-[#37322F] font-medium">
+																{numfloors != null && !Number.isNaN(numfloors) ? numfloors : "—"}
+															</p>
+														</div>
+														{lot?.zonedist1 && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">Zoning district</p>
+																<Badge variant="outline" className="text-xs font-medium text-[#37322F]">
+																	{lot.zonedist1}
+																</Badge>
+															</div>
+														)}
+														<div>
+															<p className="text-sm text-[#605A57] mb-1">Lot area</p>
+															<p className="text-[#37322F] font-medium">
+																{(lot?.lotarea ?? 0) > 0
+																	? `${(lot!.lotarea).toLocaleString()} sq ft`
+																	: "—"}
+																{lot?.status === "missing_lotarea" && (
+																	<span className="text-amber-600 ml-2 text-xs font-normal">
+																		(missing)
+																	</span>
+																)}
+															</p>
+														</div>
+														{lot?.maxFar != null && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">Max FAR</p>
+																<p className="text-[#37322F] font-medium">
+																	{lot.maxFar}
+																	{lot.requires_manual_review && (
+																		<span className="text-amber-600 ml-2 text-xs font-normal">
+																			(manual review)
+																		</span>
+																	)}
+																</p>
+															</div>
+														)}
+														{lot?.lotBuildableSqft != null && lot.lotBuildableSqft > 0 && (
+															<div>
+																<p className="text-sm text-[#605A57] mb-1">Buildable (FAR)</p>
+																<p className="text-[#37322F] font-medium">
+																	{lot.lotBuildableSqft.toLocaleString()} sq ft
+																</p>
+															</div>
+														)}
+													</>
 												)}
 											</div>
 										</CardContent>
@@ -842,6 +1004,25 @@ export default function AssemblageReportViewPage() {
 							</>
 						)}
 						<div className="pt-6 border-t border-[rgba(55,50,47,0.12)] space-y-6">
+							{hasMissingBbl ? (
+								<div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
+									<p className="text-amber-800 font-medium mb-2">
+										Missing BBL data for {addressesMissingBbl.length === 1 ? "address" : "addresses"}:{" "}
+										{addressesMissingBbl.join(", ")}
+									</p>
+									<p className="text-sm text-amber-800 mb-3">
+										We can&apos;t automatically calculate the following for this assemblage. Please consider a manual check while we improve this feature and experience.
+									</p>
+									<ul className="text-sm text-amber-800 list-disc list-inside space-y-1">
+										<li>Combined Lot Area</li>
+										<li>Total Buildable (FAR)</li>
+										<li>Density (DUF)</li>
+										<li>Zoning District Consistency</li>
+										<li>Assemblage Contamination Risk</li>
+									</ul>
+								</div>
+							) : (
+							<>
 							{/* Combined Lot Area */}
 							<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
 								<div className="flex flex-wrap items-baseline gap-2 mb-1">
@@ -1085,16 +1266,19 @@ export default function AssemblageReportViewPage() {
 										>
 											Same normalized profile: {zoningConsistency.summary?.sameNormalizedProfile ? "Yes" : "No"}
 										</Badge>
-										<Badge
-											variant="outline"
-											className={
-												zoningConsistency.summary?.sameBlock
-													? "bg-green-100 text-green-700 border-green-200"
-													: "bg-gray-100 text-gray-600 border-gray-200"
-											}
-										>
-											Same block: {zoningConsistency.summary?.sameBlock ? "Yes" : "No"}
-										</Badge>
+										{/* Only show Same block when we have BBL data for all addresses */}
+										{(zoningConsistency.lots?.length ?? 0) === addressesList.length && (
+											<Badge
+												variant="outline"
+												className={
+													zoningConsistency.summary?.sameBlock
+														? "bg-green-100 text-green-700 border-green-200"
+														: "bg-gray-100 text-gray-600 border-gray-200"
+												}
+											>
+												Same block: {zoningConsistency.summary?.sameBlock ? "Yes" : "No"}
+											</Badge>
+										)}
 									</div>
 									{zoningConsistency.summary?.hasAnyOverlay && (
 										<p className="text-amber-700 text-sm mb-2">
@@ -1217,6 +1401,8 @@ export default function AssemblageReportViewPage() {
 										</ul>
 									)}
 								</div>
+							)}
+							</>
 							)}
 							{/* Disclaimer */}
 							<div className="pt-2 border-t border-[rgba(55,50,47,0.08)]">

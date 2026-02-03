@@ -147,15 +147,34 @@ export class GeoserviceAgent extends BaseAgent {
 	}
 
 	/**
+	 * Normalize address string before sending to Geoservice API.
+	 * Aligns format between single-report and assemblage flows (e.g. strip ", USA").
+	 * @param {string} address - Raw address string
+	 * @returns {string} Normalized address
+	 */
+	normalizeAddressForApi(address) {
+		if (!address || typeof address !== "string") return address || "";
+		let s = address.trim();
+		// Strip trailing ", USA" or ", USA." (some APIs are sensitive to this)
+		s = s.replace(/,?\s*USA\.?\s*$/i, "").trim();
+		// Collapse multiple spaces
+		s = s.replace(/\s+/g, " ");
+		return s;
+	}
+
+	/**
 	 * Fetch data from NYC Planning Geoservice
 	 * @param {Object} addressData - Address information
 	 * @param {string} addressData.address - Full address string
+	 * @param {string} [addressData.normalizedAddress] - Optional preferred form (used when provided, e.g. from single-report frontend)
 	 * @param {string} reportId - Report ID
 	 * @returns {Promise<Object>} Geoservice response with extracted fields
 	 */
 	async fetchData(addressData, reportId) {
 		const apiKey = process.env.GEOSERVICE_API_KEY || "TjWnZr4u7xXABCHF";
-		const address = addressData.address;
+		// Use normalized form when provided (single-report sends this); otherwise use address
+		const rawAddress = addressData.normalizedAddress || addressData.address;
+		const address = this.normalizeAddressForApi(rawAddress || addressData.address);
 
 		if (!address) {
 			throw new Error("Address is required for Geoservice agent");
@@ -203,6 +222,24 @@ export class GeoserviceAgent extends BaseAgent {
 
 		const rawResponse = await response.json();
 		console.log("Geoservice raw response:", JSON.stringify(rawResponse, null, 2));
+
+		// Check for Geoservice API error messages
+		// If error AND no valid BBL: do not throw — return no_bbl + partial segment data (assemblage Option B: report still succeeds)
+		// If error BUT valid BBL: log warning and continue (e.g. "PSEUDO-ADDRESS" still returns BBL)
+		const wa1 = rawResponse.root?.wa1;
+		const errorMsg2 = wa1?.out_error_message2 != null ? String(wa1.out_error_message2).trim() : "";
+		const errorMsg1 = wa1?.out_error_message != null ? String(wa1.out_error_message).trim() : "";
+		const apiError = errorMsg2 || errorMsg1;
+		const hasRootBbl = rawResponse.root?.bbl_toString != null && String(rawResponse.root.bbl_toString).trim() !== "";
+		const bblObj = rawResponse.root?.wa2F1b?.wa2f1ax?.bbl;
+		const hasWa2Bbl = bblObj && [bblObj.boro, bblObj.block, bblObj.lot].every((v) => v != null && String(v).trim() !== "");
+		const hasValidBbl = hasRootBbl || hasWa2Bbl;
+		if (apiError && hasValidBbl) {
+			console.warn(`Geoservice API warning (continuing with BBL): ${apiError}`);
+		}
+		if (apiError && !hasValidBbl) {
+			console.warn(`Geoservice API returned no BBL (will return partial segment data): ${apiError}`);
+		}
 
 		// Extract key fields from response
 		// The response structure is: root.bbl_toString or root.wa2F1b.wa2f1ax.bbl
@@ -266,11 +303,13 @@ export class GeoserviceAgent extends BaseAgent {
 			}
 		}
 
-		// Extract latitude - try nested paths first
+		// wa2f1ex is sibling of wa2f1ax (segment-level data; present even when no BBL)
+		const wa2f1ex = rawResponse.root?.wa2F1b?.wa2f1ex;
+		// Extract latitude - try wa2f1ax, then wa2f1ex (segment), then root
 		if (rawResponse.root?.wa2F1b?.wa2f1ax?.latitude) {
 			latitude = parseFloat(rawResponse.root.wa2F1b.wa2f1ax.latitude);
-		} else if (rawResponse.root?.wa2F1b?.wa2f1ax?.wa2f1ex?.latitude) {
-			latitude = parseFloat(rawResponse.root.wa2F1b.wa2f1ax.wa2f1ex.latitude);
+		} else if (wa2f1ex?.latitude) {
+			latitude = parseFloat(wa2f1ex.latitude);
 		} else if (rawResponse.Latitude) {
 			latitude = parseFloat(rawResponse.Latitude);
 		} else if (rawResponse.latitude) {
@@ -279,11 +318,11 @@ export class GeoserviceAgent extends BaseAgent {
 			latitude = parseFloat(rawResponse.Lat);
 		}
 
-		// Extract longitude - try nested paths first
+		// Extract longitude - try wa2f1ax, then wa2f1ex (segment), then root
 		if (rawResponse.root?.wa2F1b?.wa2f1ax?.longitude) {
 			longitude = parseFloat(rawResponse.root.wa2F1b.wa2f1ax.longitude);
-		} else if (rawResponse.root?.wa2F1b?.wa2f1ax?.wa2f1ex?.longitude) {
-			longitude = parseFloat(rawResponse.root.wa2F1b.wa2f1ax.wa2f1ex.longitude);
+		} else if (wa2f1ex?.longitude) {
+			longitude = parseFloat(String(wa2f1ex.longitude).trim());
 		} else if (rawResponse.Longitude) {
 			longitude = parseFloat(rawResponse.Longitude);
 		} else if (rawResponse.longitude) {
@@ -317,7 +356,7 @@ export class GeoserviceAgent extends BaseAgent {
 
 		// Extract additional structured data from Geoservice response
 		const wa2f1ax = rawResponse.root?.wa2F1b?.wa2f1ax;
-		const wa2f1ex = rawResponse.root?.wa2F1b?.wa2f1ex; // Fixed: wa2f1ex is a sibling of wa2f1ax, not a child
+		// wa2f1ex already defined above (segment-level data)
 
 		// Extract building class
 		const buildingClass = wa2f1ax?.rpad_bldg_class?.trim() || null;
@@ -343,33 +382,65 @@ export class GeoserviceAgent extends BaseAgent {
 			? `${wa2f1ax.bin.binnum.trim()}${wa2f1ax.bin.boro?.trim() || ""}`.trim()
 			: rawResponse.root?.bin_toString?.trim() || null;
 
-		// Return structured data
-		return {
-			contentJson: rawResponse,
-			extracted: {
-				bbl: bbl ? bbl.toString() : null,
-				normalizedAddress: normalizedAddress || address,
-				lat: latitude,
-				lng: longitude,
-				borough: extractedBorough || rawResponse.root?.wa1?.in_boro1?.trim() || inputBorough || null,
-				block: block || null,
-				lot: lot || null,
-				// Building information
-				buildingClass: buildingClass,
-				bin: bin,
-				// Neighborhood/district information
+		// When no BBL, build partial segment-level data for assemblage (Option B: report still succeeds)
+		const boroughFinal = extractedBorough || rawResponse.root?.wa1?.in_boro1?.trim() || inputBorough || null;
+		let partial = null;
+		if (!bbl && (wa2f1ex || wa1)) {
+			partial = {
+				borough: boroughFinal,
+				boroughCode: rawResponse.root?.wa1?.in_boro1?.trim() || wa2f1ex?.real_b7sc?.boro?.trim() || null,
+				streetName: wa2f1ex?.boe_preferred_stname?.trim() || wa1?.out_stname1?.trim() || null,
+				zipCode: wa2f1ex?.zip_code?.trim() || null,
+				uspsCityName: wa2f1ex?.USPS_city_name?.trim() || null,
 				communityDistrict: communityDistrict,
-				cityCouncilDistrict: cityCouncilDistrict,
+				assemblyDistrict: wa2f1ex?.ad?.trim() || null,
 				schoolDistrict: schoolDistrict,
 				policePrecinct: policePrecinct,
 				fireCompany: fireCompany,
 				fireDivision: fireDivision,
-				sanitationBorough: sanitationBorough,
-				sanitationDistrict: sanitationDistrict,
-				sanitationSubsection: sanitationSubsection,
-				// Zoning information
-				zoningMap: zoningMap,
-			},
+				noParkingLanes: wa2f1ex?.No_Parking_lanes?.trim() || null,
+				noTotalLanes: wa2f1ex?.No_Total_Lanes?.trim() || null,
+				noTravelingLanes: wa2f1ex?.No_Traveling_lanes?.trim() || null,
+				lat: latitude,
+				lng: longitude,
+			};
+		}
+
+		const extracted = {
+			bbl: bbl ? bbl.toString() : null,
+			normalizedAddress: normalizedAddress || address,
+			lat: latitude,
+			lng: longitude,
+			borough: boroughFinal,
+			block: block || null,
+			lot: lot || null,
+			// Building information
+			buildingClass: buildingClass,
+			bin: bin,
+			// Neighborhood/district information
+			communityDistrict: communityDistrict,
+			cityCouncilDistrict: cityCouncilDistrict,
+			schoolDistrict: schoolDistrict,
+			policePrecinct: policePrecinct,
+			fireCompany: fireCompany,
+			fireDivision: fireDivision,
+			sanitationBorough: sanitationBorough,
+			sanitationDistrict: sanitationDistrict,
+			sanitationSubsection: sanitationSubsection,
+			// Zoning information
+			zoningMap: zoningMap,
+		};
+		if (!bbl && apiError) {
+			extracted.errorMessage = apiError;
+		}
+		if (partial) {
+			extracted.partial = partial;
+		}
+
+		// Return structured data
+		return {
+			contentJson: rawResponse,
+			extracted,
 			sourceUrl: url.replace(apiKey, "***"),
 		};
 	}

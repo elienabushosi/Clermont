@@ -63,57 +63,50 @@ export async function generateAssemblageReport(
 			throw new Error("GeoserviceAgent not found");
 		}
 
-		// 3. Run Geoservice for each address (must succeed for both)
+		// 3. Run Geoservice for each address (Option B: never fail report; store all results; Zola only for addresses with BBL)
 		const childContexts = [];
 
 		for (let i = 0; i < addressList.length; i++) {
 			const address = addressList[i];
 			console.log(`Executing GeoserviceAgent for address[${i}]: ${address}`);
 			const geoserviceResult = await geoserviceAgent.execute(
-				{ address },
+				{ address, normalizedAddress: null },
 				report.IdReport
 			);
 
-			// Store with SourceKey "geoservice", disambiguate by childIndex in ContentJson
+			// Store geoservice result for every address (succeeded with BBL, or no BBL + partial segment data)
+			const extracted = geoserviceResult.data?.extracted ?? null;
+			const hasBbl = extracted?.bbl != null && String(extracted.bbl).trim() !== "";
 			await storeAgentResult(report.IdReport, "geoservice", {
 				status: geoserviceResult.status,
 				data: {
 					childIndex: i,
 					address,
-					extracted: geoserviceResult.data?.extracted ?? null,
+					extracted,
+					noBbl: !hasBbl,
+					errorMessage: extracted?.errorMessage ?? geoserviceResult.error ?? null,
 					raw: geoserviceResult.data?.contentJson ?? geoserviceResult.data ?? null,
 				},
-				error: geoserviceResult.error ?? null,
+				error: geoserviceResult.error ?? (hasBbl ? null : (extracted?.errorMessage ?? "No BBL returned")),
 			});
 
 			if (geoserviceResult.status !== "succeeded") {
-				console.error(`GeoserviceAgent failed for address[${i}]:`, geoserviceResult.error);
-				await updateReportStatus(report.IdReport, "failed");
-				return {
-					reportId: report.IdReport,
-					status: "failed",
-					error: `Geoservice failed for address ${i + 1}: ${geoserviceResult.error}`,
-				};
+				console.warn(`GeoserviceAgent returned non-success for address[${i}] (report continues):`, geoserviceResult.error);
+				continue;
 			}
 
-			const extracted = geoserviceResult.data?.extracted;
-			if (!extracted || !extracted.bbl) {
-				await updateReportStatus(report.IdReport, "failed");
-				return {
-					reportId: report.IdReport,
-					status: "failed",
-					error: `Geoservice did not return BBL for address ${i + 1}`,
-				};
+			if (hasBbl) {
+				childContexts.push({
+					childIndex: i,
+					address,
+					bbl: extracted.bbl,
+					normalizedAddress: extracted.normalizedAddress ?? address,
+					lat: extracted.lat ?? null,
+					lng: extracted.lng ?? null,
+				});
+			} else {
+				console.warn(`No BBL for address[${i}] (${address}); segment data stored; report continues.`);
 			}
-
-			childContexts.push({
-				childIndex: i,
-				address,
-				bbl: extracted.bbl,
-				normalizedAddress: extracted.normalizedAddress ?? address,
-				lat: extracted.lat ?? null,
-				lng: extracted.lng ?? null,
-			});
 		}
 
 		// 4. Run Zola for each child (non-critical; store failure but don't fail report)
@@ -150,14 +143,17 @@ export async function generateAssemblageReport(
 				zolaPayloadsByIndex[ctx.childIndex] =
 					zolaResult.status === "succeeded" ? contentJson : null;
 			} catch (zolaError) {
-				console.error(`ZolaAgent failed for child[${ctx.childIndex}] (non-critical):`, zolaError);
+				const errMsg = zolaError?.message ?? String(zolaError);
+				console.error(
+					`ZolaAgent failed for child[${ctx.childIndex}] (non-critical). Address: ${ctx.address}, BBL: ${ctx.bbl}. Error: ${errMsg}`
+				);
 				await storeAgentResult(report.IdReport, "zola", {
 					status: "failed",
 					data: {
 						childIndex: ctx.childIndex,
 						address: ctx.address,
 					},
-					error: zolaError.message ?? "Unknown error in ZolaAgent",
+					error: errMsg ?? "Unknown error in ZolaAgent",
 				});
 				zolaPayloadsByIndex[ctx.childIndex] = null;
 			}

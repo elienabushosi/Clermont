@@ -49,8 +49,12 @@ export async function generateReport(
 		}
 
 		console.log("Executing GeoserviceAgent...");
+		// Pass same shape as assemblage; prefer normalizedAddress when frontend sends it
 		const geoserviceResult = await geoserviceAgent.execute(
-			{ address: addressData.address },
+			{
+				address: addressData.address,
+				normalizedAddress: addressData.normalizedAddress || null,
+			},
 			report.IdReport
 		);
 

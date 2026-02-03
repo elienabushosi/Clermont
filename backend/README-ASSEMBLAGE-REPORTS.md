@@ -60,6 +60,12 @@ curl -X POST http://localhost:3002/api/assemblage-reports/generate \
 
 Zoning resolution and aggregation use in-memory logic on Zola payloads; no extra external calls.
 
+### Geoservice alignment with single reports
+
+**Option B (assemblage):** When Geoservice returns an error and no BBL, the agent does not throw; it returns segment-level data in `extracted.partial` and `extracted.errorMessage`. The assemblage report always succeeds; addresses without a BBL get a red disclaimer and segment data on the frontend. Zola runs only for addresses that have a BBL.
+
+Assemblage and single reports use the **same Geoservice agent** and input shape: `{ address, normalizedAddress? }`. The agent prefers `normalizedAddress` when provided (single-report frontend sends it); for assemblage we pass the address string and `normalizedAddress: null`. Before calling the API, the agent **normalizes** the address (trim, strip trailing ", USA", collapse spaces) so both flows send a consistent form to NYC Planning Geoservice. If an address works in single-report mode but fails in assemblage, the normalized string should now match; if Geoservice still returns an error (e.g. "ADDRESS NUMBER OUT OF RANGE" with no BBL), the address may be invalid or out of range in the city’s data.
+
 ---
 
 ## Data Sources and Stored Results
@@ -176,6 +182,15 @@ After a successful run:
 
 - **reports:** One row with `ReportType = 'assemblage'`, `Status = 'ready'` (or `'failed'` if Geoservice failed for either address).
 - **report_sources:** `assemblage_input`; two `geoservice` rows (childIndex 0, 1); two `zola` rows (childIndex 0, 1); `assemblage_aggregation`; `assemblage_zoning_consistency`; `assemblage_contamination_risk`.
+
+**Optional: inspect sources for a specific report** (e.g. when debugging "no data" for one address). Replace `YOUR_REPORT_ID` with the report’s UUID from the URL (e.g. `/assemblagereportview/abc-123-def` → use `abc-123-def`):
+
+```sql
+SELECT "SourceKey", "Status", "ErrorMessage", "ContentJson"->>'childIndex' AS child_index
+FROM report_sources
+WHERE "IdReport" = 'YOUR_REPORT_ID' AND "SourceKey" IN ('geoservice', 'zola')
+ORDER BY "SourceKey", "CreatedAt";
+```
 
 ---
 
