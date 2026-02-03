@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Bug, Home, MapPin, MapPinCheck, Share2, FileDown } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
 import { getReportWithSources, type ReportWithSources } from "@/lib/reports";
 import type { ReportSource } from "@/lib/reports";
@@ -33,6 +34,72 @@ interface AssemblageLot {
 	farMethod?: string;
 	requires_manual_review?: boolean;
 	refuseExemptionMaxSqft?: number | null;
+	existingFloorAreaSqft?: number | null;
+}
+
+/** User-entered "ghost" lot for scenario when BBL/data is missing (ZR § 23-52, merger logic). */
+interface GhostLotInput {
+	lotAreaSqft: number | "";
+	existingFloorAreaSqft: number | "";
+	zoningDistrict: string;
+	contiguityLinearFt: number | "";
+}
+
+/** Min contiguity (ft) for zoning lot merger eligibility; below this show warning. */
+const CONTIGUITY_MIN_FT = 10;
+
+/** FAR and DUF for scenario ghost lot by district (subset of ZR § 23-21 / 23-22; DUF 680 per ZR § 23-52). */
+const DISTRICT_FAR_DUF: Record<string, { far: number; duf: number }> = {
+	R1: { far: 0.75, duf: 680 },
+	R1A: { far: 0.75, duf: 680 },
+	R2: { far: 1.0, duf: 680 },
+	R2A: { far: 1.0, duf: 680 },
+	R3: { far: 1.0, duf: 680 },
+	"R3-1": { far: 1.0, duf: 680 },
+	"R3-2": { far: 1.0, duf: 680 },
+	R4: { far: 1.5, duf: 680 },
+	"R4-1": { far: 1.5, duf: 680 },
+	R5: { far: 2.0, duf: 680 },
+	R5A: { far: 2.0, duf: 680 },
+	R5B: { far: 2.0, duf: 680 },
+	R6: { far: 2.2, duf: 680 },
+	"R6-1": { far: 3.0, duf: 680 },
+	"R6-2": { far: 2.5, duf: 680 },
+	R6A: { far: 3.0, duf: 680 },
+	R6B: { far: 2.0, duf: 680 },
+	R6D: { far: 2.5, duf: 680 },
+	R7: { far: 3.44, duf: 680 },
+	"R7-1": { far: 3.44, duf: 680 },
+	"R7-2": { far: 3.44, duf: 680 },
+	R7A: { far: 4.0, duf: 680 },
+	R7B: { far: 3.0, duf: 680 },
+	R7D: { far: 4.66, duf: 680 },
+	R8: { far: 6.02, duf: 680 },
+	R8A: { far: 6.02, duf: 680 },
+	R8B: { far: 4.0, duf: 680 },
+	R9: { far: 7.52, duf: 680 },
+	R9A: { far: 7.52, duf: 680 },
+	"R9-1": { far: 9.0, duf: 680 },
+	R9D: { far: 9.0, duf: 680 },
+	R10: { far: 10.0, duf: 680 },
+	R10A: { far: 10.0, duf: 680 },
+};
+
+function getFarDufForDistrict(district: string): { far: number; duf: number } | null {
+	if (!district || typeof district !== "string") return null;
+	const key = district.trim().toUpperCase();
+	return DISTRICT_FAR_DUF[key] ?? null;
+}
+
+/** ZR § 23-52: fractional part >= 0.75 round up, else round down. */
+function roundDwellingUnitsByZR(floorAreaSqft: number, duf: number): { units_raw: number; units_rounded: number } {
+	if (floorAreaSqft <= 0 || !duf) return { units_raw: 0, units_rounded: 0 };
+	const ROUNDING_THRESHOLD = 0.75;
+	const unitsRaw = floorAreaSqft / duf;
+	const fractionalPart = unitsRaw - Math.floor(unitsRaw);
+	const unitsRounded =
+		fractionalPart >= ROUNDING_THRESHOLD ? Math.ceil(unitsRaw) : Math.floor(unitsRaw);
+	return { units_raw: unitsRaw, units_rounded: Math.max(0, unitsRounded) };
 }
 
 interface PerLotDensityBreakdown {
@@ -283,6 +350,12 @@ export default function AssemblageReportViewPage() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [showDebugMode, setShowDebugMode] = useState(false);
+	const [ghostLot, setGhostLot] = useState<GhostLotInput>({
+		lotAreaSqft: "",
+		existingFloorAreaSqft: "",
+		zoningDistrict: "",
+		contiguityLinearFt: "",
+	});
 
 	useEffect(() => {
 		const fetchReport = async () => {
@@ -307,6 +380,89 @@ export default function AssemblageReportViewPage() {
 
 		fetchReport();
 	}, [reportId, router]);
+
+	// Hooks must run unconditionally (before any early return). Compute from reportData/ghostLot.
+	const mergedScenario = useMemo(() => {
+		const sources = reportData?.sources ?? [];
+		const aggSource = sources.find((s) => s.SourceKey === "assemblage_aggregation");
+		const rawAgg = aggSource?.ContentJson;
+		const aggregation: AssemblageAggregation | null = rawAgg
+			? (typeof rawAgg === "object" && "lots" in rawAgg
+					? rawAgg
+					: (rawAgg as Record<string, unknown>)?.contentJson ?? rawAgg) as AssemblageAggregation
+			: null;
+		const lots = aggregation?.lots ?? [];
+		const knownLotAreaSqft = lots.reduce((sum, l) => sum + (l.lotarea > 0 ? l.lotarea : 0), 0);
+		const knownExistingFloorAreaSqft = lots.reduce(
+			(sum, l) => sum + (l.existingFloorAreaSqft ?? 0),
+			0
+		);
+		const primaryZoningKnown = lots.length > 0 ? (lots[0].zonedist1 ?? null) : null;
+		const ghostLotArea = typeof ghostLot.lotAreaSqft === "number" ? ghostLot.lotAreaSqft : 0;
+		const ghostExisting = typeof ghostLot.existingFloorAreaSqft === "number" ? ghostLot.existingFloorAreaSqft : 0;
+		const ghostContiguity = typeof ghostLot.contiguityLinearFt === "number" ? ghostLot.contiguityLinearFt : null;
+		const ghostDistrict = (ghostLot.zoningDistrict || "").trim().toUpperCase();
+		const farDufGhost = ghostDistrict ? getFarDufForDistrict(ghostDistrict) : null;
+		if (ghostLotArea <= 0 || !farDufGhost) return null;
+		const combinedLotAreaSqftM = knownLotAreaSqft + ghostLotArea;
+		const effectiveFAR = farDufGhost.far;
+		const totalBuildingBudgetSqft = combinedLotAreaSqftM * effectiveFAR;
+		const totalExistingFloorAreaSqft = knownExistingFloorAreaSqft + ghostExisting;
+		const remainingBuildableSqft = Math.max(0, totalBuildingBudgetSqft - totalExistingFloorAreaSqft);
+		const { units_rounded: mergedUnits } = roundDwellingUnitsByZR(totalBuildingBudgetSqft, farDufGhost.duf);
+		const zoningMismatch =
+			primaryZoningKnown &&
+			ghostDistrict &&
+			primaryZoningKnown.trim().toUpperCase() !== ghostDistrict;
+		const contiguityLow =
+			ghostContiguity != null && ghostContiguity < CONTIGUITY_MIN_FT;
+		return {
+			combinedLotAreaSqft: combinedLotAreaSqftM,
+			totalBuildingBudgetSqft,
+			totalExistingFloorAreaSqft,
+			remainingBuildableSqft,
+			mergedUnits,
+			effectiveFAR,
+			duf: farDufGhost.duf,
+			zoningMismatch,
+			contiguityLow,
+		};
+	}, [reportData, ghostLot]);
+
+	const reportSections = useMemo(() => {
+		const base = [
+			{ id: "assemblage-map", label: "Assemblage map" },
+			{ id: "property-address-details", label: "Property Address Details" },
+			{ id: "combined-lot-area", label: "Combined Lot Area" },
+			{ id: "total-buildable-far", label: "Total Buildable (FAR)" },
+			{ id: "density-duf", label: "Density (DUF)" },
+			{ id: "zoning-district-consistency", label: "Zoning District Consistency" },
+			{ id: "assemblage-contamination-risk", label: "Assemblage Contamination Risk" },
+			{ id: "fema-flood-map", label: "FEMA Flood Map" },
+			{ id: "transit-zone-map", label: "Transit Zone Map" },
+		];
+		const sources = reportData?.sources ?? [];
+		const list = sources.filter((s) => s.SourceKey === "geoservice");
+		const byIndex: Record<number, ReportSource> = {};
+		list.forEach((s) => {
+			const cj = s.ContentJson as { childIndex?: number } | null;
+			if (cj != null && typeof cj.childIndex === "number") byIndex[cj.childIndex] = s;
+		});
+		const assemblageInput = sources.find((s) => s.SourceKey === "assemblage_input")?.ContentJson as { addresses?: string[] } | null;
+		const addressIndices = assemblageInput?.addresses?.length != null
+			? Array.from({ length: assemblageInput.addresses!.length }, (_, i) => i)
+			: Object.keys(byIndex).map(Number).sort((a, b) => a - b);
+		const hasMissingBbl = addressIndices.some((i) => {
+			const geo = byIndex[i]?.ContentJson as { extracted?: { bbl?: string | null } } | null;
+			const extracted = geo?.extracted;
+			const hasBbl = !!(extracted?.bbl != null && String(extracted.bbl).trim() !== "");
+			return !hasBbl;
+		});
+		if (hasMissingBbl) {
+			return [...base.slice(0, 2), { id: "merged-scenario", label: "Merged scenario" }, ...base.slice(2)];
+		}
+		return base;
+	}, [reportData]);
 
 	if (isLoading) {
 		return (
@@ -543,18 +699,6 @@ export default function AssemblageReportViewPage() {
 		// PDF download not yet implemented; see note below
 		toast.info("PDF download coming soon");
 	};
-
-	const reportSections = [
-		{ id: "assemblage-map", label: "Assemblage map" },
-		{ id: "property-address-details", label: "Property Address Details" },
-		{ id: "combined-lot-area", label: "Combined Lot Area" },
-		{ id: "total-buildable-far", label: "Total Buildable (FAR)" },
-		{ id: "density-duf", label: "Density (DUF)" },
-		{ id: "zoning-district-consistency", label: "Zoning District Consistency" },
-		{ id: "assemblage-contamination-risk", label: "Assemblage Contamination Risk" },
-		{ id: "fema-flood-map", label: "FEMA Flood Map" },
-		{ id: "transit-zone-map", label: "Transit Zone Map" },
-	];
 
 	return (
 		<div className="p-8">
@@ -1020,21 +1164,172 @@ export default function AssemblageReportViewPage() {
 						)}
 						<div className="pt-6 border-t border-[rgba(55,50,47,0.12)] space-y-6">
 							{hasMissingBbl ? (
-								<div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
-									<p className="text-amber-800 font-medium mb-2">
-										Missing BBL data for {addressesMissingBbl.length === 1 ? "address" : "addresses"}:{" "}
-										{addressesMissingBbl.join(", ")}
-									</p>
-									<p className="text-sm text-amber-800 mb-3">
-										We can&apos;t automatically calculate the following for this assemblage. Please consider a manual check while we improve this feature and experience.
-									</p>
-									<ul className="text-sm text-amber-800 list-disc list-inside space-y-1">
-										<li>Combined Lot Area</li>
-										<li>Total Buildable (FAR)</li>
-										<li>Density (DUF)</li>
-										<li>Zoning District Consistency</li>
-										<li>Assemblage Contamination Risk</li>
-									</ul>
+								<div id="merged-scenario" className="space-y-6 scroll-mt-8">
+									<div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
+										<p className="text-amber-800 font-medium mb-2">
+											Missing BBL data for {addressesMissingBbl.length === 1 ? "address" : "addresses"}:{" "}
+											{addressesMissingBbl.join(", ")}
+										</p>
+										<p className="text-sm text-amber-800 mb-3">
+											We can&apos;t automatically calculate Combined Lot Area, Total Buildable (FAR), Density (DUF), Zoning District Consistency, or Assemblage Contamination Risk. You can enter data for the missing lot below to see a merged scenario (Zoning Lot Merger).
+										</p>
+									</div>
+									{/* Scenario form: ghost lot inputs */}
+									<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4">
+										<h4 className="text-[#37322F] font-semibold mb-3">Scenario — missing lot data</h4>
+										<p className="text-sm text-[#605A57] mb-4">
+											Enter data for the missing lot to simulate a merged zoning lot and see Combined Lot Area, Total Building Budget, Remaining Buildable Floor Area, and Density (ZR § 23-52).
+										</p>
+										<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+											<div>
+												<Label htmlFor="ghost-lot-area" className="text-sm text-[#605A57]">Lot Area (sq ft)</Label>
+												<Input
+													id="ghost-lot-area"
+													type="number"
+													min={0}
+													step={1}
+													placeholder="e.g. 2000"
+													className="mt-1 bg-white border-[rgba(55,50,47,0.2)]"
+													value={ghostLot.lotAreaSqft === "" ? "" : ghostLot.lotAreaSqft}
+													onChange={(e) => {
+														const v = e.target.value;
+														setGhostLot((prev) => ({
+															...prev,
+															lotAreaSqft: v === "" ? "" : Math.max(0, Number(v)) || 0,
+														}));
+													}}
+												/>
+											</div>
+											<div>
+												<Label htmlFor="ghost-existing-floor" className="text-sm text-[#605A57]">Existing Floor Area (sq ft)</Label>
+												<Input
+													id="ghost-existing-floor"
+													type="number"
+													min={0}
+													step={1}
+													placeholder="e.g. 0"
+													className="mt-1 bg-white border-[rgba(55,50,47,0.2)]"
+													value={ghostLot.existingFloorAreaSqft === "" ? "" : ghostLot.existingFloorAreaSqft}
+													onChange={(e) => {
+														const v = e.target.value;
+														setGhostLot((prev) => ({
+															...prev,
+															existingFloorAreaSqft: v === "" ? "" : Math.max(0, Number(v)) || 0,
+														}));
+													}}
+												/>
+											</div>
+											<div>
+												<Label htmlFor="ghost-zoning" className="text-sm text-[#605A57]">Zoning District</Label>
+												<Input
+													id="ghost-zoning"
+													type="text"
+													placeholder="e.g. R6, R7-2"
+													className="mt-1 bg-white border-[rgba(55,50,47,0.2)]"
+													value={ghostLot.zoningDistrict}
+													onChange={(e) =>
+														setGhostLot((prev) => ({ ...prev, zoningDistrict: e.target.value }))
+													}
+												/>
+											</div>
+											<div>
+												<Label htmlFor="ghost-contiguity" className="text-sm text-[#605A57]">Contiguity (Linear Ft)</Label>
+												<Input
+													id="ghost-contiguity"
+													type="number"
+													min={0}
+													step={1}
+													placeholder={`min ${CONTIGUITY_MIN_FT} ft`}
+													className="mt-1 bg-white border-[rgba(55,50,47,0.2)]"
+													value={ghostLot.contiguityLinearFt === "" ? "" : ghostLot.contiguityLinearFt}
+													onChange={(e) => {
+														const v = e.target.value;
+														setGhostLot((prev) => ({
+															...prev,
+															contiguityLinearFt: v === "" ? "" : Math.max(0, Number(v)) || 0,
+														}));
+													}}
+												/>
+											</div>
+										</div>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											className="mt-4"
+											onClick={() =>
+												setGhostLot({
+													lotAreaSqft: "",
+													existingFloorAreaSqft: "",
+													zoningDistrict: "",
+													contiguityLinearFt: "",
+												})
+											}
+										>
+											Clear scenario
+										</Button>
+									</div>
+									{/* Merged scenario results */}
+									{mergedScenario && (
+										<div className="rounded-lg bg-[#F9F8F6] border border-[rgba(55,50,47,0.08)] p-4 space-y-4">
+											<h4 className="text-[#37322F] font-semibold">Merged scenario results</h4>
+											{(mergedScenario.zoningMismatch || mergedScenario.contiguityLow) && (
+												<div className="space-y-2">
+													{mergedScenario.zoningMismatch && (
+														<p className="text-amber-700 text-sm">
+															Different primary zoning districts (known lot vs scenario). Merger may not be permitted or may require special review.
+														</p>
+													)}
+													{mergedScenario.contiguityLow && (
+														<p className="text-amber-700 text-sm">
+															Contiguity below {CONTIGUITY_MIN_FT} ft; lots may not be eligible for zoning lot merger.
+														</p>
+													)}
+												</div>
+											)}
+											<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+												<div>
+													<p className="text-[#605A57] mb-1">Combined Lot Area</p>
+													<p className="text-[#37322F] font-medium">
+														{mergedScenario.combinedLotAreaSqft.toLocaleString()} sq ft
+													</p>
+												</div>
+												<div>
+													<p className="text-[#605A57] mb-1">Total Building Budget (FAR × combined)</p>
+													<p className="text-[#37322F] font-medium">
+														{mergedScenario.totalBuildingBudgetSqft.toLocaleString()} sq ft
+													</p>
+													<p className="text-xs text-[#605A57] mt-0.5">
+														FAR {mergedScenario.effectiveFAR} × {mergedScenario.combinedLotAreaSqft.toLocaleString()} sq ft
+													</p>
+												</div>
+												<div>
+													<p className="text-[#605A57] mb-1">Total Existing Floor Area</p>
+													<p className="text-[#37322F] font-medium">
+														{mergedScenario.totalExistingFloorAreaSqft.toLocaleString()} sq ft
+													</p>
+												</div>
+												<div>
+													<p className="text-[#605A57] mb-1">Remaining Buildable Floor Area</p>
+													<p className="text-[#37322F] font-medium">
+														{mergedScenario.remainingBuildableSqft.toLocaleString()} sq ft
+													</p>
+												</div>
+												<div>
+													<p className="text-[#605A57] mb-1">Density (max dwelling units, ZR § 23-52)</p>
+													<p className="text-[#37322F] font-medium">
+														{mergedScenario.mergedUnits} units
+													</p>
+													<p className="text-xs text-[#605A57] mt-0.5">
+														Building budget ÷ DUF {mergedScenario.duf}; fraction ≥ 0.75 rounds up.
+													</p>
+												</div>
+											</div>
+											<p className="text-xs text-[#605A57]">
+												<a href="https://zr.planning.nyc.gov/article-ii/chapter-3#23-52" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">ZR § 23-52</a> — DUF and rounding apply to merged lot. These figures are estimates for planning only; consult a qualified professional.
+											</p>
+										</div>
+									)}
 								</div>
 							) : (
 							<>

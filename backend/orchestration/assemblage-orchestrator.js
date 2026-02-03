@@ -226,6 +226,11 @@ export async function generateAssemblageReport(
 				unitsresNum != null && !Number.isNaN(unitsresNum) && unitsresNum > 0
 					? Math.floor(unitsresNum) * 3
 					: null;
+			// Existing floor area (bldgarea from MapPLUTO) for "remaining buildable" and scenario merging
+			const bldgarea =
+				zolaPayload?.bldgarea != null ? Number(zolaPayload.bldgarea) : null;
+			const existingFloorAreaSqft =
+				bldgarea != null && !Number.isNaN(bldgarea) && bldgarea >= 0 ? bldgarea : null;
 			lots.push({
 				childIndex: ctx.childIndex,
 				address: ctx.address,
@@ -241,6 +246,7 @@ export async function generateAssemblageReport(
 				zoningDistrictCandidates,
 				farCandidates,
 				refuseExemptionMaxSqft,
+				existingFloorAreaSqft,
 			});
 		}
 
