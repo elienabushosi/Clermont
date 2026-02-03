@@ -32,6 +32,7 @@ interface AssemblageLot {
 	lotBuildableSqft?: number | null;
 	farMethod?: string;
 	requires_manual_review?: boolean;
+	refuseExemptionMaxSqft?: number | null;
 }
 
 interface PerLotDensityBreakdown {
@@ -1103,6 +1104,27 @@ export default function AssemblageReportViewPage() {
 									{missingCount !== 1 ? "s" : ""}.
 								</p>
 							)}
+							{/* FAR assumptions & citations */}
+							<div className="rounded-lg bg-[#F9F8F6]/60 border border-[rgba(55,50,47,0.08)] p-4">
+								<p className="text-xs text-[#605A57] mb-2">
+									We use standard FAR per NYC Zoning Resolution. Higher FAR may apply for qualifying residential sites, qualifying affordable or senior housing, or lots within 100 ft of a wide street. For lots with multiple zoning districts we use the lowest applicable FAR; manual review recommended.
+								</p>
+								<div className="flex flex-wrap gap-x-3 gap-y-1 text-xs mb-2">
+									<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-20" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-20]</a>
+									<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-21" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-21]</a>
+									<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-22" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-22]</a>
+									<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-23" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-23]</a>
+								</div>
+								{(() => {
+									const totalRefuseExemption = lots.reduce((sum, l) => sum + (l.refuseExemptionMaxSqft ?? 0), 0);
+									return totalRefuseExemption > 0 ? (
+									<p className="text-xs text-[#605A57]">
+										Potential exemption (refuse): up to {totalRefuseExemption.toLocaleString()} sq ft total across lots{" "}
+										<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-233" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-233]</a>
+									</p>
+									) : null;
+								})()}
+							</div>
 							{/* Density (DUF) cap */}
 							{aggregation?.density?.candidates && aggregation.density.candidates.length > 0 && (() => {
 								const defaultId = aggregation.density!.default_candidate_id ?? "duf_applies";

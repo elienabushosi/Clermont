@@ -65,21 +65,29 @@ The agent reads data from multiple stored sources:
 
 ### Maximum FAR (Floor Area Ratio)
 
-**Method**: Hardcoded lookup table for residential districts
+**Method**: Hardcoded lookup table per NYC Zoning Resolution **standard** zoning lots (R1–R5) and **standard** residences (R6–R12) only.
 
-**Supported Districts**:
+**Source**: [ZR § 23-20](https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-20) (intro), [ZR § 23-21](https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-21) (R1–R5), [ZR § 23-22](https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-22) (R6–R12).
 
--   **R1-R5** (Low density): 0.5 - 1.25 FAR
--   **R6** (Medium density): 2.43 FAR (contextual variants: R6A = 3.0, R6B = 2.0)
--   **R7** (Medium-high density): 3.44 FAR (contextual variants: R7A = 4.0, R7B = 3.0)
--   **R8** (High density): 6.02 FAR (contextual variants: R8A = 7.2, R8B = 4.0)
--   **R9-R12** (Very high density): 7.52 - 12.0 FAR
+**Supported Districts** (representative; many sub-districts listed explicitly):
+
+-   **R1–R5**: 0.75–2.0 FAR (e.g. R1/R1-1/R1-2 = 0.75; R4/R4-1 = 1.5; R5/R5D = 2.0)
+-   **R6**: 2.2 base; R6A/R61/R6-1/R7B = 3.0; R6B = 2.0; R6D/R6-2 = 2.5
+-   **R7**: R7/R7-1/R7-2 = 3.44; R7A/R7-11/R7-21 = 4.0; R7D = 4.66; R7X/R7-3 = 5.0
+-   **R8**: 6.02 (R8/R8A/R8X); R8B = 4.0
+-   **R9–R12**: R9/R9A = 7.52; R9D/R9X/R9-1 = 9.0; R10 = 10; R11 = 12; R12 = 15
 
 **Matching Logic**:
 
-1. Exact match (e.g., "R8" → 6.02)
-2. Base district match (e.g., "R7-2" → matches "R7" → 3.44)
+1. Exact match (e.g. "R7-2" → 3.44, "R9X" → 9.0)
+2. Base district fallback for minor variants not in lookup
 3. Returns `null` if district not supported
+
+**FAR assumptions & limitations** (see report view for user-facing citations):
+
+-   We use the **standard** FAR column only. Higher FAR may apply for qualifying residential sites (R1–R5), qualifying affordable or senior housing (R6–R12), or lots within 100 ft of a wide street; we do not have data to apply those.
+-   For lots with multiple zoning districts (zonedist1–4), we use the **lowest** applicable FAR and flag for manual review.
+-   Special floor area exemptions (ZR § 23-23: amenities, corridors, refuse, elevated ground floor) are not applied to the buildable calculation. We optionally expose a **refuse exemption** (up to 3 sq ft per dwelling unit per [ZR § 23-233](https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-233)) as informational only.
 
 ### Maximum Lot Coverage
 

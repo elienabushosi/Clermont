@@ -9,7 +9,8 @@ export class ZoningResolutionAgent extends BaseAgent {
 	}
 
 	/**
-	 * Get max FAR for residential district (hardcoded lookup)
+	 * Get max FAR for residential district (hardcoded lookup per NYC Zoning Resolution).
+	 * Values from ZR § 23-21 (R1–R5) and § 23-22 (R6–R12), standard zoning lots / standard residences only.
 	 * @param {string} district - Zoning district code (e.g., "R6", "R7-2", "R8A")
 	 * @returns {Object} FAR data with value, profile, and assumptions
 	 */
@@ -20,69 +21,74 @@ export class ZoningResolutionAgent extends BaseAgent {
 
 		const normalized = district.trim().toUpperCase();
 
-		// Hardcoded FAR lookup for common residential districts
+		// FAR lookup per NYC Zoning Resolution § 23-21 (R1–R5) and § 23-22 (R6–R12), standard column only.
 		// Format: { district: { far: number, profile: string, contextual: boolean } }
 		const farLookup = {
-			// R1-R5 (low density)
-			R1: { far: 0.5, profile: "R1", contextual: false },
-			R1A: { far: 0.5, profile: "R1A", contextual: false },
-			R1B: { far: 0.5, profile: "R1B", contextual: false },
-			R2: { far: 0.5, profile: "R2", contextual: false },
-			R2A: { far: 0.5, profile: "R2A", contextual: false },
-			R2B: { far: 0.5, profile: "R2B", contextual: false },
-			R2X: { far: 0.5, profile: "R2X", contextual: false },
-			R3: { far: 0.5, profile: "R3", contextual: false },
-			R3A: { far: 0.5, profile: "R3A", contextual: false },
-			R3B: { far: 0.5, profile: "R3B", contextual: false },
-			R3X: { far: 0.5, profile: "R3X", contextual: false },
-			R4: { far: 0.75, profile: "R4", contextual: false },
-			R4A: { far: 0.75, profile: "R4A", contextual: false },
-			R4B: { far: 0.75, profile: "R4B", contextual: false },
-			R4X: { far: 0.75, profile: "R4X", contextual: false },
-			R5: { far: 1.25, profile: "R5", contextual: false },
-			R5A: { far: 1.25, profile: "R5A", contextual: false },
-			R5B: { far: 1.25, profile: "R5B", contextual: false },
-			R5D: { far: 1.25, profile: "R5D", contextual: false },
-			R5X: { far: 1.25, profile: "R5X", contextual: false },
+			// R1–R5 per ZR § 23-21 (standard zoning lots)
+			R1: { far: 0.75, profile: "R1", contextual: false },
+			R1A: { far: 0.75, profile: "R1A", contextual: false },
+			R1B: { far: 0.75, profile: "R1B", contextual: false },
+			"R1-1": { far: 0.75, profile: "R1-1", contextual: false },
+			"R1-2": { far: 0.75, profile: "R1-2", contextual: false },
+			"R1-2A": { far: 0.75, profile: "R1-2A", contextual: false },
+			R2: { far: 1.0, profile: "R2", contextual: false },
+			R2A: { far: 1.0, profile: "R2A", contextual: false },
+			R2B: { far: 1.0, profile: "R2B", contextual: false },
+			R2X: { far: 1.0, profile: "R2X", contextual: false },
+			R3: { far: 1.0, profile: "R3", contextual: false },
+			R3A: { far: 1.0, profile: "R3A", contextual: false },
+			R3B: { far: 1.0, profile: "R3B", contextual: false },
+			R3X: { far: 1.0, profile: "R3X", contextual: false },
+			"R3-1": { far: 1.0, profile: "R3-1", contextual: false },
+			"R3-2": { far: 1.0, profile: "R3-2", contextual: false },
+			R4: { far: 1.5, profile: "R4", contextual: false },
+			R4A: { far: 1.5, profile: "R4A", contextual: false },
+			R4B: { far: 1.5, profile: "R4B", contextual: false },
+			R4X: { far: 1.5, profile: "R4X", contextual: false },
+			"R4-1": { far: 1.5, profile: "R4-1", contextual: false },
+			R5: { far: 2.0, profile: "R5", contextual: false },
+			R5A: { far: 2.0, profile: "R5A", contextual: false },
+			R5B: { far: 2.0, profile: "R5B", contextual: false },
+			R5D: { far: 2.0, profile: "R5D", contextual: false },
+			R5X: { far: 2.0, profile: "R5X", contextual: false },
 
-			// R6 (medium density)
-			R6: { far: 2.43, profile: "R6", contextual: false },
+			// R6–R12 per ZR § 23-22 (standard residences; narrow street where applicable)
+			R6: { far: 2.2, profile: "R6", contextual: false },
 			R6A: { far: 3.0, profile: "R6A", contextual: true },
-			R6B: { far: 2.0, profile: "R6B", contextual: true },
-			R6X: { far: 2.43, profile: "R6X", contextual: false },
-
-			// R7 (medium-high density)
-			R7: { far: 3.44, profile: "R7", contextual: false },
-			R7A: { far: 4.0, profile: "R7A", contextual: true },
+			R61: { far: 3.0, profile: "R61", contextual: true },
+			"R6-1": { far: 3.0, profile: "R6-1", contextual: true },
 			R7B: { far: 3.0, profile: "R7B", contextual: true },
-			R7D: { far: 3.44, profile: "R7D", contextual: false },
-			R7X: { far: 3.44, profile: "R7X", contextual: false },
-
-			// R8 (high density)
+			R6B: { far: 2.0, profile: "R6B", contextual: true },
+			R6D: { far: 2.5, profile: "R6D", contextual: false },
+			"R6-2": { far: 2.5, profile: "R6-2", contextual: false },
+			R6X: { far: 2.2, profile: "R6X", contextual: false },
+			R7: { far: 3.44, profile: "R7", contextual: false },
+			"R7-1": { far: 3.44, profile: "R7-1", contextual: false },
+			"R7-2": { far: 3.44, profile: "R7-2", contextual: false },
+			R7A: { far: 4.0, profile: "R7A", contextual: true },
+			"R7-11": { far: 4.0, profile: "R7-11", contextual: true },
+			"R7-21": { far: 4.0, profile: "R7-21", contextual: true },
+			R7D: { far: 4.66, profile: "R7D", contextual: false },
+			R7X: { far: 5.0, profile: "R7X", contextual: false },
+			"R7-3": { far: 5.0, profile: "R7-3", contextual: false },
 			R8: { far: 6.02, profile: "R8", contextual: false },
-			R8A: { far: 7.2, profile: "R8A", contextual: true },
-			R8B: { far: 4.0, profile: "R8B", contextual: true },
+			R8A: { far: 6.02, profile: "R8A", contextual: true },
 			R8X: { far: 6.02, profile: "R8X", contextual: false },
-
-			// R9 (very high density)
+			R8B: { far: 4.0, profile: "R8B", contextual: true },
 			R9: { far: 7.52, profile: "R9", contextual: false },
-			R9A: { far: 8.0, profile: "R9A", contextual: true },
-			R9X: { far: 7.52, profile: "R9X", contextual: false },
-
-			// R10 (very high density)
+			R9A: { far: 7.52, profile: "R9A", contextual: true },
+			R9D: { far: 9.0, profile: "R9D", contextual: false },
+			R9X: { far: 9.0, profile: "R9X", contextual: false },
+			"R9-1": { far: 9.0, profile: "R9-1", contextual: false },
 			R10: { far: 10.0, profile: "R10", contextual: false },
 			R10A: { far: 10.0, profile: "R10A", contextual: true },
 			R10X: { far: 10.0, profile: "R10X", contextual: false },
-
-			// R11 (very high density)
 			R11: { far: 12.0, profile: "R11", contextual: false },
 			R11A: { far: 12.0, profile: "R11A", contextual: true },
 			R11X: { far: 12.0, profile: "R11X", contextual: false },
-
-			// R12 (very high density)
-			R12: { far: 12.0, profile: "R12", contextual: false },
-			R12A: { far: 12.0, profile: "R12A", contextual: true },
-			R12X: { far: 12.0, profile: "R12X", contextual: false },
+			R12: { far: 15.0, profile: "R12", contextual: false },
+			R12A: { far: 15.0, profile: "R12A", contextual: true },
+			R12X: { far: 15.0, profile: "R12X", contextual: false },
 		};
 
 		// Check exact match first
@@ -94,8 +100,7 @@ export class ZoningResolutionAgent extends BaseAgent {
 			};
 		}
 
-		// Try to match base district (e.g., "R7-2" -> "R7", "R8A" -> "R8")
-		// Match pattern: R followed by digits, optionally followed by dash and more chars
+		// Fallback: match base district (e.g. unknown suffix) so we don't return null for minor variants
 		const baseMatch = normalized.match(/^(R\d+)[-A-ZX]*/);
 		if (baseMatch && farLookup[baseMatch[1]]) {
 			const base = farLookup[baseMatch[1]];
@@ -103,7 +108,7 @@ export class ZoningResolutionAgent extends BaseAgent {
 				far: base.far,
 				profile: base.profile,
 				contextual: base.contextual,
-				assumption: `District ${normalized} not in lookup; using base ${baseMatch[1]} FAR`,
+				assumption: `District ${normalized} not in lookup; using base ${baseMatch[1]} FAR (ZR § 23-21 / 23-22).`,
 			};
 		}
 
@@ -192,15 +197,26 @@ export class ZoningResolutionAgent extends BaseAgent {
 
 	/**
 	 * Determine lot type (corner vs interior/through)
-	 * @param {Object} zolaData - Zola source data
+	 * Uses corner_code from Geoservice ContentJson: if empty → interior (confident); otherwise → corner.
+	 * @param {Object} zolaData - Zola source data (unused; kept for signature)
+	 * @param {string|null|undefined} cornerCode - From geoservice ContentJson (e.g. "SE" = corner on that facing)
 	 * @returns {Object} Lot type with flag and assumption
 	 */
-	determineLotType(zolaData) {
-		// V1: Default to interior/through if no reliable indicator
-		// In future, could check for corner lot indicators in PLUTO
+	determineLotType(zolaData, cornerCode) {
+		const hasCornerCode =
+			cornerCode != null &&
+			typeof cornerCode === "string" &&
+			cornerCode.trim().length > 0;
+		if (hasCornerCode) {
+			return {
+				lotType: "corner",
+				assumption: null,
+			};
+		}
+		// Empty or absent corner_code → confident interior/through
 		return {
 			lotType: "interior_or_through",
-			assumption: "Lot type unknown; assumed interior/through",
+			assumption: null,
 		};
 	}
 
@@ -1089,7 +1105,7 @@ export class ZoningResolutionAgent extends BaseAgent {
 			derived.maxBuildableFloorAreaSqft = maxFAR * lotArea;
 		}
 
-		// Remaining buildable floor area
+		// Remaining buildable floor area (FAR-based; independent of lot coverage)
 		if (
 			derived.maxBuildableFloorAreaSqft !== undefined &&
 			bldgarea !== null &&
@@ -1098,7 +1114,7 @@ export class ZoningResolutionAgent extends BaseAgent {
 			const remaining = derived.maxBuildableFloorAreaSqft - bldgarea;
 			derived.remainingBuildableFloorAreaSqft = Math.max(0, remaining);
 			if (derived.remainingBuildableFloorAreaSqft === 0) {
-				derived.remainingFloorAreaMessage = "FAR limit reached already";
+				derived.remainingFloorAreaMessage = "FAR limit reached (existing floor area meets or exceeds max permitted); lot coverage limits footprint separately";
 			}
 		}
 
@@ -2710,13 +2726,18 @@ export class ZoningResolutionAgent extends BaseAgent {
 				}
 			}
 
-			// Extract community district from geoservice or zola
+			// Extract community district and corner_code from geoservice
 			let communityDistrict = null;
+			let cornerCode = null;
 			if (geoserviceSource && geoserviceSource.ContentJson) {
 				const geoserviceData = geoserviceSource.ContentJson;
 				communityDistrict =
 					geoserviceData.extracted?.communityDistrict ||
 					geoserviceData.communityDistrict ||
+					null;
+				cornerCode =
+					geoserviceData.corner_code ??
+					geoserviceData.extracted?.corner_code ??
 					null;
 			}
 			// Fallback to Zola CD field
@@ -2857,8 +2878,8 @@ export class ZoningResolutionAgent extends BaseAgent {
 				};
 			}
 
-			// Determine lot type and building type
-			const lotTypeResult = this.determineLotType(zolaData);
+			// Determine lot type (corner_code from Geoservice: empty → interior, otherwise → corner) and building type
+			const lotTypeResult = this.determineLotType(zolaData, cornerCode);
 			const buildingTypeResult = this.determineBuildingType(bldgclass);
 
 			// Get controlling FAR (supports multiple zoning districts: use lowest FAR, flag for review)
@@ -3015,7 +3036,8 @@ export class ZoningResolutionAgent extends BaseAgent {
 				}
 			}
 
-			// Build flags
+			// Build flags (lotTypeInferred = true only when we had no Geoservice corner_code data)
+			const hadGeoserviceForLotType = !!(geoserviceSource && geoserviceSource.ContentJson);
 			const flags = {
 				hasOverlay: !!(overlay1 || overlay2),
 				hasSpecialDistrict: !!(spdist1 || spdist2 || spdist3),
@@ -3025,7 +3047,7 @@ export class ZoningResolutionAgent extends BaseAgent {
 					zolaData.zonedist4
 				),
 				farRequiresManualReview: farControl.requires_manual_review,
-				lotTypeInferred: true,
+				lotTypeInferred: !hadGeoserviceForLotType,
 				buildingTypeInferred: !!buildingTypeResult.assumption,
 				eligibleSiteNotEvaluated:
 					lotCoverageResult.eligibleSiteNotEvaluated || false,
@@ -3070,6 +3092,10 @@ export class ZoningResolutionAgent extends BaseAgent {
 				"Yard requirements are best-effort defaults; multiple modifications may apply; see notes and citations."
 			);
 
+			// ZR § 23-233: refuse storage/disposal exempt up to 3 sq ft per dwelling unit
+			const refuseExemptionMaxSqft =
+				unitsres != null && unitsres > 0 ? Math.floor(unitsres) * 3 : null;
+
 			// Build result object (do not remove or rename existing fields)
 			const result = {
 				district: district,
@@ -3079,6 +3105,7 @@ export class ZoningResolutionAgent extends BaseAgent {
 				buildingType: buildingTypeResult.buildingType,
 				maxFar: maxFAR,
 				maxLotCoverage: maxLotCoverage,
+				refuseExemptionMaxSqft,
 				zoningDistrictCandidates: farControl.zoningDistrictCandidates,
 				farCandidates: farControl.farCandidates,
 				farMethod: farControl.farMethod,

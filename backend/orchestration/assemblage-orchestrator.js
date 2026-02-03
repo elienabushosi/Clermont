@@ -219,6 +219,13 @@ export async function generateAssemblageReport(
 			}
 
 			const zonedist1 = zolaPayload?.zonedist1 ?? null;
+			// ZR § 23-233: refuse storage/disposal exempt up to 3 sq ft per dwelling unit
+			const unitsresNum =
+				zolaPayload?.unitsres != null ? Number(zolaPayload.unitsres) : null;
+			const refuseExemptionMaxSqft =
+				unitsresNum != null && !Number.isNaN(unitsresNum) && unitsresNum > 0
+					? Math.floor(unitsresNum) * 3
+					: null;
 			lots.push({
 				childIndex: ctx.childIndex,
 				address: ctx.address,
@@ -233,6 +240,7 @@ export async function generateAssemblageReport(
 				requires_manual_review,
 				zoningDistrictCandidates,
 				farCandidates,
+				refuseExemptionMaxSqft,
 			});
 		}
 

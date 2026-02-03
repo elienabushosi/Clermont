@@ -1251,6 +1251,24 @@ export default function ViewReportPage() {
 															)}
 														</p>
 													)}
+													{/* FAR assumptions & citations */}
+													<div className="mt-3 pt-3 border-t border-[rgba(55,50,47,0.08)]">
+														<p className="text-xs text-[#605A57] mb-2">
+															We use standard FAR per NYC Zoning Resolution. Higher FAR may apply for qualifying residential sites, qualifying affordable or senior housing, or lots within 100 ft of a wide street. For lots with multiple zoning districts we use the lowest applicable FAR; manual review recommended.
+														</p>
+														<div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+															<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-20" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-20]</a>
+															<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-21" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-21]</a>
+															<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-22" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-22]</a>
+															<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-23" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-23]</a>
+														</div>
+														{formattedData.zoningResolution.refuseExemptionMaxSqft != null && formattedData.zoningResolution.refuseExemptionMaxSqft > 0 && (
+															<p className="text-xs text-[#605A57] mt-2">
+																Potential exemption (refuse): up to {formattedData.zoningResolution.refuseExemptionMaxSqft.toLocaleString()} sq ft{" "}
+																<a href="https://zr.planning.nyc.gov/index.php/article-ii/chapter-3/23-233" target="_blank" rel="noopener noreferrer" className="text-[#4090C2] hover:underline">See Citation [ZR § 23-233]</a>
+															</p>
+														)}
+													</div>
 												</div>
 											)}
 
@@ -1271,26 +1289,29 @@ export default function ViewReportPage() {
 														%
 													</p>
 													<div className="flex items-center gap-4 mt-2">
-														<div>
-															<p className="text-xs text-[#605A57] mb-1">
-																Lot Type
-															</p>
-															<Badge className="bg-gray-100 text-gray-700 border-gray-200">
-																{formattedData.zoningResolution.lotType
-																	?.replace(
-																		/_/g,
-																		" "
-																	)
-																	.replace(
-																		/\b\w/g,
-																		(
-																			l: string
-																		) =>
-																			l.toUpperCase()
-																	) ||
-																	"Unknown"}
-															</Badge>
-														</div>
+														{/* Lot Type badge only when corner_code (Geoservice) was used; hide when inferred */}
+														{!formattedData.zoningResolution.flags?.lotTypeInferred && (
+															<div>
+																<p className="text-xs text-[#605A57] mb-1">
+																	Lot Type
+																</p>
+																<Badge className="bg-gray-100 text-gray-700 border-gray-200">
+																	{formattedData.zoningResolution.lotType
+																		?.replace(
+																			/_/g,
+																			" "
+																		)
+																		.replace(
+																			/\b\w/g,
+																			(
+																				l: string
+																			) =>
+																				l.toUpperCase()
+																		) ||
+																		"Unknown"}
+																</Badge>
+															</div>
+														)}
 														<div>
 															<p className="text-xs text-[#605A57] mb-1">
 																Building Type
@@ -1321,8 +1342,11 @@ export default function ViewReportPage() {
 											{formattedData.zoningResolution
 												.derived && (
 												<div className="pt-4 border-t border-[rgba(55,50,47,0.12)]">
-													<p className="text-sm font-semibold text-[#37322F] mb-3">
+													<p className="text-sm font-semibold text-[#37322F] mb-1">
 														Derived Calculations
+													</p>
+													<p className="text-xs text-[#605A57] mb-3">
+														Remaining buildable is based on FAR (floor area). Max lot coverage above limits footprint separately.
 													</p>
 													<div className="grid grid-cols-2 gap-4">
 														{formattedData
