@@ -382,24 +382,26 @@ export default function ViewReportPage() {
 								</Badge>
 							)}
 						</div>
-						<div className="flex items-center gap-2">
-							<Label
-								htmlFor="debug-toggle"
-								className="text-sm text-[#605A57] cursor-pointer"
-							>
-								{showDebugMode ? "Debug" : "Pretty"}
-							</Label>
-							<Switch
-								id="debug-toggle"
-								checked={showDebugMode}
-								onCheckedChange={setShowDebugMode}
-								className={
-									showDebugMode
-										? "data-[state=checked]:bg-blue-600"
-										: "data-[state=unchecked]:bg-[#37322F] data-[state=unchecked]:border-[#37322F]"
-								}
-							/>
-						</div>
+						{process.env.NODE_ENV !== "production" && (
+							<div className="flex items-center gap-2">
+								<Label
+									htmlFor="debug-toggle"
+									className="text-sm text-[#605A57] cursor-pointer"
+								>
+									{showDebugMode ? "Debug" : "Pretty"}
+								</Label>
+								<Switch
+									id="debug-toggle"
+									checked={showDebugMode}
+									onCheckedChange={setShowDebugMode}
+									className={
+										showDebugMode
+											? "data-[state=checked]:bg-blue-600"
+											: "data-[state=unchecked]:bg-[#37322F] data-[state=unchecked]:border-[#37322F]"
+									}
+								/>
+							</div>
+						)}
 					</div>
 				</div>
 
