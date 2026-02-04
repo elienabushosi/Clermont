@@ -60,6 +60,101 @@ export default function ViewReportPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [showDebugMode, setShowDebugMode] = useState(false); // false = pretty mode (default), true = debug mode
 	const [densityCandidateId, setDensityCandidateId] = useState<string>("duf_applies"); // Default to "DUF applies"
+	const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+
+	// Intersection Observer + scroll listener: highlight TOC item for the section currently in view
+	useEffect(() => {
+		if (showDebugMode) return;
+		const sectionIds = [
+			"property-location",
+			"property-level-information",
+			"lot-details",
+			"zoning-classification",
+			"zoning-constraints-height",
+			"zoning-constraints",
+			"fema-flood-map",
+			"transit-zone-map",
+			"neighborhood-information",
+		];
+
+		const updateActive = () => {
+			const tops = sectionIds
+				.map((id) => {
+					const el = document.getElementById(id);
+					if (!el) return { id, top: Infinity, bottom: -Infinity };
+					const rect = el.getBoundingClientRect();
+					return { id, top: rect.top, bottom: rect.bottom };
+				})
+				.filter((x) => Number.isFinite(x.top));
+			
+			if (tops.length === 0) return;
+
+			// Find the section that is currently "active" (in the top portion of viewport)
+			// Priority: section whose top is between 0-150px (accounting for sticky header)
+			const headerOffset = 100;
+			const activeZone = tops.filter((x) => x.top >= headerOffset && x.top <= headerOffset + 200);
+			
+			let active: typeof tops[0] | null = null;
+			if (activeZone.length > 0) {
+				// Pick the one closest to the header offset
+				active = activeZone.sort((a, b) => Math.abs(a.top - headerOffset) - Math.abs(b.top - headerOffset))[0];
+			} else {
+				// If none in active zone, pick the topmost section that's above the viewport or just entered
+				const aboveOrJustEntered = tops.filter((x) => x.top <= headerOffset + 50);
+				if (aboveOrJustEntered.length > 0) {
+					active = aboveOrJustEntered.sort((a, b) => b.top - a.top)[0];
+				} else {
+					// Fallback: first section that's visible
+					const visible = tops.filter((x) => x.top < window.innerHeight && x.bottom > 0);
+					if (visible.length > 0) {
+						active = visible.sort((a, b) => a.top - b.top)[0];
+					}
+				}
+			}
+			
+			if (active) setActiveSectionId(active.id);
+		};
+
+		// Throttled scroll handler for smooth updates
+		let scrollTimeout: NodeJS.Timeout | null = null;
+		const handleScroll = () => {
+			if (scrollTimeout) return;
+			scrollTimeout = setTimeout(() => {
+				updateActive();
+				scrollTimeout = null;
+			}, 50); // Update every 50ms during scroll
+		};
+
+		// Intersection Observer as backup/initial detection
+		const io = new IntersectionObserver(
+			() => updateActive(),
+			{ rootMargin: "-100px 0px -50% 0px", threshold: 0 }
+		);
+
+		for (const id of sectionIds) {
+			const el = document.getElementById(id);
+			if (el) io.observe(el);
+		}
+		
+		// Initial update
+		updateActive();
+		
+		// Listen to scroll events
+		window.addEventListener("scroll", handleScroll, { passive: true });
+		
+		return () => {
+			io.disconnect();
+			window.removeEventListener("scroll", handleScroll);
+			if (scrollTimeout) clearTimeout(scrollTimeout);
+		};
+	}, [showDebugMode]);
+
+	const handleTocClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+		e.preventDefault();
+		setActiveSectionId(id);
+		const el = document.getElementById(id);
+		el?.scrollIntoView({ behavior: "smooth", block: "start" });
+	};
 
 	useEffect(() => {
 		const fetchReport = async () => {
@@ -2436,7 +2531,12 @@ export default function ViewReportPage() {
 									<a
 										key={id}
 										href={`#${id}`}
-										className="block text-sm text-[#37322F] hover:text-[#4090C2] hover:underline py-0.5"
+										onClick={(e) => handleTocClick(e, id)}
+										className={`block text-sm py-0.5 pl-2 -ml-0.5 border-l-2 transition-colors ${
+											activeSectionId === id
+												? "border-[#4090C2] text-[#4090C2] font-medium"
+												: "border-transparent text-[#37322F] hover:text-[#4090C2] hover:underline"
+										}`}
 									>
 										{label}
 									</a>

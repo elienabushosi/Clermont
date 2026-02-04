@@ -356,6 +356,7 @@ export default function AssemblageReportViewPage() {
 		zoningDistrict: "",
 		contiguityLinearFt: "",
 	});
+	const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
 	useEffect(() => {
 		const fetchReport = async () => {
@@ -459,10 +460,124 @@ export default function AssemblageReportViewPage() {
 			return !hasBbl;
 		});
 		if (hasMissingBbl) {
-			return [...base.slice(0, 2), { id: "merged-scenario", label: "Merged scenario" }, ...base.slice(2)];
+			// Scenario report: hide sections that are covered by "Merged scenario"
+			const excludedInScenario = new Set([
+				"combined-lot-area",
+				"total-buildable-far",
+				"density-duf",
+				"zoning-district-consistency",
+				"assemblage-contamination-risk",
+			]);
+			const filtered = base.filter((s) => !excludedInScenario.has(s.id));
+			const idx = filtered.findIndex((s) => s.id === "property-address-details");
+			const before = filtered.slice(0, idx + 1);
+			const after = filtered.slice(idx + 1);
+			return [...before, { id: "merged-scenario", label: "Merged scenario" }, ...after];
 		}
 		return base;
 	}, [reportData]);
+
+	// Intersection Observer + scroll listener: highlight TOC item for the section currently in view
+	useEffect(() => {
+		if (showDebugMode) return;
+		const baseSectionIds = [
+			"assemblage-map",
+			"property-address-details",
+			"combined-lot-area",
+			"total-buildable-far",
+			"density-duf",
+			"zoning-district-consistency",
+			"assemblage-contamination-risk",
+			"fema-flood-map",
+			"transit-zone-map",
+		];
+		// Include merged-scenario if it exists (when BBL missing)
+		const sectionIds = [...baseSectionIds];
+		if (document.getElementById("merged-scenario")) {
+			sectionIds.splice(2, 0, "merged-scenario");
+		}
+
+		const updateActive = () => {
+			const tops = sectionIds
+				.map((id) => {
+					const el = document.getElementById(id);
+					if (!el) return { id, top: Infinity, bottom: -Infinity };
+					const rect = el.getBoundingClientRect();
+					return { id, top: rect.top, bottom: rect.bottom };
+				})
+				.filter((x) => Number.isFinite(x.top));
+			
+			if (tops.length === 0) return;
+
+			// Find the section that is currently "active" (in the top portion of viewport)
+			// Priority: section whose top is between 0-150px (accounting for sticky header)
+			const headerOffset = 100;
+			const activeZone = tops.filter((x) => x.top >= headerOffset && x.top <= headerOffset + 200);
+			
+			let active: typeof tops[0] | null = null;
+			if (activeZone.length > 0) {
+				// Pick the one closest to the header offset
+				active = activeZone.sort((a, b) => Math.abs(a.top - headerOffset) - Math.abs(b.top - headerOffset))[0];
+			} else {
+				// If none in active zone, pick the topmost section that's above the viewport or just entered
+				const aboveOrJustEntered = tops.filter((x) => x.top <= headerOffset + 50);
+				if (aboveOrJustEntered.length > 0) {
+					active = aboveOrJustEntered.sort((a, b) => b.top - a.top)[0];
+				} else {
+					// Fallback: first section that's visible
+					const visible = tops.filter((x) => x.top < window.innerHeight && x.bottom > 0);
+					if (visible.length > 0) {
+						active = visible.sort((a, b) => a.top - b.top)[0];
+					}
+				}
+			}
+			
+			if (active) setActiveSectionId(active.id);
+		};
+
+		// Throttled scroll handler for smooth updates
+		let scrollTimeout: NodeJS.Timeout | null = null;
+		const handleScroll = () => {
+			if (scrollTimeout) return;
+			scrollTimeout = setTimeout(() => {
+				updateActive();
+				scrollTimeout = null;
+			}, 50); // Update every 50ms during scroll
+		};
+
+		// Intersection Observer as backup/initial detection
+		const io = new IntersectionObserver(
+			() => updateActive(),
+			{ rootMargin: "-100px 0px -50% 0px", threshold: 0 }
+		);
+
+		for (const id of sectionIds) {
+			const el = document.getElementById(id);
+			if (el) io.observe(el);
+		}
+		
+		// Initial update after DOM is ready
+		const initTimeout = setTimeout(() => {
+			updateActive();
+		}, 100);
+		
+		// Listen to scroll events
+		window.addEventListener("scroll", handleScroll, { passive: true });
+		
+		return () => {
+			clearTimeout(initTimeout);
+			io.disconnect();
+			window.removeEventListener("scroll", handleScroll);
+			if (scrollTimeout) clearTimeout(scrollTimeout);
+		};
+	}, [showDebugMode, reportData]);
+
+	const handleTocClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+		e.preventDefault();
+		setActiveSectionId(id);
+		const el = document.getElementById(id);
+		el?.scrollIntoView({ behavior: "smooth", block: "start" });
+	};
 
 	if (isLoading) {
 		return (
@@ -677,6 +792,15 @@ export default function AssemblageReportViewPage() {
 
 	// Addresses from input (always 2 or 3); map geocodes them so both markers always show
 	const assemblageAddresses = displayItems.map((item) => item.address);
+
+	// First address that has coords (for FEMA/Transit maps when some addresses may lack BBL)
+	const firstAvailableCoords = (() => {
+		for (let i = 0; i < displayItems.length; i++) {
+			const coords = getCoordsForLot(i);
+			if (coords) return { ...coords, address: displayItems[i]?.address ?? report.Address ?? "", index: i };
+		}
+		return null;
+	})();
 
 	const DebugJsonBlock = ({ data }: { data: unknown }) => (
 		<div className="bg-[#F7F5F3] rounded-lg p-3 border border-[rgba(55,50,47,0.12)] overflow-x-auto">
@@ -1741,25 +1865,9 @@ export default function AssemblageReportViewPage() {
 									These figures are estimates for planning and feasibility purposes only. They are based on public data (e.g. MapPLUTO) and zoning lookups. Lot area, FAR, and buildable area can be affected by zoning amendments, special districts, and site-specific conditions. Consult a qualified professional for zoning and development decisions.
 								</p>
 							</div>
-
-							{/* FEMA Flood Map */}
-							{(() => {
-								const firstCoords = lots.length > 0 ? getCoordsForLot(0) : null;
-								const lat = firstCoords?.lat ?? null;
-								const lng = firstCoords?.lng ?? null;
-								const femaFloodSource = sources.find((s) => s.SourceKey === "fema_flood");
-								const femaFloodData =
-									femaFloodSource?.ContentJson != null
-										? ((femaFloodSource.ContentJson as { contentJson?: unknown }).contentJson ??
-												femaFloodSource.ContentJson) as {
-												floodZone: string | null;
-												floodZoneLabel: string;
-												matched: boolean;
-												features?: unknown[];
-										  } | null
-										: null;
-								if (lat == null || lng == null) return null;
-								return (
+							{/* FEMA Flood Map & Transit Zone Map: show for first address that has coords (so maps show even when some addresses lack BBL) */}
+							{firstAvailableCoords && (
+								<>
 									<div id="fema-flood-map" className="pt-6 border-t border-[rgba(55,50,47,0.08)] scroll-mt-8">
 										<Card className="bg-[#F9F8F6] border-[rgba(55,50,47,0.12)]">
 											<CardContent className="pt-6">
@@ -1768,34 +1876,24 @@ export default function AssemblageReportViewPage() {
 													FEMA Flood Map
 												</h3>
 												<FemaFloodMap
-													lat={lat}
-													lng={lng}
-													address={report.Address ?? ""}
-													floodZoneData={femaFloodData}
+													lat={firstAvailableCoords.lat}
+													lng={firstAvailableCoords.lng}
+													address={firstAvailableCoords.address}
+													floodZoneData={
+														sources.find((s) => s.SourceKey === "fema_flood")?.ContentJson != null
+															? ((sources.find((s) => s.SourceKey === "fema_flood")!.ContentJson as { contentJson?: unknown }).contentJson ??
+																	sources.find((s) => s.SourceKey === "fema_flood")!.ContentJson) as {
+																	floodZone: string | null;
+																	floodZoneLabel: string;
+																	matched: boolean;
+																	features?: unknown[];
+															  } | null
+															: null
+													}
 												/>
 											</CardContent>
 										</Card>
 									</div>
-								);
-							})()}
-
-							{/* Transit Zone Map */}
-							{(() => {
-								const firstCoords = lots.length > 0 ? getCoordsForLot(0) : null;
-								const lat = firstCoords?.lat ?? null;
-								const lng = firstCoords?.lng ?? null;
-								const transitZoneSource = sources.find((s) => s.SourceKey === "transit_zones");
-								const transitZoneData =
-									transitZoneSource?.ContentJson != null
-										? ((transitZoneSource.ContentJson as { contentJson?: unknown }).contentJson ??
-												transitZoneSource.ContentJson) as {
-												transitZone: string;
-												transitZoneLabel: string;
-												matched: boolean;
-										  } | null
-										: null;
-								if (lat == null || lng == null) return null;
-								return (
 									<div id="transit-zone-map" className="pt-6 border-t border-[rgba(55,50,47,0.12)] scroll-mt-8">
 										<Card className="bg-[#F9F8F6] border-[rgba(55,50,47,0.12)]">
 											<CardContent className="pt-6">
@@ -1804,16 +1902,25 @@ export default function AssemblageReportViewPage() {
 													Transit Zone Map
 												</h3>
 												<TransitZoneMap
-													lat={lat}
-													lng={lng}
-													address={report.Address ?? ""}
-													transitZoneData={transitZoneData}
+													lat={firstAvailableCoords.lat}
+													lng={firstAvailableCoords.lng}
+													address={firstAvailableCoords.address}
+													transitZoneData={
+														sources.find((s) => s.SourceKey === "transit_zones")?.ContentJson != null
+															? ((sources.find((s) => s.SourceKey === "transit_zones")!.ContentJson as { contentJson?: unknown }).contentJson ??
+																	sources.find((s) => s.SourceKey === "transit_zones")!.ContentJson) as {
+																	transitZone: string;
+																	transitZoneLabel: string;
+																	matched: boolean;
+															  } | null
+															: null
+													}
 												/>
 											</CardContent>
 										</Card>
 									</div>
-								);
-							})()}
+								</>
+							)}
 						</div>
 					</div>
 				)}
@@ -1831,7 +1938,12 @@ export default function AssemblageReportViewPage() {
 									<a
 										key={id}
 										href={`#${id}`}
-										className="block text-sm text-[#37322F] hover:text-[#4090C2] hover:underline py-0.5"
+										onClick={(e) => handleTocClick(e, id)}
+										className={`block text-sm py-0.5 pl-2 -ml-0.5 border-l-2 transition-colors ${
+											activeSectionId === id
+												? "border-[#4090C2] text-[#4090C2] font-medium"
+												: "border-transparent text-[#37322F] hover:text-[#4090C2] hover:underline"
+										}`}
 									>
 										{label}
 									</a>
