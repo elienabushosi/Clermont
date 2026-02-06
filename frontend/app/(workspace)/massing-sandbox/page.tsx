@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, Suspense, useMemo, useRef, useLayoutEffect, useEffect } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
-import { OrbitControls, Html, Line } from "@react-three/drei";
+import { Canvas, useThree, useFrame } from "@react-three/fiber";
+import { OrbitControls, Html, Line, Text } from "@react-three/drei";
 import React from "react";
 import * as THREE from "three";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** Default values matching typical report data */
 const DEFAULTS = {
@@ -19,7 +20,7 @@ const DEFAULTS = {
 	scale: 0.1,
 	groundColor: "#E5E7EB",
 	containerHeightPx: 400,
-	lotSlabHeightFt: 10,
+	lotSlabHeightFt: 2,
 	lotSlabPaddingFt: 2,
 	ambientLightIntensity: 0.6,
 	directionalLightIntensity: 0.8,
@@ -27,12 +28,17 @@ const DEFAULTS = {
 	cameraPosX: -6.5,
 	cameraPosY: 6.5,
 	cameraPosZ: -22,
-	// Building (block) defaults: Front 20, Back 20, Left 80, Right 80; height 10 ft
+	// Building (block) defaults: Front 20, Back 20, Left 80, Right 80; heights and setback
 	frontWallFt: 20,
 	backWallFt: 20,
 	leftWallFt: 80,
 	rightWallFt: 80,
-	buildingHeightFt: 10,
+	baseHeightFt: 20,
+	buildingHeightFt: 37,
+	setbackStartFt: 18,
+	frontSetbackFt: 20,
+	xAlign: "center" as const,
+	zAlign: "center" as const,
 };
 
 /** Renders a line that can be solid or dashed; points are [x,y,z] tuples */
@@ -60,7 +66,7 @@ function DimensionLine({
 	if (points.length < 2) return null;
 	if (dashed) {
 		return (
-			<line ref={lineRef}>
+			<line ref={lineRef as unknown as React.LegacyRef<SVGLineElement>}>
 				<bufferGeometry>
 					<bufferAttribute
 						attach="attributes-position"
@@ -198,13 +204,182 @@ function CameraAwareLabel({
 	return <Html position={position} {...props}>{children}</Html>;
 }
 
+const SHOW_THRESHOLD = 0.35;
+const HIDE_THRESHOLD = 0.2;
+
+/** Lot dimension label visibility: show/hide with hysteresis to avoid flicker */
+const LOT_LABEL_SHOW_THRESHOLD = 0.4;
+const LOT_LABEL_HIDE_THRESHOLD = 0.3;
+
+const labelStyle = "bg-white/92 backdrop-blur-sm rounded px-1 py-0.5 text-[8px] font-medium text-[#37322F] border border-[rgba(55,50,47,0.12)] shadow-sm whitespace-nowrap";
+
+/** Building side labels: show only when camera is on that side of the block (with hysteresis) */
+function BuildingSideLabels({
+	positions,
+}: {
+	positions: { front: [number, number, number]; back: [number, number, number]; left: [number, number, number]; right: [number, number, number] };
+}) {
+	const { camera } = useThree();
+	const center = useMemo(() => new THREE.Vector3(0, 0, 0), []);
+	const dir = useRef(new THREE.Vector3());
+	const camPos = useRef(new THREE.Vector3());
+	const [visible, setVisible] = useState({ front: true, back: true, left: true, right: true });
+	const prevVisible = useRef({ front: true, back: true, left: true, right: true });
+
+	useFrame(() => {
+		camera.getWorldPosition(camPos.current);
+		dir.current.copy(camPos.current).sub(center).normalize();
+		const dx = dir.current.x;
+		const dz = dir.current.z;
+
+		const frontDot = -dz; // front = -Z, show when camera in -Z direction
+		const backDot = dz;
+		const rightDot = dx;
+		const leftDot = -dx;
+
+		const next = {
+			front: prevVisible.current.front ? frontDot > HIDE_THRESHOLD : frontDot > SHOW_THRESHOLD,
+			back: prevVisible.current.back ? backDot > HIDE_THRESHOLD : backDot > SHOW_THRESHOLD,
+			left: prevVisible.current.left ? rightDot > HIDE_THRESHOLD : rightDot > SHOW_THRESHOLD,
+			right: prevVisible.current.right ? leftDot > HIDE_THRESHOLD : leftDot > SHOW_THRESHOLD,
+		};
+		const changed =
+			next.front !== prevVisible.current.front ||
+			next.back !== prevVisible.current.back ||
+			next.left !== prevVisible.current.left ||
+			next.right !== prevVisible.current.right;
+		prevVisible.current = next;
+		if (changed) setVisible({ ...next });
+	});
+
+	return (
+		<>
+			{visible.front && (
+				<Html position={positions.front} center>
+					<div className={labelStyle}>Front</div>
+				</Html>
+			)}
+			{visible.back && (
+				<Html position={positions.back} center>
+					<div className={labelStyle}>Back</div>
+				</Html>
+			)}
+			{visible.right && (
+				<Html position={positions.right} center>
+					<div className={labelStyle}>Right</div>
+				</Html>
+			)}
+			{visible.left && (
+				<Html position={positions.left} center>
+					<div className={labelStyle}>Left</div>
+				</Html>
+			)}
+		</>
+	);
+}
+
+const HEIGHT_TICK_SPACING_FT = 10;
+const RULER_OFFSET_WORLD = 0.6; // offset left of building (world units)
+const TICK_LENGTH = 0.15; // scene units; tick sticks out left from pole
+const TICK_LENGTH_MAJOR = 0.3; // major tick (e.g. base height) — 2x normal
+const CAP_LENGTH = 0.2; // scene units; end cap half-length each side of pole
+const HEIGHT_MARKER_LINEWIDTH = 2;
+const HEIGHT_MARKER_COLOR = "#000000";
+const HEIGHT_LABEL_OFFSET = 1.5; // world units left of pole (space between pole and text)
+const BASE_LABEL_OFFSET = 1.5; // world units left of pole for "Base X ft" label (further out so not touching pole)
+const BASE_TICK_EPSILON_FT = 0.5; // treat tick as "at base" if within this many ft
+
+type LineSeg = { p1: [number, number, number]; p2: [number, number, number] };
+
+/**
+ * Height dimension marker: black vertical pole at back-left edge with end caps, ticks every 10 ft,
+ * optional major tick + label at base height, and total height label.
+ * Anchor from footprint "bbox": x = min.x - offset, z = max.z (back), y = 0.
+ */
+function useHeightDimensionMarker(
+	bboxMinX: number,
+	bboxMinZ: number,
+	bboxMaxZ: number,
+	buildingHeightFt: number,
+	scale: number,
+	baseHeightFt?: number
+): {
+	mainLine: LineSeg;
+	bottomCap: LineSeg;
+	topCap: LineSeg;
+	ticks: LineSeg[];
+	labelPosition: [number, number, number];
+	heightWorld: number;
+	baseTick: LineSeg | null;
+	baseLabelPosition: [number, number, number] | null;
+	baseLabelText: string;
+} {
+	return useMemo(() => {
+		const heightWorld = buildingHeightFt * scale;
+		const anchorX = bboxMinX - RULER_OFFSET_WORLD;
+		const anchorZ = bboxMaxZ;
+		const anchorY0 = 0;
+
+		const mainLine: LineSeg = {
+			p1: [anchorX, anchorY0, anchorZ],
+			p2: [anchorX, heightWorld, anchorZ],
+		};
+		const bottomCap: LineSeg = {
+			p1: [anchorX - CAP_LENGTH / 2, anchorY0, anchorZ],
+			p2: [anchorX + CAP_LENGTH / 2, anchorY0, anchorZ],
+		};
+		const topCap: LineSeg = {
+			p1: [anchorX - CAP_LENGTH / 2, heightWorld, anchorZ],
+			p2: [anchorX + CAP_LENGTH / 2, heightWorld, anchorZ],
+		};
+
+		const showBase = baseHeightFt != null && baseHeightFt > 0 && baseHeightFt < buildingHeightFt;
+		const baseHeightWorld = showBase ? baseHeightFt * scale : 0;
+
+		const ticks: LineSeg[] = [];
+		for (let i = HEIGHT_TICK_SPACING_FT; i < buildingHeightFt; i += HEIGHT_TICK_SPACING_FT) {
+			const isAtBase = showBase && Math.abs(i - baseHeightFt) < BASE_TICK_EPSILON_FT;
+			if (isAtBase) continue; // draw as major tick instead
+			const yWorld = i * scale;
+			ticks.push(
+				{ p1: [anchorX, yWorld, anchorZ], p2: [anchorX - TICK_LENGTH, yWorld, anchorZ] }
+			);
+		}
+
+		const baseTick: LineSeg | null = showBase
+			? { p1: [anchorX, baseHeightWorld, anchorZ], p2: [anchorX - TICK_LENGTH_MAJOR, baseHeightWorld, anchorZ] }
+			: null;
+		const baseLabelPosition: [number, number, number] | null = showBase
+			? [anchorX - BASE_LABEL_OFFSET, baseHeightWorld, anchorZ]
+			: null;
+		const baseLabelText = showBase ? `Base height: ${baseHeightFt} ft` : "";
+
+		const labelPosition: [number, number, number] = [
+			anchorX - HEIGHT_LABEL_OFFSET,
+			heightWorld,
+			anchorZ,
+		];
+		return {
+			mainLine,
+			bottomCap,
+			topCap,
+			ticks,
+			labelPosition,
+			heightWorld,
+			baseTick,
+			baseLabelPosition,
+			baseLabelText,
+		};
+	}, [bboxMinX, bboxMinZ, bboxMaxZ, buildingHeightFt, scale, baseHeightFt]);
+}
+
 /** 3D scene driven by sandbox state */
 function MassingSandboxScene({
 	lotLengthFt,
 	lotWidthFt,
 	scale,
 	groundColor,
-	lotSlabHeightFt = 10,
+	lotSlabHeightFt = 2,
 	lotSlabPaddingFt = 2,
 	ambientLightIntensity = 0.6,
 	directionalLightIntensity = 0.8,
@@ -212,7 +387,12 @@ function MassingSandboxScene({
 	backWallFt = 20,
 	leftWallFt = 80,
 	rightWallFt = 80,
+	baseHeightFt = 10,
 	buildingHeightFt = 10,
+	setbackStartFt = 10,
+	frontSetbackFt = 0,
+	xAlign,
+	zAlign,
 }: {
 	lotLengthFt: number;
 	lotWidthFt: number;
@@ -226,7 +406,12 @@ function MassingSandboxScene({
 	backWallFt?: number;
 	leftWallFt?: number;
 	rightWallFt?: number;
+	baseHeightFt?: number;
 	buildingHeightFt?: number;
+	setbackStartFt?: number;
+	frontSetbackFt?: number;
+	xAlign?: "left" | "center" | "right";
+	zAlign?: "front" | "center" | "back";
 }) {
 	const lotLength = lotLengthFt * scale;
 	const lotWidth = lotWidthFt * scale;
@@ -235,7 +420,7 @@ function MassingSandboxScene({
 	const slabPadding = (lotSlabPaddingFt ?? 0) * scale;
 	const slabLength = lotLength + slabPadding * 2;
 	const slabWidth = lotWidth + slabPadding * 2;
-	const slabHeight = (lotSlabHeightFt ?? 10) * scale;
+	const slabHeight = (lotSlabHeightFt ?? 2) * scale;
 
 	// Building footprint: independent edges; vertices then offset so footprint is centered on the lot.
 	const anchorX = centerX - lotWidth / 2;
@@ -244,7 +429,11 @@ function MassingSandboxScene({
 	const back = backWallFt * scale;
 	const left = leftWallFt * scale;
 	const right = rightWallFt * scale;
-	const buildingHeight = (buildingHeightFt ?? 10) * scale;
+	const buildingHeightTotal = (buildingHeightFt ?? 10) * scale;
+	const setbackStartWorld = (setbackStartFt ?? baseHeightFt ?? 10) * scale;
+	const maxDepthWorld = Math.max(left, right);
+	const frontSetbackClamped = Math.min(Math.max(frontSetbackFt ?? 0, 0), maxDepthWorld / scale - 0.01);
+	const frontSetbackWorld = frontSetbackClamped * scale;
 
 	// Centroid of quad (frontLeft, frontRight, backRight, backLeft) so we can center the shape
 	const footprintCenterX = anchorX + (front + back) / 4;
@@ -252,29 +441,122 @@ function MassingSandboxScene({
 	const offsetX = centerX - footprintCenterX;
 	const offsetZ = centerZ - footprintCenterZ;
 
+	// Building placement inside lot: axis-aligned bounds and clamped position
+	const buildingWidth = Math.max(front, back);
+	const buildingDepth = Math.max(left, right);
+	const halfLotW = lotWidth / 2;
+	const halfLotD = lotLength / 2;
+	const halfBuildingW = buildingWidth / 2;
+	const halfBuildingD = buildingDepth / 2;
+	const minX = -halfLotW + halfBuildingW;
+	const maxX = halfLotW - halfBuildingW;
+	const minZ = -halfLotD + halfBuildingD;
+	const maxZ = halfLotD - halfBuildingD;
+	const alignX = xAlign ?? "center";
+	const alignZ = zAlign ?? "center";
+	const rawX = alignX === "left" ? minX : alignX === "right" ? maxX : 0;
+	const rawZ = alignZ === "front" ? minZ : alignZ === "back" ? maxZ : 0;
+	const buildingPosX = Math.min(Math.max(rawX, minX), maxX);
+	const buildingPosZ = Math.min(Math.max(rawZ, minZ), maxZ);
+	const buildingPosition = useMemo(
+		() => [buildingPosX, 0, buildingPosZ] as [number, number, number],
+		[buildingPosX, buildingPosZ]
+	);
+
+	// Full footprint (base mass)
 	const footprintShape = useMemo(() => {
 		const s = new THREE.Shape();
 		// Shape is in XY; we use (world X, -world Z) so after rotation -π/2 around X (local Z→world Y) we get world Z correct
-		// Vertices offset so footprint is centered on (centerX, centerZ)
 		// Counterclockwise: frontLeft -> frontRight -> backRight -> backLeft
 		s.moveTo(anchorX + offsetX, -(anchorZ + offsetZ));
 		s.lineTo(anchorX + front + offsetX, -(anchorZ + offsetZ));
-		s.lineTo(anchorX + back + offsetX, -(anchorZ + right + offsetZ));
-		s.lineTo(anchorX + offsetX, -(anchorZ + left + offsetZ));
+		s.lineTo(anchorX + back + offsetX, -(anchorZ + left + offsetZ));
+		s.lineTo(anchorX + offsetX, -(anchorZ + right + offsetZ));
 		s.lineTo(anchorX + offsetX, -(anchorZ + offsetZ));
 		return s;
 	}, [anchorX, anchorZ, front, back, left, right, offsetX, offsetZ]);
 
-	const buildingGeometry = useMemo(() => {
+	// Upper footprint: front edge moved inward by frontSetbackWorld (front verts z += frontSetbackWorld → shape Y -= frontSetbackWorld)
+	const upperFootprintShape = useMemo(() => {
+		const s = new THREE.Shape();
+		const frontZ = anchorZ + offsetZ + frontSetbackWorld;
+		s.moveTo(anchorX + offsetX, -frontZ);
+		s.lineTo(anchorX + front + offsetX, -frontZ);
+		s.lineTo(anchorX + back + offsetX, -(anchorZ + left + offsetZ));
+		s.lineTo(anchorX + offsetX, -(anchorZ + right + offsetZ));
+		s.lineTo(anchorX + offsetX, -frontZ);
+		return s;
+	}, [anchorX, anchorZ, front, back, left, right, offsetX, offsetZ, frontSetbackWorld]);
+
+	const oneMass = (buildingHeightFt ?? 10) <= (baseHeightFt ?? 10);
+	const massHeightA = oneMass ? buildingHeightTotal : setbackStartWorld;
+	const massHeightB = oneMass ? 0 : buildingHeightTotal - setbackStartWorld;
+
+	const buildingGeometryA = useMemo(() => {
 		return new THREE.ExtrudeGeometry(footprintShape, {
-			depth: buildingHeight,
+			depth: massHeightA,
 			bevelEnabled: false,
 		});
-	}, [footprintShape, buildingHeight]);
+	}, [footprintShape, massHeightA]);
+
+	const buildingGeometryB = useMemo(() => {
+		if (massHeightB <= 0) return null;
+		return new THREE.ExtrudeGeometry(upperFootprintShape, {
+			depth: massHeightB,
+			bevelEnabled: false,
+		});
+	}, [upperFootprintShape, massHeightB]);
 
 	useEffect(() => {
-		return () => buildingGeometry.dispose();
-	}, [buildingGeometry]);
+		return () => {
+			buildingGeometryA.dispose();
+			buildingGeometryB?.dispose();
+		};
+	}, [buildingGeometryA, buildingGeometryB]);
+
+	// Height dimension marker: total building height, anchor at front-left edge of footprint
+	const bboxMinX = anchorX + offsetX;
+	const bboxMinZ = anchorZ + offsetZ;
+	const bboxMaxZ = anchorZ + offsetZ + Math.max(left, right);
+	const totalHeightFt = buildingHeightFt ?? 10;
+	const baseHeightFtVal = baseHeightFt ?? 10;
+	const heightMarker = useHeightDimensionMarker(
+		bboxMinX,
+		bboxMinZ,
+		bboxMaxZ,
+		totalHeightFt,
+		scale,
+		baseHeightFtVal
+	);
+
+	// Lot dimension label visibility: camera-facing (length = left/right sides, width = front/back sides), with hysteresis
+	const { camera } = useThree();
+	const lotCenter = useMemo(() => new THREE.Vector3(centerX, 0, centerZ), [centerX, centerZ]);
+	const camDir = useRef(new THREE.Vector3());
+	const camPos = useRef(new THREE.Vector3());
+	const [lotLengthLabelVisible, setLotLengthLabelVisible] = useState(true);
+	const [lotWidthLabelVisible, setLotWidthLabelVisible] = useState(true);
+	const prevLengthVisible = useRef(true);
+	const prevWidthVisible = useRef(true);
+
+	useFrame(() => {
+		camera.getWorldPosition(camPos.current);
+		camDir.current.copy(camPos.current).sub(lotCenter).normalize();
+		const dx = camDir.current.x;
+		const dz = camDir.current.z;
+		// Length sides: LEFT (-1,0,0) and RIGHT (1,0,0) → visible when |dx| large
+		const lengthDot = Math.max(-dx, dx);
+		// Width sides: FRONT (0,0,-1) and BACK (0,0,1) → visible when |dz| large
+		const widthDot = Math.max(-dz, dz);
+		const nextLength = prevLengthVisible.current ? lengthDot > LOT_LABEL_HIDE_THRESHOLD : lengthDot > LOT_LABEL_SHOW_THRESHOLD;
+		const nextWidth = prevWidthVisible.current ? widthDot > LOT_LABEL_HIDE_THRESHOLD : widthDot > LOT_LABEL_SHOW_THRESHOLD;
+		const changedLength = nextLength !== prevLengthVisible.current;
+		const changedWidth = nextWidth !== prevWidthVisible.current;
+		prevLengthVisible.current = nextLength;
+		prevWidthVisible.current = nextWidth;
+		if (changedLength) setLotLengthLabelVisible(nextLength);
+		if (changedWidth) setLotWidthLabelVisible(nextWidth);
+	});
 
 	return (
 		<>
@@ -288,52 +570,89 @@ function MassingSandboxScene({
 				<meshStandardMaterial color={groundColor} />
 			</mesh>
 
-			{/* White building: extruded footprint (each wall moves independently); extrusion was along +Z, rotate so it goes +Y */}
-			<mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-				<primitive object={buildingGeometry} attach="geometry" />
-				<meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.4} />
-			</mesh>
+			{/* Building group: placement inside lot (clamped by alignment) */}
+			<group position={buildingPosition}>
+				{/* Base mass: full footprint, height = setbackStart (or full height if one mass) */}
+				<mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+					<primitive object={buildingGeometryA} attach="geometry" />
+					<meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.4} />
+				</mesh>
+				{/* Upper mass (tower): front setback footprint, stacked above base */}
+				{buildingGeometryB && (
+					<mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, setbackStartWorld, 0]}>
+						<primitive object={buildingGeometryB} attach="geometry" />
+						<meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.4} />
+					</mesh>
+				)}
 
-			{/* Building side labels (smaller than lot dimension labels) */}
-			<CameraAwareLabel position={[anchorX + offsetX + front / 2, buildingHeight / 2 + 0.05, anchorZ + offsetZ]} center>
-				<div className="bg-white/92 backdrop-blur-sm rounded px-1 py-0.5 text-[8px] font-medium text-[#37322F] border border-[rgba(55,50,47,0.12)] shadow-sm whitespace-nowrap">
-					Front
-				</div>
-			</CameraAwareLabel>
-			<CameraAwareLabel position={[anchorX + offsetX + back / 2, buildingHeight / 2 + 0.05, anchorZ + offsetZ + (left + right) / 2]} center>
-				<div className="bg-white/92 backdrop-blur-sm rounded px-1 py-0.5 text-[8px] font-medium text-[#37322F] border border-[rgba(55,50,47,0.12)] shadow-sm whitespace-nowrap">
-					Back
-				</div>
-			</CameraAwareLabel>
-			<CameraAwareLabel position={[anchorX + offsetX, buildingHeight / 2 + 0.05, anchorZ + offsetZ + left / 2]} center>
-				<div className="bg-white/92 backdrop-blur-sm rounded px-1 py-0.5 text-[8px] font-medium text-[#37322F] border border-[rgba(55,50,47,0.12)] shadow-sm whitespace-nowrap">
-					Right
-				</div>
-			</CameraAwareLabel>
-			<CameraAwareLabel position={[anchorX + offsetX + (front + back) / 2, buildingHeight / 2 + 0.05, anchorZ + offsetZ + right / 2]} center>
-				<div className="bg-white/92 backdrop-blur-sm rounded px-1 py-0.5 text-[8px] font-medium text-[#37322F] border border-[rgba(55,50,47,0.12)] shadow-sm whitespace-nowrap">
-					Left
-				</div>
-			</CameraAwareLabel>
+				{/* Building side labels: visible only when camera is on that side (with hysteresis) */}
+				<BuildingSideLabels
+					positions={{
+						front: [anchorX + offsetX + front / 2, 0.05, anchorZ + offsetZ],
+						back: [anchorX + offsetX + back / 2, buildingHeightTotal / 2 + 0.05, anchorZ + offsetZ + (left + right) / 2],
+						left: [anchorX + offsetX + (front + back) / 2, -slabHeight + 0.1, anchorZ + offsetZ + left / 2],
+						right: [anchorX + offsetX, -slabHeight + 0.1, anchorZ + offsetZ + right / 2],
+					}}
+				/>
 
-			{/* Lot length dimension line - front to back along Z, positioned on left edge */}
-			<DimensionLineWithLabel
-				start={[centerX - lotWidth / 2, 0.1, centerZ - lotLength / 2]}
-				end={[centerX - lotWidth / 2, 0.1, centerZ + lotLength / 2]}
-				label={`${lotLengthFt} ft`}
-				color="#37322F"
-				lineWidth={2}
-				labelOffset={0.2}
-			/>
-			{/* Lot width dimension line - left to right along X, positioned on front edge */}
-			<DimensionLineWithLabel
-				start={[centerX - lotWidth / 2, 0.1, centerZ - lotLength / 2]}
-				end={[centerX + lotWidth / 2, 0.1, centerZ - lotLength / 2]}
-				label={`${lotWidthFt} ft`}
-				color="#37322F"
-				lineWidth={2}
-				labelOffset={0.2}
-			/>
+				{/* Height dimension marker: black pole at back-left edge with end caps, ticks every 10 ft, base + total labels */}
+				<group>
+					<Line points={[heightMarker.mainLine.p1, heightMarker.mainLine.p2]} color={HEIGHT_MARKER_COLOR} lineWidth={HEIGHT_MARKER_LINEWIDTH} />
+					<Line points={[heightMarker.bottomCap.p1, heightMarker.bottomCap.p2]} color={HEIGHT_MARKER_COLOR} lineWidth={HEIGHT_MARKER_LINEWIDTH} />
+					<Line points={[heightMarker.topCap.p1, heightMarker.topCap.p2]} color={HEIGHT_MARKER_COLOR} lineWidth={HEIGHT_MARKER_LINEWIDTH} />
+					{heightMarker.ticks.map((tick, i) => (
+						<Line key={i} points={[tick.p1, tick.p2]} color={HEIGHT_MARKER_COLOR} lineWidth={HEIGHT_MARKER_LINEWIDTH} />
+					))}
+					{heightMarker.baseTick != null && (
+						<Line points={[heightMarker.baseTick.p1, heightMarker.baseTick.p2]} color={HEIGHT_MARKER_COLOR} lineWidth={HEIGHT_MARKER_LINEWIDTH} />
+					)}
+					{heightMarker.baseLabelPosition != null && (
+						<Text
+							position={heightMarker.baseLabelPosition}
+							anchorX="center"
+							anchorY="middle"
+							fontSize={0.22}
+							color={HEIGHT_MARKER_COLOR}
+							scale={[-1, 1, 1]}
+						>
+							{heightMarker.baseLabelText}
+						</Text>
+					)}
+					<Text
+						position={heightMarker.labelPosition}
+						anchorX="center"
+						anchorY="middle"
+						fontSize={0.22}
+						color={HEIGHT_MARKER_COLOR}
+						scale={[-1, 1, 1]}
+					>
+						 Building height: {totalHeightFt} ft
+					</Text>
+				</group>
+			</group>
+
+			{/* Lot length dimension line - front to back along Z, positioned on left edge; visible when camera faces length (left/right) side */}
+			{lotLengthLabelVisible && (
+				<DimensionLineWithLabel
+					start={[centerX - lotWidth / 2, 0.1, centerZ - lotLength / 2]}
+					end={[centerX - lotWidth / 2, 0.1, centerZ + lotLength / 2]}
+					label={`Lot length: ${lotLengthFt} ft`}
+					color="#37322F"
+					lineWidth={2}
+					labelOffset={0.2}
+				/>
+			)}
+			{/* Lot width dimension line - left to right along X, positioned on front edge; visible when camera faces width (front/back) side */}
+			{lotWidthLabelVisible && (
+				<DimensionLineWithLabel
+					start={[centerX - lotWidth / 2, 0.1, centerZ - lotLength / 2]}
+					end={[centerX + lotWidth / 2, 0.1, centerZ - lotLength / 2]}
+					label={`Lot width: ${lotWidthFt} ft`}
+					color="#37322F"
+					lineWidth={2}
+					labelOffset={0.2}
+				/>
+			)}
 
 			<OrbitControls
 				enablePan
@@ -360,7 +679,12 @@ export default function MassingSandboxPage() {
 	const [backWallFt, setBackWallFt] = useState(String(DEFAULTS.backWallFt));
 	const [leftWallFt, setLeftWallFt] = useState(String(DEFAULTS.leftWallFt));
 	const [rightWallFt, setRightWallFt] = useState(String(DEFAULTS.rightWallFt));
+	const [baseHeightFt, setBaseHeightFt] = useState(String(DEFAULTS.baseHeightFt));
 	const [buildingHeightFt, setBuildingHeightFt] = useState(String(DEFAULTS.buildingHeightFt));
+	const [setbackStartFt, setSetbackStartFt] = useState(String(DEFAULTS.setbackStartFt));
+	const [frontSetbackFt, setFrontSetbackFt] = useState(String(DEFAULTS.frontSetbackFt));
+	const [xAlign, setXAlign] = useState<"left" | "center" | "right">(DEFAULTS.xAlign);
+	const [zAlign, setZAlign] = useState<"front" | "center" | "back">(DEFAULTS.zAlign);
 
 	const lotL = parseNum(lotLengthFt, DEFAULTS.lotLengthFt);
 	const lotW = parseNum(lotWidthFt, DEFAULTS.lotWidthFt);
@@ -371,7 +695,10 @@ export default function MassingSandboxPage() {
 	const backW = parseNum(backWallFt, DEFAULTS.backWallFt);
 	const leftW = parseNum(leftWallFt, DEFAULTS.leftWallFt);
 	const rightW = parseNum(rightWallFt, DEFAULTS.rightWallFt);
+	const baseH = parseNum(baseHeightFt, DEFAULTS.baseHeightFt);
 	const buildingH = parseNum(buildingHeightFt, DEFAULTS.buildingHeightFt);
+	const setbackStart = parseNum(setbackStartFt, DEFAULTS.setbackStartFt);
+	const frontSetback = parseNum(frontSetbackFt, DEFAULTS.frontSetbackFt);
 
 	const resetToDefaults = () => {
 		setLotLengthFt(String(DEFAULTS.lotLengthFt));
@@ -427,24 +754,76 @@ export default function MassingSandboxPage() {
 								/>
 							</div>
 						</div>
-						<div className="space-y-2 rounded-lg border border-[rgba(55,50,47,0.12)] p-3 bg-[#F9F8F6]">
+						<div className="space-y-2 rounded-lg border border-[rgba(55,50,47,0.12)] p-3 bg-white">
+							<Label className="text-xs font-semibold text-[#605A57]">Building placement inside lot</Label>
+							<div className="grid grid-cols-2 gap-3">
+								<div className="space-y-1.5">
+									<Label htmlFor="xAlign" className="text-xs">Left vs Right</Label>
+									<Select value={xAlign} onValueChange={(v) => setXAlign(v as "left" | "center" | "right")}>
+										<SelectTrigger id="xAlign" className="h-8 w-full">
+											<SelectValue placeholder="X" />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="left">Left</SelectItem>
+											<SelectItem value="center">Center</SelectItem>
+											<SelectItem value="right">Right</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+								<div className="space-y-1.5">
+									<Label htmlFor="zAlign" className="text-xs">Front vs Back</Label>
+									<Select value={zAlign} onValueChange={(v) => setZAlign(v as "front" | "center" | "back")}>
+										<SelectTrigger id="zAlign" className="h-8 w-full">
+											<SelectValue placeholder="Z" />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="front">Front</SelectItem>
+											<SelectItem value="center">Center</SelectItem>
+											<SelectItem value="back">Back</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+							</div>
+						</div>
+						<div className="space-y-2 rounded-lg border border-[rgba(55,50,47,0.12)] p-3 bg-white">
 							<Label className="text-xs font-semibold text-[#605A57]">Building walls (ft) — each edge moves independently</Label>
 							<div className="grid grid-cols-2 gap-2">
 								<div className="space-y-1">
-									<Label htmlFor="frontWall" className="text-xs">Front</Label>
+									<Label htmlFor="frontWall" className="text-xs">Front (Width)</Label>
 									<Input id="frontWall" type="number" min={0} value={frontWallFt} onChange={(e) => setFrontWallFt(e.target.value)} className="h-8" />
 								</div>
 								<div className="space-y-1">
-									<Label htmlFor="backWall" className="text-xs">Back</Label>
+									<Label htmlFor="backWall" className="text-xs">Back (Width)</Label>
 									<Input id="backWall" type="number" min={0} value={backWallFt} onChange={(e) => setBackWallFt(e.target.value)} className="h-8" />
 								</div>
 								<div className="space-y-1">
-									<Label htmlFor="leftWall" className="text-xs">Left</Label>
+									<Label htmlFor="leftWall" className="text-xs">Left (Length)</Label>
 									<Input id="leftWall" type="number" min={0} value={leftWallFt} onChange={(e) => setLeftWallFt(e.target.value)} className="h-8" />
 								</div>
 								<div className="space-y-1">
-									<Label htmlFor="rightWall" className="text-xs">Right</Label>
+									<Label htmlFor="rightWall" className="text-xs">Right (Length)</Label>
 									<Input id="rightWall" type="number" min={0} value={rightWallFt} onChange={(e) => setRightWallFt(e.target.value)} className="h-8" />
+								</div>
+							</div>
+						</div>
+						<div className="space-y-2 rounded-lg border border-[rgba(55,50,47,0.12)] p-3 bg-white">
+							<Label className="text-xs font-semibold text-[#605A57]">Height and setbacks</Label>
+							<div className="grid grid-cols-2 gap-2">
+								<div className="space-y-1">
+									<Label htmlFor="baseHeight" className="text-xs">Base height (ft)</Label>
+									<Input id="baseHeight" type="number" min={0} value={baseHeightFt} onChange={(e) => setBaseHeightFt(e.target.value)} className="h-8" />
+								</div>
+								<div className="space-y-1">
+									<Label htmlFor="buildingHeight" className="text-xs">Building height (ft)</Label>
+									<Input id="buildingHeight" type="number" min={0} value={buildingHeightFt} onChange={(e) => setBuildingHeightFt(e.target.value)} className="h-8" />
+								</div>
+								<div className="space-y-1">
+									<Label htmlFor="setbackStart" className="text-xs">Setback start (ft)</Label>
+									<Input id="setbackStart" type="number" min={0} value={setbackStartFt} onChange={(e) => setSetbackStartFt(e.target.value)} className="h-8" />
+								</div>
+								<div className="space-y-1">
+									<Label htmlFor="frontSetback" className="text-xs">Front setback (ft)</Label>
+									<Input id="frontSetback" type="number" min={0} value={frontSetbackFt} onChange={(e) => setFrontSetbackFt(e.target.value)} className="h-8" />
 								</div>
 							</div>
 						</div>
@@ -467,7 +846,7 @@ export default function MassingSandboxPage() {
 						) : (
 							<>
 								<div
-									className="rounded-lg overflow-hidden border border-[rgba(55,50,47,0.12)] bg-[#F9F8F6]"
+									className="rounded-lg overflow-hidden border border-[rgba(55,50,47,0.12)] bg-white"
 									style={{ height: heightPx }}
 								>
 									<Suspense
@@ -485,14 +864,19 @@ export default function MassingSandboxPage() {
 												groundColor={DEFAULTS.groundColor}
 												lotSlabHeightFt={DEFAULTS.lotSlabHeightFt}
 												lotSlabPaddingFt={DEFAULTS.lotSlabPaddingFt}
-											ambientLightIntensity={DEFAULTS.ambientLightIntensity}
-											directionalLightIntensity={DEFAULTS.directionalLightIntensity}
-											frontWallFt={frontW}
+												ambientLightIntensity={DEFAULTS.ambientLightIntensity}
+												directionalLightIntensity={DEFAULTS.directionalLightIntensity}
+												frontWallFt={frontW}
 												backWallFt={backW}
-											leftWallFt={leftW}
-											rightWallFt={rightW}
-											buildingHeightFt={buildingH}
-										/>
+												leftWallFt={leftW}
+												rightWallFt={rightW}
+												baseHeightFt={baseH}
+												buildingHeightFt={buildingH}
+												setbackStartFt={setbackStart}
+												frontSetbackFt={frontSetback}
+												xAlign={xAlign}
+												zAlign={zAlign}
+											/>
 										</Canvas>
 									</Suspense>
 								</div>
