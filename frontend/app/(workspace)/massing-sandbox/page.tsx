@@ -695,7 +695,7 @@ function MassingSandboxScene({
 					/>
 				)}
 
-				{/* Upper story setback arrow: base front face → upper front face, horizontal on ground; label at Setback start height */}
+				{/* Upper story setback arrow: base front face → upper front face, horizontal on ground; label at Setback height */}
 				{arrowVisible.front && frontSetbackWorld > 0.01 && (
 					<MeasurementArrow
 						start={baseFrontMid}
@@ -929,7 +929,7 @@ export default function MassingSandboxPage() {
 									<Input id="buildingHeight" type="number" min={0} value={buildingHeightFt} onChange={(e) => setBuildingHeightFt(e.target.value)} className="h-8" />
 								</div>
 								<div className="space-y-1">
-									<Label htmlFor="setbackStart" className="text-xs">Setback start (ft)</Label>
+									<Label htmlFor="setbackStart" className="text-xs">Setback height (ft)</Label>
 									<Input id="setbackStart" type="number" min={0} value={setbackStartFt} onChange={(e) => setSetbackStartFt(e.target.value)} className="h-8" />
 								</div>
 								<div className="space-y-1">
