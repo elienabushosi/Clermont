@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MeasurementArrow } from "@/components/MeasurementArrow";
 
 /** Default values matching typical report data */
 const DEFAULTS = {
@@ -24,10 +25,10 @@ const DEFAULTS = {
 	lotSlabPaddingFt: 2,
 	ambientLightIntensity: 0.6,
 	directionalLightIntensity: 0.8,
-	// Initial camera ~180° from front, zoomed out a bit
-	cameraPosX: -6.5,
-	cameraPosY: 6.5,
-	cameraPosZ: -22,
+	// Initial camera: orbited toward left, tilted higher to see roof
+	cameraPosX: -5,
+	cameraPosY: 6,
+	cameraPosZ: -10,
 	// Building (block) defaults: Front 20, Back 20, Left 80, Right 80; heights and setback
 	frontWallFt: 20,
 	backWallFt: 20,
@@ -36,7 +37,7 @@ const DEFAULTS = {
 	baseHeightFt: 20,
 	buildingHeightFt: 37,
 	setbackStartFt: 18,
-	frontSetbackFt: 20,
+	frontSetbackFt: 20, // Upper story setback (ft)
 	xAlign: "center" as const,
 	zAlign: "center" as const,
 };
@@ -210,6 +211,10 @@ const HIDE_THRESHOLD = 0.2;
 /** Lot dimension label visibility: show/hide with hysteresis to avoid flicker */
 const LOT_LABEL_SHOW_THRESHOLD = 0.4;
 const LOT_LABEL_HIDE_THRESHOLD = 0.3;
+
+/** Building measurement arrow visibility: camera-facing with hysteresis */
+const ARROW_SHOW_THRESHOLD = 0.45;
+const ARROW_HIDE_THRESHOLD = 0.25;
 
 const labelStyle = "bg-white/92 backdrop-blur-sm rounded px-1 py-0.5 text-[8px] font-medium text-[#37322F] border border-[rgba(55,50,47,0.12)] shadow-sm whitespace-nowrap";
 
@@ -409,6 +414,7 @@ function MassingSandboxScene({
 	baseHeightFt?: number;
 	buildingHeightFt?: number;
 	setbackStartFt?: number;
+	/** Front story setback (ft) */
 	frontSetbackFt?: number;
 	xAlign?: "left" | "center" | "right";
 	zAlign?: "front" | "center" | "back";
@@ -434,6 +440,9 @@ function MassingSandboxScene({
 	const maxDepthWorld = Math.max(left, right);
 	const frontSetbackClamped = Math.min(Math.max(frontSetbackFt ?? 0, 0), maxDepthWorld / scale - 0.01);
 	const frontSetbackWorld = frontSetbackClamped * scale;
+	// Upper story setback (ft) controls: only the FRONT edge of the upper footprint. The upper mass
+	// front face is offset inward (+Z) by frontSetbackWorld from the base mass front face. Base mass
+	// height = setbackStartWorld (baseHeight); upper mass sits above that. No other edges/sides are offset.
 
 	// Centroid of quad (frontLeft, frontRight, backRight, backLeft) so we can center the shape
 	const footprintCenterX = anchorX + (front + back) / 4;
@@ -463,6 +472,38 @@ function MassingSandboxScene({
 		[buildingPosX, buildingPosZ]
 	);
 
+	// Building footprint edges for measurement arrows (group local space, Y = 10 ft)
+	const measurementHeightY = 10 * scale;
+	const pFrontLeft = useMemo(() => [anchorX + offsetX, measurementHeightY, anchorZ + offsetZ] as [number, number, number], [anchorX, offsetX, anchorZ, offsetZ, measurementHeightY]);
+	const pFrontRight = useMemo(() => [anchorX + front + offsetX, measurementHeightY, anchorZ + offsetZ] as [number, number, number], [anchorX, front, offsetX, anchorZ, offsetZ, measurementHeightY]);
+	const pBackLeft = useMemo(() => [anchorX + offsetX, measurementHeightY, anchorZ + offsetZ + right] as [number, number, number], [anchorX, offsetX, anchorZ, offsetZ, right, measurementHeightY]);
+	const pBackRight = useMemo(() => [anchorX + back + offsetX, measurementHeightY, anchorZ + offsetZ + left] as [number, number, number], [anchorX, back, offsetX, anchorZ, offsetZ, left, measurementHeightY]);
+
+	const measurementEdges = useMemo(
+		() => ({
+			front: { start: pFrontLeft, end: pFrontRight, label: `Front: ${frontWallFt} ft`, labelOffsetDirection: [0, 0, -1] as [number, number, number] },
+			back: { start: pBackLeft, end: pBackRight, label: `Back: ${backWallFt} ft`, labelOffsetDirection: [0, 0, 1] as [number, number, number] },
+			left: { start: pFrontLeft, end: pBackLeft, label: `Right: ${rightWallFt} ft`, labelOffsetDirection: [-1, 0, 0] as [number, number, number] },
+			right: { start: pFrontRight, end: pBackRight, label: `Left: ${leftWallFt} ft`, labelOffsetDirection: [1, 0, 0] as [number, number, number] },
+		}),
+		[pFrontLeft, pFrontRight, pBackLeft, pBackRight, frontWallFt, backWallFt, leftWallFt, rightWallFt]
+	);
+
+	// Upper story setback arrow: horizontal distance from base front face to upper front face (ground plane, building group local)
+	const GROUND_Y = 0.05;
+	const baseFrontMid = useMemo(
+		() => [anchorX + offsetX + front / 2, GROUND_Y, anchorZ + offsetZ] as [number, number, number],
+		[anchorX, offsetX, anchorZ, offsetZ, front]
+	);
+	const upperFrontMid = useMemo(
+		() => [anchorX + offsetX + front / 2, GROUND_Y, anchorZ + offsetZ + frontSetbackWorld] as [number, number, number],
+		[anchorX, offsetX, anchorZ, offsetZ, front, frontSetbackWorld]
+	);
+	const upperSetbackLabel = useMemo(
+		() => `Upper setback: ${frontSetbackClamped} ft`,
+		[frontSetbackClamped]
+	);
+
 	// Full footprint (base mass)
 	const footprintShape = useMemo(() => {
 		const s = new THREE.Shape();
@@ -476,7 +517,7 @@ function MassingSandboxScene({
 		return s;
 	}, [anchorX, anchorZ, front, back, left, right, offsetX, offsetZ]);
 
-	// Upper footprint: front edge moved inward by frontSetbackWorld (front verts z += frontSetbackWorld → shape Y -= frontSetbackWorld)
+	// Upper footprint: only the front edge is moved inward by upper story setback (frontSetbackWorld); back/left/right unchanged
 	const upperFootprintShape = useMemo(() => {
 		const s = new THREE.Shape();
 		const frontZ = anchorZ + offsetZ + frontSetbackWorld;
@@ -532,12 +573,16 @@ function MassingSandboxScene({
 	// Lot dimension label visibility: camera-facing (length = left/right sides, width = front/back sides), with hysteresis
 	const { camera } = useThree();
 	const lotCenter = useMemo(() => new THREE.Vector3(centerX, 0, centerZ), [centerX, centerZ]);
+	const buildingCenterVec = useMemo(() => new THREE.Vector3(buildingPosX, 0, buildingPosZ), [buildingPosX, buildingPosZ]);
 	const camDir = useRef(new THREE.Vector3());
 	const camPos = useRef(new THREE.Vector3());
+	const camDirBuilding = useRef(new THREE.Vector3());
 	const [lotLengthLabelVisible, setLotLengthLabelVisible] = useState(true);
 	const [lotWidthLabelVisible, setLotWidthLabelVisible] = useState(true);
 	const prevLengthVisible = useRef(true);
 	const prevWidthVisible = useRef(true);
+	const [arrowVisible, setArrowVisible] = useState({ front: true, back: true, left: true, right: true });
+	const prevArrowVisible = useRef({ front: true, back: true, left: true, right: true });
 
 	useFrame(() => {
 		camera.getWorldPosition(camPos.current);
@@ -556,6 +601,27 @@ function MassingSandboxScene({
 		prevWidthVisible.current = nextWidth;
 		if (changedLength) setLotLengthLabelVisible(nextLength);
 		if (changedWidth) setLotWidthLabelVisible(nextWidth);
+
+		// Building measurement arrow visibility: camera-facing each side, hysteresis to avoid flicker
+		camDirBuilding.current.copy(camPos.current).sub(buildingCenterVec).normalize();
+		const bx = camDirBuilding.current.x;
+		const bz = camDirBuilding.current.z;
+		const frontDot = -bz;
+		const backDot = bz;
+		const leftDot = -bx;
+		const rightDot = bx;
+		const nextFront = prevArrowVisible.current.front ? frontDot > ARROW_HIDE_THRESHOLD : frontDot > ARROW_SHOW_THRESHOLD;
+		const nextBack = prevArrowVisible.current.back ? backDot > ARROW_HIDE_THRESHOLD : backDot > ARROW_SHOW_THRESHOLD;
+		const nextLeft = prevArrowVisible.current.left ? leftDot > ARROW_HIDE_THRESHOLD : leftDot > ARROW_SHOW_THRESHOLD;
+		const nextRight = prevArrowVisible.current.right ? rightDot > ARROW_HIDE_THRESHOLD : rightDot > ARROW_SHOW_THRESHOLD;
+		const nextArrow = { front: nextFront, back: nextBack, left: nextLeft, right: nextRight };
+		const arrowChanged =
+			nextArrow.front !== prevArrowVisible.current.front ||
+			nextArrow.back !== prevArrowVisible.current.back ||
+			nextArrow.left !== prevArrowVisible.current.left ||
+			nextArrow.right !== prevArrowVisible.current.right;
+		prevArrowVisible.current = nextArrow;
+		if (arrowChanged) setArrowVisible({ ...nextArrow });
 	});
 
 	return (
@@ -577,7 +643,7 @@ function MassingSandboxScene({
 					<primitive object={buildingGeometryA} attach="geometry" />
 					<meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.4} />
 				</mesh>
-				{/* Upper mass (tower): front setback footprint, stacked above base */}
+				{/* Upper mass (tower): front story setback footprint, stacked above base */}
 				{buildingGeometryB && (
 					<mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, setbackStartWorld, 0]}>
 						<primitive object={buildingGeometryB} attach="geometry" />
@@ -594,6 +660,51 @@ function MassingSandboxScene({
 						right: [anchorX + offsetX, -slabHeight + 0.1, anchorZ + offsetZ + right / 2],
 					}}
 				/>
+
+				{/* Measurement arrows: Front/Back/Left/Right, visible only when camera faces that side */}
+				{arrowVisible.front && (
+					<MeasurementArrow
+						start={measurementEdges.front.start}
+						end={measurementEdges.front.end}
+						label={measurementEdges.front.label}
+						labelOffsetDirection={measurementEdges.front.labelOffsetDirection}
+					/>
+				)}
+				{arrowVisible.back && (
+					<MeasurementArrow
+						start={measurementEdges.back.start}
+						end={measurementEdges.back.end}
+						label={measurementEdges.back.label}
+						labelOffsetDirection={measurementEdges.back.labelOffsetDirection}
+					/>
+				)}
+				{arrowVisible.left && (
+					<MeasurementArrow
+						start={measurementEdges.left.start}
+						end={measurementEdges.left.end}
+						label={measurementEdges.left.label}
+						labelOffsetDirection={measurementEdges.left.labelOffsetDirection}
+					/>
+				)}
+				{arrowVisible.right && (
+					<MeasurementArrow
+						start={measurementEdges.right.start}
+						end={measurementEdges.right.end}
+						label={measurementEdges.right.label}
+						labelOffsetDirection={measurementEdges.right.labelOffsetDirection}
+					/>
+				)}
+
+				{/* Upper story setback arrow: base front face → upper front face, horizontal on ground; label at Setback start height */}
+				{arrowVisible.front && frontSetbackWorld > 0.01 && (
+					<MeasurementArrow
+						start={baseFrontMid}
+						end={upperFrontMid}
+						label={upperSetbackLabel}
+						labelOffsetDirection={[0, 0, -1]}
+						labelY={setbackStartWorld}
+					/>
+				)}
 
 				{/* Height dimension marker: black pole at back-left edge with end caps, ticks every 10 ft, base + total labels */}
 				<group>
@@ -822,7 +933,7 @@ export default function MassingSandboxPage() {
 									<Input id="setbackStart" type="number" min={0} value={setbackStartFt} onChange={(e) => setSetbackStartFt(e.target.value)} className="h-8" />
 								</div>
 								<div className="space-y-1">
-									<Label htmlFor="frontSetback" className="text-xs">Front setback (ft)</Label>
+									<Label htmlFor="frontSetback" className="text-xs">Upper story setback (ft)</Label>
 									<Input id="frontSetback" type="number" min={0} value={frontSetbackFt} onChange={(e) => setFrontSetbackFt(e.target.value)} className="h-8" />
 								</div>
 							</div>
