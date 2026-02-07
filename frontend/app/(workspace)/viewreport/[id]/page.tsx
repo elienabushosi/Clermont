@@ -98,104 +98,6 @@ export default function ViewReportPage() {
 	);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [showDebugMode, setShowDebugMode] = useState(false); // false = pretty mode (default), true = debug mode
-	const [densityCandidateId, setDensityCandidateId] = useState<string>("duf_applies"); // Default to "DUF applies"
-	const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
-
-	// Intersection Observer + scroll listener: highlight TOC item for the section currently in view
-	useEffect(() => {
-		if (showDebugMode) return;
-		const sectionIds = [
-			"property-location",
-			"property-level-information",
-			"lot-details",
-			"zoning-classification",
-			"zoning-constraints-height",
-			"property-massing-3d",
-			"zoning-constraints",
-			"fema-flood-map",
-			"transit-zone-map",
-			"neighborhood-information",
-		];
-
-		const updateActive = () => {
-			const tops = sectionIds
-				.map((id) => {
-					const el = document.getElementById(id);
-					if (!el) return { id, top: Infinity, bottom: -Infinity };
-					const rect = el.getBoundingClientRect();
-					return { id, top: rect.top, bottom: rect.bottom };
-				})
-				.filter((x) => Number.isFinite(x.top));
-			
-			if (tops.length === 0) return;
-
-			// Find the section that is currently "active" (in the top portion of viewport)
-			// Priority: section whose top is between 0-150px (accounting for sticky header)
-			const headerOffset = 100;
-			const activeZone = tops.filter((x) => x.top >= headerOffset && x.top <= headerOffset + 200);
-			
-			let active: typeof tops[0] | null = null;
-			if (activeZone.length > 0) {
-				// Pick the one closest to the header offset
-				active = activeZone.sort((a, b) => Math.abs(a.top - headerOffset) - Math.abs(b.top - headerOffset))[0];
-			} else {
-				// If none in active zone, pick the topmost section that's above the viewport or just entered
-				const aboveOrJustEntered = tops.filter((x) => x.top <= headerOffset + 50);
-				if (aboveOrJustEntered.length > 0) {
-					active = aboveOrJustEntered.sort((a, b) => b.top - a.top)[0];
-				} else {
-					// Fallback: first section that's visible
-					const visible = tops.filter((x) => x.top < window.innerHeight && x.bottom > 0);
-					if (visible.length > 0) {
-						active = visible.sort((a, b) => a.top - b.top)[0];
-					}
-				}
-			}
-			
-			if (active) setActiveSectionId(active.id);
-		};
-
-		// Throttled scroll handler for smooth updates
-		let scrollTimeout: NodeJS.Timeout | null = null;
-		const handleScroll = () => {
-			if (scrollTimeout) return;
-			scrollTimeout = setTimeout(() => {
-				updateActive();
-				scrollTimeout = null;
-			}, 50); // Update every 50ms during scroll
-		};
-
-		// Intersection Observer as backup/initial detection
-		const io = new IntersectionObserver(
-			() => updateActive(),
-			{ rootMargin: "-100px 0px -50% 0px", threshold: 0 }
-		);
-
-		for (const id of sectionIds) {
-			const el = document.getElementById(id);
-			if (el) io.observe(el);
-		}
-		
-		// Initial update
-		updateActive();
-		
-		// Listen to scroll events
-		window.addEventListener("scroll", handleScroll, { passive: true });
-		
-		return () => {
-			io.disconnect();
-			window.removeEventListener("scroll", handleScroll);
-			if (scrollTimeout) clearTimeout(scrollTimeout);
-		};
-	}, [showDebugMode]);
-
-	const handleTocClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
-		e.preventDefault();
-		setActiveSectionId(id);
-		const el = document.getElementById(id);
-		el?.scrollIntoView({ behavior: "smooth", block: "start" });
-	};
 
 	useEffect(() => {
 		const fetchReport = async () => {
@@ -206,8 +108,6 @@ export default function ViewReportPage() {
 				setError(null);
 				const data = await getReportWithSources(reportId);
 				setReportData(data);
-				// Reset density toggle to default when report changes
-				setDensityCandidateId("duf_applies");
 			} catch (err) {
 				console.error("Error fetching report:", err);
 				setError(
@@ -256,6 +156,101 @@ export default function ViewReportPage() {
 			</div>
 		);
 	}
+
+	return (
+		<ReportViewContent
+			reportData={reportData}
+			reportId={reportId}
+			isPublic={false}
+		/>
+	);
+}
+
+export function ReportViewContent({
+	reportData,
+	reportId,
+	isPublic = false,
+}: {
+	reportData: ReportWithSources;
+	reportId: string;
+	isPublic?: boolean;
+}) {
+	const router = useRouter();
+	const [showDebugMode, setShowDebugMode] = useState(false);
+	const [densityCandidateId, setDensityCandidateId] = useState("duf_applies");
+	const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+
+	useEffect(() => {
+		setDensityCandidateId("duf_applies");
+	}, [reportData?.report.IdReport]);
+
+	const sectionIds = [
+		"property-location",
+		"property-level-information",
+		"lot-details",
+		"zoning-classification",
+		"zoning-constraints-height",
+		"property-massing-3d",
+		"zoning-constraints",
+		"fema-flood-map",
+		"transit-zone-map",
+		"neighborhood-information",
+	];
+	useEffect(() => {
+		if (showDebugMode) return;
+		const updateActive = () => {
+			const tops = sectionIds
+				.map((id) => {
+					const el = document.getElementById(id);
+					if (!el) return { id, top: Infinity, bottom: -Infinity };
+					const rect = el.getBoundingClientRect();
+					return { id, top: rect.top, bottom: rect.bottom };
+				})
+				.filter((x) => Number.isFinite(x.top));
+			if (tops.length === 0) return;
+			const headerOffset = 100;
+			const activeZone = tops.filter((x) => x.top >= headerOffset && x.top <= headerOffset + 200);
+			let active: (typeof tops)[0] | null = null;
+			if (activeZone.length > 0) {
+				active = activeZone.sort((a, b) => Math.abs(a.top - headerOffset) - Math.abs(b.top - headerOffset))[0];
+			} else {
+				const aboveOrJustEntered = tops.filter((x) => x.top <= headerOffset + 50);
+				if (aboveOrJustEntered.length > 0) {
+					active = aboveOrJustEntered.sort((a, b) => b.top - a.top)[0];
+				} else {
+					const visible = tops.filter((x) => x.top < window.innerHeight && x.bottom > 0);
+					if (visible.length > 0) active = visible.sort((a, b) => a.top - b.top)[0];
+				}
+			}
+			if (active) setActiveSectionId(active.id);
+		};
+		let scrollTimeout: NodeJS.Timeout | null = null;
+		const handleScroll = () => {
+			if (scrollTimeout) return;
+			scrollTimeout = setTimeout(() => {
+				updateActive();
+				scrollTimeout = null;
+			}, 50);
+		};
+		const io = new IntersectionObserver(() => updateActive(), { rootMargin: "-100px 0px -50% 0px", threshold: 0 });
+		for (const id of sectionIds) {
+			const el = document.getElementById(id);
+			if (el) io.observe(el);
+		}
+		updateActive();
+		window.addEventListener("scroll", handleScroll, { passive: true });
+		return () => {
+			io.disconnect();
+			window.removeEventListener("scroll", handleScroll);
+			if (scrollTimeout) clearTimeout(scrollTimeout);
+		};
+	}, [showDebugMode]);
+
+	const handleTocClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+		e.preventDefault();
+		setActiveSectionId(id);
+		document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+	};
 
 	const { report, client, sources } = reportData;
 
@@ -361,7 +356,11 @@ export default function ViewReportPage() {
 	const formattedData = getFormattedData();
 
 	const handleShare = () => {
-		toast.info("Share coming soon");
+		const url = `${typeof window !== "undefined" ? window.location.origin : ""}/viewreportpublic/${reportId}`;
+		navigator.clipboard.writeText(url).then(
+			() => toast.success("Link copied to clipboard"),
+			() => toast.error("Could not copy link")
+		);
 	};
 
 	const handleDownloadPdf = () => {
@@ -390,21 +389,23 @@ export default function ViewReportPage() {
 				<div className="flex items-center justify-between mb-6">
 					<Button
 						variant="ghost"
-						onClick={() => router.push("/reports")}
+						onClick={() => router.push(isPublic ? "/" : "/reports")}
 					>
 						<ArrowLeft className="size-4 mr-2" />
-						Back to Your Reports
+						{isPublic ? "Back" : "Back to Your Reports"}
 					</Button>
-					<div className="flex items-center gap-2">
-						<Button variant="outline" size="sm" onClick={handleShare} className="gap-1.5">
-							<Share2 className="size-4" />
-							Share
-						</Button>
-						<Button variant="outline" size="sm" onClick={handleDownloadPdf} className="gap-1.5">
-							<FileDown className="size-4" />
-							Download as PDF
-						</Button>
-					</div>
+					{!isPublic && (
+						<div className="flex items-center gap-2">
+							<Button variant="outline" size="sm" onClick={handleShare} className="gap-1.5">
+								<Share2 className="size-4" />
+								Share
+							</Button>
+							<Button variant="outline" size="sm" onClick={handleDownloadPdf} className="gap-1.5">
+								<FileDown className="size-4" />
+								Download as PDF
+							</Button>
+						</div>
+					)}
 				</div>
 
 				{/* Report Header */}
@@ -1354,7 +1355,13 @@ export default function ViewReportPage() {
 
 						{/* 3D Massing Visualization — inputs below 3D, Save persists to report; no report-derived defaults */}
 						{report?.IdReport && report?.ReportType !== "assemblage" && (
-							<ReportMassingSection reportId={report.IdReport} />
+							<ReportMassingSection
+								reportId={report.IdReport}
+								readOnly={isPublic}
+								initialMassingOverrides={
+									isPublic ? (reportData as { massingOverrides?: MassingOverrides | null }).massingOverrides : undefined
+								}
+							/>
 						)}
 
 						{/* Zoning Constraints Section */}

@@ -131,6 +131,32 @@ export async function getReportWithSources(
 	};
 }
 
+/**
+ * Fetch a single report with all its sources (no auth – for public share link)
+ * @param reportId - Report ID
+ * @returns Report with sources and optional massingOverrides
+ */
+export async function getReportWithSourcesPublic(
+	reportId: string
+): Promise<ReportWithSources & { massingOverrides?: MassingOverrides | null }> {
+	const response = await fetch(
+		`${config.apiUrl}/api/reports/public/${reportId}`,
+		{ method: "GET", headers: { "Content-Type": "application/json" } }
+	);
+	if (!response.ok) {
+		const err = await response.json();
+		throw new Error(err.message || "Failed to fetch report");
+	}
+	const data = await response.json();
+	return {
+		report: data.report,
+		client: data.client || null,
+		creator: data.creator || null,
+		sources: data.sources || [],
+		massingOverrides: data.massingOverrides ?? null,
+	};
+}
+
 /** Massing overrides shape stored per report (same fields as sandbox + inputsPanelHidden) */
 export interface MassingOverrides {
 	lotLengthFt?: number;

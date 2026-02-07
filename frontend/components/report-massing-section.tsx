@@ -89,7 +89,13 @@ function formStateToOverrides(state: ReturnType<typeof overridesToFormState>): M
 	};
 }
 
-export default function ReportMassingSection({ reportId }: { reportId: string }) {
+export default function ReportMassingSection({
+	reportId,
+	readOnly = false,
+}: {
+	reportId: string;
+	readOnly?: boolean;
+}) {
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [state, setState] = useState(() => overridesToFormState(null));
@@ -111,6 +117,7 @@ export default function ReportMassingSection({ reportId }: { reportId: string })
 	}, [reportId]);
 
 	const save = useCallback(async () => {
+		if (readOnly) return;
 		setSaving(true);
 		try {
 			const payload = formStateToOverrides(state);
@@ -121,21 +128,21 @@ export default function ReportMassingSection({ reportId }: { reportId: string })
 		} finally {
 			setSaving(false);
 		}
-	}, [reportId, state]);
+	}, [reportId, state, readOnly]);
 
 	const hidePanel = useCallback(async () => {
+		if (readOnly) return;
 		setState((s) => ({ ...s, inputsPanelHidden: true }));
 		setSaving(true);
 		try {
 			const payload = formStateToOverrides({ ...state, inputsPanelHidden: true });
 			await patchReportMassing(reportId, payload);
 		} catch {
-			// Revert on error
 			setState((s) => ({ ...s, inputsPanelHidden: false }));
 		} finally {
 			setSaving(false);
 		}
-	}, [reportId, state]);
+	}, [reportId, state, readOnly]);
 
 	const d = MASSING_DEFAULTS;
 	const lotL = parseNum(state.lotLengthFt, d.lotLengthFt);
@@ -215,20 +222,22 @@ export default function ReportMassingSection({ reportId }: { reportId: string })
 				</div>
 
 				{/* Hideable inputs: top row Save + Hide, then form */}
-				{state.inputsPanelHidden ? (
+				{state.inputsPanelHidden && !readOnly ? (
 					<Button variant="outline" size="sm" onClick={() => setState((s) => ({ ...s, inputsPanelHidden: false }))}>
 						Show inputs
 					</Button>
 				) : (
 					<div className="space-y-4 rounded-lg border border-[rgba(55,50,47,0.12)] p-4 bg-white">
-						<div className="flex items-center gap-2">
-							<Button size="sm" onClick={save} disabled={saving}>
-								{saving ? "Saving…" : "Save"}
-							</Button>
-							<Button variant="outline" size="sm" onClick={hidePanel} disabled={saving}>
-								Hide inputs
-							</Button>
-						</div>
+						{!readOnly && (
+							<div className="flex items-center gap-2">
+								<Button size="sm" onClick={save} disabled={saving}>
+									{saving ? "Saving…" : "Save"}
+								</Button>
+								<Button variant="outline" size="sm" onClick={hidePanel} disabled={saving}>
+									Hide inputs
+								</Button>
+							</div>
+						)}
 						<div className="grid grid-cols-2 gap-3">
 							<div className="space-y-1.5">
 								<Label htmlFor="rpt-lotLength" className="text-xs">Lot length (ft)</Label>

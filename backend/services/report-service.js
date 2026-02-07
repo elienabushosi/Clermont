@@ -273,6 +273,74 @@ export async function getReportWithSources(reportId, organizationId) {
 }
 
 /**
+ * Get a single report with all its sources (no auth – for public share link)
+ * @param {string} reportId - Report ID
+ * @returns {Promise<Object>} Report with sources and massingOverrides
+ */
+export async function getReportWithSourcesPublic(reportId) {
+	const { data: report, error: reportError } = await supabase
+		.from("reports")
+		.select("*")
+		.eq("IdReport", reportId)
+		.single();
+
+	if (reportError || !report) {
+		throw new Error("Report not found");
+	}
+
+	let clientData = null;
+	if (report.IdClient) {
+		const { data: client, error: clientError } = await supabase
+			.from("clients")
+			.select("IdClient, Name, Email, PhoneNumber")
+			.eq("IdClient", report.IdClient)
+			.single();
+		if (!clientError && client) clientData = client;
+	}
+
+	let creatorData = null;
+	if (report.CreatedBy) {
+		const { data: creator, error: creatorError } = await supabase
+			.from("users")
+			.select("IdUser, Name, Email")
+			.eq("IdUser", report.CreatedBy)
+			.single();
+		if (!creatorError && creator) creatorData = creator;
+	}
+
+	const { data: sources, error: sourcesError } = await supabase
+		.from("report_sources")
+		.select(
+			"IdReportSource, SourceKey, ContentText, ContentJson, SourceUrl, Status, ErrorMessage, CreatedAt, UpdatedAt"
+		)
+		.eq("IdReport", reportId)
+		.order("CreatedAt", { ascending: true });
+
+	if (sourcesError) {
+		console.error("Error fetching report sources:", sourcesError);
+	}
+
+	return {
+		report: {
+			IdReport: report.IdReport,
+			Address: report.Address,
+			AddressNormalized: report.AddressNormalized,
+			Name: report.Name,
+			Description: report.Description,
+			Status: report.Status,
+			ReportType: report.ReportType ?? "single",
+			CreatedAt: report.CreatedAt,
+			UpdatedAt: report.UpdatedAt,
+			CreatedBy: report.CreatedBy || null,
+		},
+		client: clientData,
+		creator: creatorData,
+		sources: sources || [],
+		massingOverrides: report.MassingOverridesJson ?? null,
+	};
+}
+
+/**
  * Get all reports for an organization with client information
  * @param {string} organizationId - Organization ID
  * @returns {Promise<Array>} Array of reports with client names

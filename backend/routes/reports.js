@@ -242,6 +242,30 @@ router.get("/", async (req, res) => {
 });
 
 /**
+ * GET /api/reports/public/:reportId
+ * Get report with sources (no auth – for public share link)
+ */
+router.get("/public/:reportId", async (req, res) => {
+	try {
+		const { reportId } = req.params;
+		const { getReportWithSourcesPublic } = await import(
+			"../services/report-service.js"
+		);
+		const reportData = await getReportWithSourcesPublic(reportId);
+		res.json({
+			status: "success",
+			...reportData,
+		});
+	} catch (error) {
+		console.error("Error fetching public report:", error);
+		res.status(404).json({
+			status: "error",
+			message: error.message || "Report not found",
+		});
+	}
+});
+
+/**
  * GET /api/reports/:reportId/massing
  * Get massing overrides for a report (JSON blob). Returns null if none saved.
  */
