@@ -35,6 +35,7 @@ import {
 	Users,
 	SquareStack,
 	SquareDashed,
+	Box,
 } from "lucide-react";
 
 function SidebarHeaderContent({
@@ -90,6 +91,8 @@ function getPageTitle(pathname: string): string {
 		return "Report Details";
 	} else if (pathname === "/settings") {
 		return "Settings";
+	} else if (pathname === "/massing-sandbox") {
+		return "Massing Sandbox";
 	}
 	return "Home";
 }
@@ -258,12 +261,26 @@ export default function WorkspaceLayout({
 										}
 										asChild
 									>
-										<Link href="/demo-report-list">
+									<Link href="/demo-report-list">
 											<FileCheck className="size-4" />
 											<span>Sample Reports</span>
 										</Link>
 									</SidebarMenuButton>
 								</SidebarMenuItem>
+								{process.env.NODE_ENV === "development" && (
+									<SidebarMenuItem>
+										<SidebarMenuButton
+											tooltip="Massing Sandbox (dev only)"
+											isActive={pathname === "/massing-sandbox"}
+											asChild
+										>
+											<Link href="/massing-sandbox">
+												<Box className="size-4" />
+												<span>Massing Sandbox</span>
+											</Link>
+										</SidebarMenuButton>
+									</SidebarMenuItem>
+								)}
 							</SidebarMenu>
 						</SidebarGroupContent>
 					</SidebarGroup>

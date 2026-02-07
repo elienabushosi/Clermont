@@ -242,6 +242,79 @@ router.get("/", async (req, res) => {
 });
 
 /**
+ * GET /api/reports/:reportId/massing
+ * Get massing overrides for a report (JSON blob). Returns null if none saved.
+ */
+router.get("/:reportId/massing", async (req, res) => {
+	try {
+		const { reportId } = req.params;
+		const authHeader = req.headers.authorization;
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({ status: "error", message: "No token provided" });
+		}
+		const userData = await getUserFromToken(authHeader.substring(7));
+		if (!userData) {
+			return res.status(401).json({ status: "error", message: "Invalid or expired token" });
+		}
+		const { data: report, error } = await supabase
+			.from("reports")
+			.select("IdReport, MassingOverridesJson")
+			.eq("IdReport", reportId)
+			.eq("IdOrganization", userData.IdOrganization)
+			.single();
+		if (error || !report) {
+			return res.status(404).json({ status: "error", message: "Report not found" });
+		}
+		res.json({
+			status: "success",
+			massingOverrides: report.MassingOverridesJson ?? null,
+		});
+	} catch (err) {
+		console.error("Error fetching report massing:", err);
+		res.status(500).json({ status: "error", message: err.message });
+	}
+});
+
+/**
+ * PATCH /api/reports/:reportId/massing
+ * Save massing overrides for a report (JSON blob).
+ */
+router.patch("/:reportId/massing", async (req, res) => {
+	try {
+		const { reportId } = req.params;
+		const authHeader = req.headers.authorization;
+		if (!authHeader || !authHeader.startsWith("Bearer ")) {
+			return res.status(401).json({ status: "error", message: "No token provided" });
+		}
+		const userData = await getUserFromToken(authHeader.substring(7));
+		if (!userData) {
+			return res.status(401).json({ status: "error", message: "Invalid or expired token" });
+		}
+		const { massingOverrides } = req.body;
+		if (massingOverrides === undefined) {
+			return res.status(400).json({ status: "error", message: "massingOverrides required" });
+		}
+		const { data, error } = await supabase
+			.from("reports")
+			.update({
+				MassingOverridesJson: massingOverrides,
+				UpdatedAt: new Date().toISOString(),
+			})
+			.eq("IdReport", reportId)
+			.eq("IdOrganization", userData.IdOrganization)
+			.select("IdReport")
+			.single();
+		if (error || !data) {
+			return res.status(404).json({ status: "error", message: "Report not found or update failed" });
+		}
+		res.json({ status: "success", massingOverrides });
+	} catch (err) {
+		console.error("Error saving report massing:", err);
+		res.status(500).json({ status: "error", message: err.message });
+	}
+});
+
+/**
  * GET /api/reports/:reportId
  * Get a single report with all its sources
  */

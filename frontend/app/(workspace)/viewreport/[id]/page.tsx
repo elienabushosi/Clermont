@@ -15,6 +15,7 @@ import { getBuildingClassDescriptionText } from "@/lib/building-class";
 import { getLandUseDescriptionText } from "@/lib/land-use";
 import {
 	ArrowLeft,
+	Box,
 	MapPin,
 	Send,
 	Home,
@@ -32,6 +33,7 @@ import { config } from "@/lib/config";
 import { toast } from "sonner";
 import FemaFloodMap from "@/components/fema-flood-map";
 import TransitZoneMap from "@/components/transit-zone-map";
+import ReportMassingSection from "@/components/report-massing-section";
 
 function getStatusColor(status: string) {
 	switch (status) {
@@ -46,6 +48,44 @@ function getStatusColor(status: string) {
 		default:
 			return "bg-gray-100 text-gray-700 border-gray-200";
 	}
+}
+
+/** Extract numeric lot area (sq ft) from formatted string like "5,000 sq ft" */
+function extractLotAreaSqft(lotAreaStr: string | null | undefined): number | null {
+	if (!lotAreaStr) return null;
+	const match = lotAreaStr.replace(/,/g, "").match(/(\d+(?:\.\d+)?)/);
+	return match ? parseFloat(match[1]) : null;
+}
+
+/** Extract numeric frontage (ft) from formatted string like "25 ft" */
+function extractLotFrontageFt(frontageStr: string | null | undefined): number | null {
+	if (!frontageStr) return null;
+	const match = frontageStr.replace(/,/g, "").match(/(\d+(?:\.\d+)?)/);
+	return match ? parseFloat(match[1]) : null;
+}
+
+/** Extract min base height (ft) from zoning resolution height data */
+function extractMinBaseHeightFt(height: { min_base_height?: { kind?: string; value_ft?: number; candidates?: { value_ft: number }[] } } | null | undefined): number | null {
+	if (!height?.min_base_height) return null;
+	const h = height.min_base_height;
+	if (h.kind === "fixed" && h.value_ft != null) return h.value_ft;
+	if (h.kind === "conditional" && h.candidates?.length) {
+		const values = h.candidates.map((c) => c.value_ft).filter((v) => v != null);
+		return values.length > 0 ? Math.min(...values) : null;
+	}
+	return null;
+}
+
+/** Extract max base height (ft) from zoning resolution envelope */
+function extractMaxBaseHeightFt(height: { envelope?: { candidates?: { max_base_height_ft?: number }[] } } | null | undefined): number | null {
+	const candidate = height?.envelope?.candidates?.[0];
+	return candidate?.max_base_height_ft ?? null;
+}
+
+/** Extract max building height (ft) from zoning resolution envelope */
+function extractMaxBuildingHeightFt(height: { envelope?: { candidates?: { max_building_height_ft?: number }[] } } | null | undefined): number | null {
+	const candidate = height?.envelope?.candidates?.[0];
+	return candidate?.max_building_height_ft ?? null;
 }
 
 export default function ViewReportPage() {
@@ -71,6 +111,7 @@ export default function ViewReportPage() {
 			"lot-details",
 			"zoning-classification",
 			"zoning-constraints-height",
+			"property-massing-3d",
 			"zoning-constraints",
 			"fema-flood-map",
 			"transit-zone-map",
@@ -333,6 +374,7 @@ export default function ViewReportPage() {
 		{ id: "lot-details", label: "Lot Details" },
 		{ id: "zoning-classification", label: "Zoning Classification" },
 		{ id: "zoning-constraints-height", label: "Zoning Constraints (Height)" },
+		{ id: "property-massing-3d", label: "3D Massing" },
 		{ id: "zoning-constraints", label: "Zoning Constraints" },
 		{ id: "fema-flood-map", label: "FEMA Flood Map" },
 		{ id: "transit-zone-map", label: "Transit Zone Map" },
@@ -1308,6 +1350,11 @@ export default function ViewReportPage() {
 									</div>
 								</CardContent>
 							</Card>
+						)}
+
+						{/* 3D Massing Visualization — inputs below 3D, Save persists to report; no report-derived defaults */}
+						{report?.IdReport && report?.ReportType !== "assemblage" && (
+							<ReportMassingSection reportId={report.IdReport} />
 						)}
 
 						{/* Zoning Constraints Section */}

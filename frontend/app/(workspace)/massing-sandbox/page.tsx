@@ -38,6 +38,8 @@ const DEFAULTS = {
 	buildingHeightFt: 37,
 	setbackStartFt: 18,
 	frontSetbackFt: 20, // Upper story setback (ft)
+	maxHeightFt: 50,
+	showMaxHeightCage: false,
 	xAlign: "center" as const,
 	zAlign: "center" as const,
 };
@@ -378,8 +380,65 @@ function useHeightDimensionMarker(
 	}, [bboxMinX, bboxMinZ, bboxMaxZ, buildingHeightFt, scale, baseHeightFt]);
 }
 
-/** 3D scene driven by sandbox state */
-function MassingSandboxScene({
+const CAGE_EPSILON_Y = 0.02;
+const CAGE_OPACITY_NORMAL = 0.18;
+const CAGE_OPACITY_OVER = 0.35;
+
+/** Transparent wireframe cage showing max permitted height. Lot footprint, no solid faces; renders behind building. */
+function MaxHeightCage({
+	lotWidth,
+	lotLength,
+	maxHeightFt,
+	scale,
+	show,
+	buildingHeightFt,
+	epsilonY = CAGE_EPSILON_Y,
+}: {
+	lotWidth: number;
+	lotLength: number;
+	maxHeightFt: number;
+	scale: number;
+	show: boolean;
+	buildingHeightFt?: number;
+	epsilonY?: number;
+}) {
+	const maxHeightWorld = maxHeightFt * scale;
+	const boxGeom = useMemo(
+		() => new THREE.BoxGeometry(lotWidth, maxHeightWorld, lotLength),
+		[lotWidth, lotLength, maxHeightWorld]
+	);
+	const edgesGeom = useMemo(() => new THREE.EdgesGeometry(boxGeom), [boxGeom]);
+	useEffect(() => {
+		return () => {
+			boxGeom.dispose();
+			edgesGeom.dispose();
+		};
+	}, [boxGeom, edgesGeom]);
+
+	const overLimit = buildingHeightFt != null && buildingHeightFt > maxHeightFt;
+	const opacity = overLimit ? CAGE_OPACITY_OVER : CAGE_OPACITY_NORMAL;
+	const color = overLimit ? "#b91c1c" : "#000000";
+
+	if (!show || maxHeightFt <= 0) return null;
+
+	return (
+		<lineSegments
+			geometry={edgesGeom}
+			position={[0, epsilonY + maxHeightWorld / 2, 0]}
+			renderOrder={-1}
+		>
+			<lineBasicMaterial
+				color={color}
+				transparent
+				opacity={opacity}
+				depthWrite={false}
+			/>
+		</lineSegments>
+	);
+}
+
+/** 3D scene driven by sandbox state (exported for report massing section) */
+export function MassingSandboxScene({
 	lotLengthFt,
 	lotWidthFt,
 	scale,
@@ -396,6 +455,8 @@ function MassingSandboxScene({
 	buildingHeightFt = 10,
 	setbackStartFt = 10,
 	frontSetbackFt = 0,
+	maxHeightFt = 0,
+	showMaxHeightCage = false,
 	xAlign,
 	zAlign,
 }: {
@@ -416,6 +477,8 @@ function MassingSandboxScene({
 	setbackStartFt?: number;
 	/** Front story setback (ft) */
 	frontSetbackFt?: number;
+	maxHeightFt?: number;
+	showMaxHeightCage?: boolean;
 	xAlign?: "left" | "center" | "right";
 	zAlign?: "front" | "center" | "back";
 }) {
@@ -463,7 +526,8 @@ function MassingSandboxScene({
 	const maxZ = halfLotD - halfBuildingD;
 	const alignX = xAlign ?? "center";
 	const alignZ = zAlign ?? "center";
-	const rawX = alignX === "left" ? minX : alignX === "right" ? maxX : 0;
+	// Left/Right are swapped: "Left" targets right side (maxX), "Right" targets left side (minX)
+	const rawX = alignX === "left" ? maxX : alignX === "right" ? minX : 0;
 	const rawZ = alignZ === "front" ? minZ : alignZ === "back" ? maxZ : 0;
 	const buildingPosX = Math.min(Math.max(rawX, minX), maxX);
 	const buildingPosZ = Math.min(Math.max(rawZ, minZ), maxZ);
@@ -636,6 +700,16 @@ function MassingSandboxScene({
 				<meshStandardMaterial color={groundColor} />
 			</mesh>
 
+			{/* Max height cage: wireframe envelope at lot footprint; renders behind building */}
+			<MaxHeightCage
+				lotWidth={lotWidth}
+				lotLength={lotLength}
+				maxHeightFt={maxHeightFt ?? 0}
+				scale={scale}
+				show={showMaxHeightCage ?? false}
+				buildingHeightFt={buildingHeightFt ?? 10}
+			/>
+
 			{/* Building group: placement inside lot (clamped by alignment) */}
 			<group position={buildingPosition}>
 				{/* Base mass: full footprint, height = setbackStart (or full height if one mass) */}
@@ -794,6 +868,8 @@ export default function MassingSandboxPage() {
 	const [buildingHeightFt, setBuildingHeightFt] = useState(String(DEFAULTS.buildingHeightFt));
 	const [setbackStartFt, setSetbackStartFt] = useState(String(DEFAULTS.setbackStartFt));
 	const [frontSetbackFt, setFrontSetbackFt] = useState(String(DEFAULTS.frontSetbackFt));
+	const [maxHeightFt, setMaxHeightFt] = useState(String(DEFAULTS.maxHeightFt));
+	const [showMaxHeightCage, setShowMaxHeightCage] = useState(DEFAULTS.showMaxHeightCage);
 	const [xAlign, setXAlign] = useState<"left" | "center" | "right">(DEFAULTS.xAlign);
 	const [zAlign, setZAlign] = useState<"front" | "center" | "back">(DEFAULTS.zAlign);
 
@@ -810,6 +886,7 @@ export default function MassingSandboxPage() {
 	const buildingH = parseNum(buildingHeightFt, DEFAULTS.buildingHeightFt);
 	const setbackStart = parseNum(setbackStartFt, DEFAULTS.setbackStartFt);
 	const frontSetback = parseNum(frontSetbackFt, DEFAULTS.frontSetbackFt);
+	const maxHeight = parseNum(maxHeightFt, DEFAULTS.maxHeightFt);
 
 	const resetToDefaults = () => {
 		setLotLengthFt(String(DEFAULTS.lotLengthFt));
@@ -936,6 +1013,20 @@ export default function MassingSandboxPage() {
 									<Label htmlFor="frontSetback" className="text-xs">Upper story setback (ft)</Label>
 									<Input id="frontSetback" type="number" min={0} value={frontSetbackFt} onChange={(e) => setFrontSetbackFt(e.target.value)} className="h-8" />
 								</div>
+								<div className="space-y-1">
+									<Label htmlFor="maxHeight" className="text-xs">Max height (ft)</Label>
+									<Input id="maxHeight" type="number" min={0} value={maxHeightFt} onChange={(e) => setMaxHeightFt(e.target.value)} className="h-8" />
+								</div>
+							</div>
+							<div className="flex items-center gap-2 mt-2">
+								<input
+									id="showMaxHeightCage"
+									type="checkbox"
+									checked={showMaxHeightCage}
+									onChange={(e) => setShowMaxHeightCage(e.target.checked)}
+									className="h-4 w-4 rounded border-[rgba(55,50,47,0.24)]"
+								/>
+								<Label htmlFor="showMaxHeightCage" className="text-xs cursor-pointer">Show max height cage</Label>
 							</div>
 						</div>
 					</CardContent>
@@ -985,6 +1076,8 @@ export default function MassingSandboxPage() {
 												buildingHeightFt={buildingH}
 												setbackStartFt={setbackStart}
 												frontSetbackFt={frontSetback}
+												maxHeightFt={maxHeight}
+												showMaxHeightCage={showMaxHeightCage}
 												xAlign={xAlign}
 												zAlign={zAlign}
 											/>
