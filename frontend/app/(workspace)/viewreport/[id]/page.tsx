@@ -31,8 +31,8 @@ import {
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
 import { config } from "@/lib/config";
 import { toast } from "sonner";
-import FemaFloodMap from "@/components/fema-flood-map";
-import TransitZoneMap from "@/components/transit-zone-map";
+import FemaFloodMap, { type FemaFloodMapHandle } from "@/components/fema-flood-map";
+import TransitZoneMap, { type TransitZoneMapHandle } from "@/components/transit-zone-map";
 import ReportMassingSection from "@/components/report-massing-section";
 
 function getStatusColor(status: string) {
@@ -179,6 +179,8 @@ export function ReportViewContent({
 	const [showDebugMode, setShowDebugMode] = useState(false);
 	const [densityCandidateId, setDensityCandidateId] = useState("duf_applies");
 	const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+	const femaMapRef = useRef<FemaFloodMapHandle>(null);
+	const transitMapRef = useRef<TransitZoneMapHandle>(null);
 
 	useEffect(() => {
 		setDensityCandidateId("duf_applies");
@@ -363,8 +365,30 @@ export function ReportViewContent({
 		);
 	};
 
-	const handleDownloadPdf = () => {
-		toast.info("PDF download coming soon");
+	const handleDownloadPdf = async () => {
+		// Capture FEMA and Transit Zone maps via ArcGIS takeScreenshot for print
+		try {
+			const [femaDataUrl, transitDataUrl] = await Promise.all([
+				femaMapRef.current?.takeScreenshot() ?? Promise.resolve(null),
+				transitMapRef.current?.takeScreenshot() ?? Promise.resolve(null),
+			]);
+			const femaImg = document.getElementById("fema-flood-map-print-image") as HTMLImageElement | null;
+			const transitImg = document.getElementById("transit-zone-map-print-image") as HTMLImageElement | null;
+			if (femaDataUrl && femaImg) femaImg.src = femaDataUrl;
+			if (transitDataUrl && transitImg) transitImg.src = transitDataUrl;
+		} catch (err) {
+			console.error("Failed to capture maps for PDF:", err);
+		}
+		// Set document title to address so Save As PDF suggests the address as filename
+		const previousTitle = document.title;
+		const addressTitle = (report.Address || "Report").replace(/[\\/:*?"<>|]/g, " ").trim() || "Report";
+		document.title = addressTitle;
+		const onAfterPrint = () => {
+			document.title = previousTitle;
+			window.removeEventListener("afterprint", onAfterPrint);
+		};
+		window.addEventListener("afterprint", onAfterPrint);
+		setTimeout(() => window.print(), 150);
 	};
 
 	const reportSections = [
@@ -381,12 +405,12 @@ export function ReportViewContent({
 	];
 
 	return (
-		<div className="p-8 bg-[#F7F5F3] min-h-screen">
+		<div className="p-8 bg-[#F7F5F3] min-h-screen" data-report-print-root>
 			<div className="max-w-6xl mx-auto flex gap-10">
 				{/* Main report content */}
 				<main className="flex-1 min-w-0 max-w-4xl">
 				{/* Top Navigation Bar */}
-				<div className="flex items-center justify-between mb-6">
+				<div className="flex items-center justify-between mb-6 print-hide-top-bar">
 					<Button
 						variant="ghost"
 						onClick={() => router.push(isPublic ? "/" : "/reports")}
@@ -2400,9 +2424,11 @@ export function ReportViewContent({
 												FEMA Flood Map
 											</h3>
 											<FemaFloodMap
+												ref={femaMapRef}
 												lat={lat}
 												lng={lng}
 												address={report.Address}
+												printImageId="fema-flood-map-print-image"
 												floodZoneData={femaFloodData}
 											/>
 										</div>
@@ -2453,9 +2479,11 @@ export function ReportViewContent({
 												Transit Zone Map
 											</h3>
 											<TransitZoneMap
+												ref={transitMapRef}
 												lat={lat}
 												lng={lng}
 												address={report.Address}
+												printImageId="transit-zone-map-print-image"
 												transitZoneData={transitZoneData}
 											/>
 										</div>

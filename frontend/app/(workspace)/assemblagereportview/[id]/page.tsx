@@ -18,8 +18,8 @@ import { getBuildingClassDescriptionText } from "@/lib/building-class";
 import { getLandUseDescriptionText } from "@/lib/land-use";
 import { config } from "@/lib/config";
 import { toast } from "sonner";
-import FemaFloodMap from "@/components/fema-flood-map";
-import TransitZoneMap from "@/components/transit-zone-map";
+import FemaFloodMap, { type FemaFloodMapHandle } from "@/components/fema-flood-map";
+import TransitZoneMap, { type TransitZoneMapHandle } from "@/components/transit-zone-map";
 
 interface AssemblageLot {
 	childIndex: number;
@@ -357,6 +357,8 @@ export default function AssemblageReportViewPage() {
 		contiguityLinearFt: "",
 	});
 	const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+	const femaMapRef = useRef<FemaFloodMapHandle>(null);
+	const transitMapRef = useRef<TransitZoneMapHandle>(null);
 
 	useEffect(() => {
 		const fetchReport = async () => {
@@ -819,29 +821,48 @@ export default function AssemblageReportViewPage() {
 	const handleShare = () => {
 		toast.info("Share coming soon");
 	};
-	const handleDownloadPdf = () => {
-		// PDF download not yet implemented; see note below
-		toast.info("PDF download coming soon");
+	const handleDownloadPdf = async () => {
+		try {
+			const [femaDataUrl, transitDataUrl] = await Promise.all([
+				femaMapRef.current?.takeScreenshot() ?? Promise.resolve(null),
+				transitMapRef.current?.takeScreenshot() ?? Promise.resolve(null),
+			]);
+			const femaImg = document.getElementById("fema-flood-map-print-image") as HTMLImageElement | null;
+			const transitImg = document.getElementById("transit-zone-map-print-image") as HTMLImageElement | null;
+			if (femaDataUrl && femaImg) femaImg.src = femaDataUrl;
+			if (transitDataUrl && transitImg) transitImg.src = transitDataUrl;
+		} catch (err) {
+			console.error("Failed to capture maps for PDF:", err);
+		}
+		// Set document title to address so Save As PDF suggests the address as filename
+		const previousTitle = document.title;
+		const addressTitle = (report.Address || "Assemblage Report").replace(/[\\/:*?"<>|]/g, " ").trim() || "Assemblage Report";
+		document.title = addressTitle;
+		const onAfterPrint = () => {
+			document.title = previousTitle;
+			window.removeEventListener("afterprint", onAfterPrint);
+		};
+		window.addEventListener("afterprint", onAfterPrint);
+		setTimeout(() => window.print(), 150);
 	};
 
 	return (
-		<div className="p-8">
+		<div className="p-8 bg-[#F7F5F3] min-h-screen" data-report-print-root>
 			<div className="max-w-6xl mx-auto flex gap-10">
 				<main className="flex-1 min-w-0 max-w-5xl space-y-6">
-				<Button
-					variant="ghost"
-					onClick={() => router.push("/reports")}
-					className="mb-2"
-				>
-					<ArrowLeft className="size-4 mr-2" />
-					Back to Reports
-				</Button>
+				<div className="print-hide-top-bar">
+					<Button
+						variant="ghost"
+						onClick={() => router.push("/reports")}
+						className="mb-2"
+					>
+						<ArrowLeft className="size-4 mr-2" />
+						Back to Reports
+					</Button>
 
-				{/* Created by + Share / Download as PDF */}
-				<div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-					<p className="text-sm text-[#605A57]">
-						Created by {creator?.Name ?? "—"}
-					</p>
+					{/* Share / Download as PDF */}
+					<div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+					<div />
 					<div className="flex items-center gap-2">
 						<Button variant="outline" size="sm" onClick={handleShare} className="gap-1.5">
 							<Share2 className="size-4" />
@@ -852,24 +873,27 @@ export default function AssemblageReportViewPage() {
 							Download as PDF
 						</Button>
 					</div>
+					</div>
 				</div>
 
 				<div className="flex flex-wrap items-center justify-between gap-3">
-					<div className="flex flex-wrap items-center gap-3">
+					<div className="flex flex-col gap-2">
 						<h1 className="text-2xl font-semibold text-[#37322F]">
 							Assemblage Report
 						</h1>
-						<Badge
-							variant="outline"
-							className={`text-xs ${getStatusColor(report.Status)}`}
-						>
-							{report.Status}
-						</Badge>
-						{report.CreatedAt && (
-							<span className="text-sm text-[#605A57]">
-								{format(new Date(report.CreatedAt), "MMM d, yyyy 'at' h:mm a")}
-							</span>
-						)}
+						<div className="flex flex-wrap items-center gap-2">
+							{report.CreatedAt && (
+								<Badge className="bg-green-100 text-green-700 border-green-200">
+									Report Generated:{" "}
+									{format(new Date(report.CreatedAt), "M/d/yyyy")}
+								</Badge>
+							)}
+							{creator && (
+								<Badge className="bg-blue-100 text-blue-700 border-blue-200">
+									Created by: {creator.Name}
+								</Badge>
+							)}
+						</div>
 					</div>
 					{process.env.NODE_ENV !== "production" && (
 						<div className="flex items-center gap-2">
@@ -1878,9 +1902,11 @@ export default function AssemblageReportViewPage() {
 													FEMA Flood Map
 												</h3>
 												<FemaFloodMap
+													ref={femaMapRef}
 													lat={firstAvailableCoords.lat}
 													lng={firstAvailableCoords.lng}
 													address={firstAvailableCoords.address}
+													printImageId="fema-flood-map-print-image"
 													floodZoneData={
 														sources.find((s) => s.SourceKey === "fema_flood")?.ContentJson != null
 															? ((sources.find((s) => s.SourceKey === "fema_flood")!.ContentJson as { contentJson?: unknown }).contentJson ??
@@ -1904,9 +1930,11 @@ export default function AssemblageReportViewPage() {
 													Transit Zone Map
 												</h3>
 												<TransitZoneMap
+													ref={transitMapRef}
 													lat={firstAvailableCoords.lat}
 													lng={firstAvailableCoords.lng}
 													address={firstAvailableCoords.address}
+													printImageId="transit-zone-map-print-image"
 													transitZoneData={
 														sources.find((s) => s.SourceKey === "transit_zones")?.ContentJson != null
 															? ((sources.find((s) => s.SourceKey === "transit_zones")!.ContentJson as { contentJson?: unknown }).contentJson ??
