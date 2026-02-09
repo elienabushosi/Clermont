@@ -93,6 +93,10 @@ function getPageTitle(pathname: string): string {
 		return "Settings";
 	} else if (pathname === "/massing-sandbox") {
 		return "Massing Sandbox";
+	} else if (pathname.includes("/assemblagereportview")) {
+		return "Assemblage Report";
+	} else if (pathname.includes("/viewreport")) {
+		return "Report";
 	}
 	return "Home";
 }
@@ -165,7 +169,7 @@ export default function WorkspaceLayout({
 
 	return (
 		<SidebarProvider>
-			<Sidebar collapsible="icon">
+			<Sidebar collapsible="icon" data-sidebar="sidebar">
 				<SidebarHeader>
 					<SidebarHeaderContent
 						organizationName={userData?.organization?.Name || null}
@@ -319,8 +323,10 @@ export default function WorkspaceLayout({
 				</SidebarFooter>
 			</Sidebar>
 			<SidebarInset>
-				{/* Header with toggle button */}
-				<header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+				{/* Header with toggle button - hidden on report view and in print */}
+				<header
+					className={`flex h-16 shrink-0 items-center gap-2 border-b px-4 workspace-page-header ${pathname.includes("/viewreport") || pathname.includes("/assemblagereportview") ? "hidden" : ""}`}
+				>
 					<SidebarTrigger className="-ml-1" />
 					<h1 className="text-lg font-semibold text-[#37322F]">
 						{pageTitle}

@@ -124,5 +124,64 @@
 }
 
 .backdrop-blur-custom {
-  backdrop-filter: blur(8.25px);
+	backdrop-filter: blur(8.25px);
+}
+
+/* Print styles for report PDF export */
+@media print {
+	/* Hide workspace sidebar */
+	[data-sidebar="sidebar"] {
+		display: none !important;
+	}
+
+	/* Hide workspace page header (title bar) */
+	.workspace-page-header {
+		display: none !important;
+	}
+
+	/* Hide top navigation bar (Back/Share/Download) */
+	.print-hide-top-bar {
+		display: none !important;
+	}
+
+	/* Ensure full width when sidebar is hidden and center content */
+	[data-slot="sidebar-wrapper"] {
+		display: block !important;
+		width: 100% !important;
+	}
+
+	[data-slot="sidebar-inset"] {
+		width: 100% !important;
+		max-width: 100% !important;
+		margin-left: 0 !important;
+		padding-left: 0 !important;
+		padding-right: 0 !important;
+		display: flex !important;
+		flex-direction: column !important;
+		align-items: center !important;
+	}
+
+	/* Center the report content on the page */
+	[data-report-print-root] {
+		width: 100% !important;
+		max-width: 72rem !important;
+		margin-left: auto !important;
+		margin-right: auto !important;
+		padding-left: 1.5rem !important;
+		padding-right: 1.5rem !important;
+	}
+
+	[data-slot="sidebar-inset"] .max-w-6xl {
+		margin-left: auto !important;
+		margin-right: auto !important;
+	}
+
+	/* Hide live map containers in print (canvas doesn't render); print images shown instead */
+	[data-map-print-target] {
+		display: none !important;
+	}
+
+	.print-show-map-image {
+		display: block !important;
+	}
 }
