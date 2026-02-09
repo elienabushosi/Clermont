@@ -37,6 +37,16 @@ export default function ViewReportPublicPage() {
 		fetchReport();
 	}, [reportId]);
 
+	// Set tab title to report address when report has loaded (for client nav / fallback)
+	useEffect(() => {
+		if (!reportData?.report) return;
+		const title =
+			reportData.report.Address?.trim() ||
+			reportData.report.Name?.trim() ||
+			"Report";
+		document.title = title;
+	}, [reportData]);
+
 	if (isLoading) {
 		return (
 			<div className="p-8 bg-[#F7F5F3] min-h-screen">
