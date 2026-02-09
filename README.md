@@ -78,3 +78,4 @@ This project uses npm workspaces:
 
 -   `lindero-frontend` - Next.js application
 -   `lindero-backend` - Express.js API server
+
