@@ -341,14 +341,16 @@ function AssemblageMap({ addresses }: { addresses: string[] }) {
 	);
 }
 
-export default function AssemblageReportViewPage() {
-	const params = useParams();
+export function AssemblageReportViewContent({
+	reportData,
+	reportId,
+	isPublic,
+}: {
+	reportData: ReportWithSources;
+	reportId: string;
+	isPublic: boolean;
+}) {
 	const router = useRouter();
-	const reportId = params.id as string;
-
-	const [reportData, setReportData] = useState<ReportWithSources | null>(null);
-	const [isLoading, setIsLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
 	const [showDebugMode, setShowDebugMode] = useState(false);
 	const [ghostLot, setGhostLot] = useState<GhostLotInput>({
 		lotAreaSqft: "",
@@ -359,30 +361,6 @@ export default function AssemblageReportViewPage() {
 	const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 	const femaMapRef = useRef<FemaFloodMapHandle>(null);
 	const transitMapRef = useRef<TransitZoneMapHandle>(null);
-
-	useEffect(() => {
-		const fetchReport = async () => {
-			if (!reportId) return;
-			try {
-				setIsLoading(true);
-				setError(null);
-				const data = await getReportWithSources(reportId);
-				// If not an assemblage report, redirect to single report view
-				if (data.report.ReportType !== "assemblage") {
-					router.replace(`/viewreport/${reportId}`);
-					return;
-				}
-				setReportData(data);
-			} catch (err) {
-				console.error("Error fetching assemblage report:", err);
-				setError(err instanceof Error ? err.message : "Failed to load report");
-			} finally {
-				setIsLoading(false);
-			}
-		};
-
-		fetchReport();
-	}, [reportId, router]);
 
 	// Hooks must run unconditionally (before any early return). Compute from reportData/ghostLot.
 	const mergedScenario = useMemo(() => {
@@ -581,43 +559,7 @@ export default function AssemblageReportViewPage() {
 		el?.scrollIntoView({ behavior: "smooth", block: "start" });
 	};
 
-	if (isLoading) {
-		return (
-			<div className="p-8">
-				<div className="max-w-4xl mx-auto">
-					<Skeleton className="h-8 w-32 mb-6" />
-					<Skeleton className="h-64 w-full" />
-				</div>
-			</div>
-		);
-	}
-
-	if (error || !reportData) {
-		return (
-			<div className="p-8">
-				<div className="max-w-4xl mx-auto">
-					<Button
-						variant="ghost"
-						onClick={() => router.push("/reports")}
-						className="mb-4"
-					>
-						<ArrowLeft className="size-4 mr-2" />
-						Back to Reports
-					</Button>
-					<Card>
-						<CardContent className="pt-6">
-							<p className="text-red-600">{error || "Report not found"}</p>
-						</CardContent>
-					</Card>
-				</div>
-			</div>
-		);
-	}
-
 	const { report, sources, creator } = reportData;
-	if (report.ReportType !== "assemblage") {
-		return null; // redirect in progress
-	}
 
 	// Find assemblage_aggregation source; ContentJson may be nested
 	const aggSource = sources.find((s) => s.SourceKey === "assemblage_aggregation");
@@ -819,7 +761,11 @@ export default function AssemblageReportViewPage() {
 	);
 
 	const handleShare = () => {
-		toast.info("Share coming soon");
+		const url = `${typeof window !== "undefined" ? window.location.origin : ""}/viewassemblagereportpublic/${reportId}`;
+		navigator.clipboard.writeText(url).then(
+			() => toast.success("Link copied to clipboard"),
+			() => toast.error("Could not copy link")
+		);
 	};
 	const handleDownloadPdf = async () => {
 		try {
@@ -853,14 +799,14 @@ export default function AssemblageReportViewPage() {
 				<div className="print-hide-top-bar">
 					<Button
 						variant="ghost"
-						onClick={() => router.push("/reports")}
+						onClick={() => router.push(isPublic ? "/" : "/reports")}
 						className="mb-2"
 					>
 						<ArrowLeft className="size-4 mr-2" />
-						Back to Reports
+						{isPublic ? "Back" : "Back to Reports"}
 					</Button>
 
-					{/* Share / Download as PDF */}
+					{!isPublic && (
 					<div className="flex flex-wrap items-center justify-between gap-3 mb-2">
 					<div />
 					<div className="flex items-center gap-2">
@@ -874,6 +820,7 @@ export default function AssemblageReportViewPage() {
 						</Button>
 					</div>
 					</div>
+					)}
 				</div>
 
 				<div className="flex flex-wrap items-center justify-between gap-3">
@@ -1984,5 +1931,78 @@ export default function AssemblageReportViewPage() {
 				)}
 			</div>
 		</div>
+	);
+}
+
+export default function AssemblageReportViewPage() {
+	const params = useParams();
+	const router = useRouter();
+	const reportId = params.id as string;
+
+	const [reportData, setReportData] = useState<ReportWithSources | null>(null);
+	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		const fetchReport = async () => {
+			if (!reportId) return;
+			try {
+				setIsLoading(true);
+				setError(null);
+				const data = await getReportWithSources(reportId);
+				if (data.report.ReportType !== "assemblage") {
+					router.replace(`/viewreport/${reportId}`);
+					return;
+				}
+				setReportData(data);
+			} catch (err) {
+				console.error("Error fetching assemblage report:", err);
+				setError(err instanceof Error ? err.message : "Failed to load report");
+			} finally {
+				setIsLoading(false);
+			}
+		};
+		fetchReport();
+	}, [reportId, router]);
+
+	if (isLoading) {
+		return (
+			<div className="p-8">
+				<div className="max-w-4xl mx-auto">
+					<Skeleton className="h-8 w-32 mb-6" />
+					<Skeleton className="h-64 w-full" />
+				</div>
+			</div>
+		);
+	}
+
+	if (error || !reportData) {
+		return (
+			<div className="p-8">
+				<div className="max-w-4xl mx-auto">
+					<Button
+						variant="ghost"
+						onClick={() => router.push("/reports")}
+						className="mb-4"
+					>
+						<ArrowLeft className="size-4 mr-2" />
+						Back to Reports
+					</Button>
+					<Card>
+						<CardContent className="pt-6">
+							<p className="text-red-600">{error || "Report not found"}</p>
+						</CardContent>
+					</Card>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<AssemblageReportViewContent
+			reportData={reportData}
+			reportId={reportId}
+			isPublic={false}
+		/>
 	);
 }
