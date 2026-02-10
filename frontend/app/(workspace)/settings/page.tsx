@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Lock, CreditCard, Mail, CheckCircle2, Loader2, X, Check } from "lucide-react";
+import { Lock, CreditCard, Mail, CheckCircle2, Loader2, X, Check, Gem } from "lucide-react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -732,22 +732,39 @@ export default function SettingsPage() {
 													</div>
 													
 													{/* Upgrade Button - Only show for monthly subscribers */}
-													{currentSubscriptionProduct.priceId === STRIPE_MONTHLY_PRICE_ID && (
-														<Button
-															onClick={handleUpgradeClick}
-															disabled={isPreviewingUpgrade || isUpgrading}
-															className="w-full bg-[#37322F] hover:bg-[#37322F]/90 text-white"
-														>
-															{isPreviewingUpgrade ? (
-																<>
-																	<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-																	Calculating...
-																</>
-															) : (
-																"Upgrade & save $589 annually"
-															)}
-														</Button>
-													)}
+													{currentSubscriptionProduct.priceId === STRIPE_MONTHLY_PRICE_ID && (() => {
+														const annualPriceForUpgrade = products.find(
+															(p) => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID
+														);
+														const upgradeMonthlyAnnualCost = currentSubscriptionProduct.amount ? currentSubscriptionProduct.amount * 12 : 0;
+														const upgradeAnnualCost = annualPriceForUpgrade?.amount || 0;
+														const upgradeSavings = upgradeMonthlyAnnualCost - upgradeAnnualCost;
+														const upgradeSavingsFormatted = upgradeSavings > 0 && annualPriceForUpgrade?.currency
+															? new Intl.NumberFormat("en-US", {
+																	style: "currency",
+																	currency: annualPriceForUpgrade.currency.toUpperCase(),
+																	minimumFractionDigits: 0,
+																	maximumFractionDigits: 0,
+																}).format(Math.floor(upgradeSavings / 100))
+															: null;
+														
+														return (
+															<Button
+																onClick={handleUpgradeClick}
+																disabled={isPreviewingUpgrade || isUpgrading}
+																className="w-full bg-[#37322F] hover:bg-[#37322F]/90 text-white"
+															>
+																{isPreviewingUpgrade ? (
+																	<>
+																		<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																		Calculating...
+																	</>
+																) : (
+																	upgradeSavingsFormatted ? `Upgrade & save ${upgradeSavingsFormatted} annually` : "Upgrade to annual plan"
+																)}
+															</Button>
+														);
+													})()}
 												</div>
 											</CardContent>
 										</Card>
@@ -814,6 +831,17 @@ export default function SettingsPage() {
 													const monthlyAnnualCost = monthlyPrice?.amount ? monthlyPrice.amount * 12 : 0;
 													const annualCost = annualPrice?.amount || 0;
 													const savings = monthlyAnnualCost - annualCost;
+													const savingsFormatted = savings > 0 && annualPrice?.currency
+														? new Intl.NumberFormat("en-US", {
+																style: "currency",
+																currency: annualPrice.currency.toUpperCase(),
+																minimumFractionDigits: 0,
+																maximumFractionDigits: 0,
+															}).format(Math.floor(savings / 100))
+														: null;
+													const savingsPercentage = monthlyAnnualCost > 0 && savings > 0
+														? Math.ceil((savings / monthlyAnnualCost) * 100)
+														: null;
 
 													return (
 														<Card key={group.id} className="hover:shadow-md transition-shadow">
@@ -832,6 +860,9 @@ export default function SettingsPage() {
 																<div className="space-y-3">
 																	{[
 																		"Unlimited reports",
+																		"Residential NYC addresses(only)",
+																		"Single Parcel",
+																		"Assemblage",
 																		"Zoning Restriction Insights",
 																		"High Requirement Data",
 																		"Zone Lot Coverage Data",
@@ -842,6 +873,21 @@ export default function SettingsPage() {
 																				<Check className="h-4 w-4 text-white" />
 																			</div>
 																			<span className="text-sm text-[#37322F]">{feature}</span>
+																		</div>
+																	))}
+																</div>
+
+																{/* Additional Benefits Section */}
+																<div className="space-y-3 pt-4 border-t border-[rgba(55,50,47,0.12)]">
+																	{[
+																		"Early Access",
+																		"Priority support",
+																		"Weekly feedback session (30–45 min)",
+																		"Ability to influence roadmap priorities",
+																	].map((benefit) => (
+																		<div key={benefit} className="flex items-center gap-3">
+																			<Gem className="h-4 w-4 shrink-0 text-[#6f9f6b]" />
+																			<span className="text-sm text-[#37322F]">{benefit}</span>
 																		</div>
 																	))}
 																</div>
@@ -859,9 +905,11 @@ export default function SettingsPage() {
 																		>
 																			<div className="flex flex-col items-center gap-1">
 																				<span>Billed Annually</span>
-																				<Badge className="bg-green-600 text-white text-xs border-0 px-2 py-0.5">
-																					Saving over 15%
-																				</Badge>
+																				{savingsPercentage && (
+																					<Badge className="bg-green-600 text-white text-xs border-0 px-2 py-0.5">
+																						Saving {savingsPercentage}%
+																					</Badge>
+																				)}
 																			</div>
 																		</button>
 																		<button
@@ -879,22 +927,40 @@ export default function SettingsPage() {
 																)}
 
 																<div>
-																	<div className="text-3xl font-bold text-[#37322F]">
-																		{selectedBillingInterval === "month" && selectedPrice
-																			? formatPrice(selectedPrice.amount, selectedPrice.currency, selectedPrice.priceId)
+																	<div className="text-lg font-bold text-[#37322F]">
+																		{selectedPrice
+																			? selectedBillingInterval === "year"
+																				? new Intl.NumberFormat("en-US", {
+																						style: "currency",
+																						currency: (selectedPrice.currency || "usd").toUpperCase(),
+																						minimumFractionDigits: 0,
+																						maximumFractionDigits: 0,
+																					}).format(Math.floor((selectedPrice.amount || 0) / 1200))
+																				: new Intl.NumberFormat("en-US", {
+																						style: "currency",
+																						currency: (selectedPrice.currency || "usd").toUpperCase(),
+																						minimumFractionDigits: 0,
+																						maximumFractionDigits: 0,
+																					}).format(Math.floor((selectedPrice.amount || 0) / 100))
 																			: "$249"
 																		}
 																	</div>
-																	<p className="text-sm text-[#605A57]">
-																		{selectedBillingInterval === "month" 
-																			? selectedPrice?.interval ? `per ${selectedPrice.interval}` : "per month"
-																			: "per month"
-																		}
-																	</p>
-																	{selectedBillingInterval === "year" && savings > 0 && (
-																		<p className="text-sm text-green-600 font-medium mt-1">
-																			Save $589 annually
-																		</p>
+																	{selectedBillingInterval === "month" && (
+																		<div className="text-xs text-[#605A57] mt-0.5">
+																			per month
+																		</div>
+																	)}
+																	{selectedBillingInterval === "year" && (
+																		<>
+																			<div className="text-xs text-[#605A57] mt-0.5">
+																				per month
+																			</div>
+																			{savingsFormatted && (
+																				<div className="text-xs text-green-600 font-medium mt-1">
+																					Save {savingsFormatted} annually
+																				</div>
+																			)}
+																		</>
 																	)}
 																</div>
 																<Button
@@ -935,11 +1001,33 @@ export default function SettingsPage() {
 
 					{/* Upgrade Confirmation Dialog */}
 					<AlertDialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
-						<AlertDialogContent>
+						<AlertDialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
 							<AlertDialogHeader>
 								<AlertDialogTitle>Upgrade to Annual Plan</AlertDialogTitle>
 								<AlertDialogDescription>
-									Upgrade your subscription to the annual plan and save $589 per year. You'll be charged a prorated amount based on the time remaining in your current billing period.
+									{(() => {
+										const dialogMonthlyPrice = products.find(
+											(p) => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_MONTHLY_PRICE_ID
+										);
+										const dialogAnnualPrice = products.find(
+											(p) => p.id === STRIPE_PRODUCT_ID && p.priceId === STRIPE_ANNUAL_PRICE_ID
+										);
+										const dialogMonthlyAnnualCost = dialogMonthlyPrice?.amount ? dialogMonthlyPrice.amount * 12 : 0;
+										const dialogAnnualCost = dialogAnnualPrice?.amount || 0;
+										const dialogSavings = dialogMonthlyAnnualCost - dialogAnnualCost;
+										const dialogSavingsFormatted = dialogSavings > 0 && dialogAnnualPrice?.currency
+											? new Intl.NumberFormat("en-US", {
+													style: "currency",
+													currency: dialogAnnualPrice.currency.toUpperCase(),
+													minimumFractionDigits: 0,
+													maximumFractionDigits: 0,
+												}).format(Math.floor(dialogSavings / 100))
+											: null;
+										
+										return dialogSavingsFormatted
+											? `Upgrade your subscription to the annual plan and save ${dialogSavingsFormatted} per year. You'll be charged a prorated amount based on the time remaining in your current billing period.`
+											: "Upgrade your subscription to the annual plan. You'll be charged a prorated amount based on the time remaining in your current billing period.";
+									})()}
 								</AlertDialogDescription>
 							</AlertDialogHeader>
 							<div className="py-4">
