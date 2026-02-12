@@ -40,6 +40,7 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { config } from "@/lib/config";
+import { isAddressInFiveBoroughs } from "@/lib/nyc-bounds";
 
 const STRIPE_PRODUCT_ID = process.env.NEXT_PUBLIC_STRIPE_PRODUCT_ID ?? "";
 const STRIPE_ANNUAL_PRICE_ID =
@@ -271,6 +272,20 @@ export default function SearchAddressPage() {
 	const handleGenerateReport = async () => {
 		if (!addressData) {
 			toast.error("Please select an address first");
+			return;
+		}
+
+		if (!isAddressInFiveBoroughs(addressData)) {
+			// Same flow as requiresSubscription: show subscription modal
+			const annualProPrice = products.find(
+				(p) =>
+					p.id === STRIPE_PRODUCT_ID &&
+					p.priceId === STRIPE_ANNUAL_PRICE_ID,
+			);
+			if (annualProPrice && !selectedPriceId) {
+				setSelectedPriceId(annualProPrice.priceId);
+			}
+			setShowSubscriptionModal(true);
 			return;
 		}
 

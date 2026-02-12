@@ -50,3 +50,6 @@ logs
 
 # Temporary exports
 cursor_chat_history_*.txt
+
+# Large boundary data (not used at runtime; bounds are in nyc-bounds.ts)
+frontend/lib/Borough_Boundaries_*.geojson

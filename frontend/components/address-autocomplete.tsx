@@ -18,6 +18,8 @@ export interface AddressData {
 		lng: number;
 	};
 	placeId: string;
+	/** State from Google (e.g. "NY") for 5-borough check */
+	state?: string;
 }
 
 interface AddressAutocompleteProps {
@@ -124,10 +126,19 @@ export default function AddressAutocomplete({
 				const normalizedAddress = place.formatted_address;
 				const location = place.geometry.location;
 
+				// Extract state from address_components (e.g. "NY") for 5-borough check
+				let state: string | undefined;
+				const stateComponent = place.address_components?.find((c) =>
+					c.types.includes("administrative_area_level_1")
+				);
+				if (stateComponent) {
+					state = stateComponent.short_name ?? stateComponent.long_name;
+				}
+
 				// Update input value
 				setInputValue(normalizedAddress);
 
-				// Call the callback with address data including coordinates
+				// Call the callback with address data including coordinates and state
 				onAddressSelect({
 					address: normalizedAddress,
 					normalizedAddress: normalizedAddress,
@@ -136,6 +147,7 @@ export default function AddressAutocomplete({
 						lng: location.lng(),
 					},
 					placeId: place.place_id || "",
+					state,
 				});
 			});
 
