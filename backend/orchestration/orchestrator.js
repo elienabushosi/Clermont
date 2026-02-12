@@ -65,6 +65,27 @@ export async function generateReport(
 			geoserviceResult
 		);
 
+		// Check for "ADDRESS NUMBER OUT OF RANGE" error with no BBL (single-parcel only)
+		// This should show subscription modal instead of failing the report
+		const geoserviceData = geoserviceResult.data;
+		const extracted = geoserviceData?.extracted;
+		const errorMessage = geoserviceResult.error || extracted?.errorMessage || "";
+		const hasBbl = extracted?.bbl != null && String(extracted.bbl).trim() !== "";
+		
+		if (
+			errorMessage.toUpperCase().includes("ADDRESS NUMBER OUT OF RANGE") &&
+			!hasBbl
+		) {
+			// Mark report as failed (early exit)
+			await updateReportStatus(report.IdReport, "failed");
+			return {
+				reportId: report.IdReport,
+				status: "failed",
+				addressOutOfRange: true,
+				error: "Address number out of range - no BBL available",
+			};
+		}
+
 		// If Geoservice failed, mark report as failed and return
 		if (geoserviceResult.status !== "succeeded") {
 			console.error("GeoserviceAgent failed:", geoserviceResult.error);
@@ -87,7 +108,7 @@ export async function generateReport(
 		}
 
 		// 3. Extract BBL and location data from Geoservice result
-		const geoserviceData = geoserviceResult.data;
+		// geoserviceData already declared above for addressOutOfRange check
 		if (!geoserviceData || !geoserviceData.extracted) {
 			throw new Error("GeoserviceAgent did not return extracted data");
 		}

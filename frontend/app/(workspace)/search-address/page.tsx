@@ -39,6 +39,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { config } from "@/lib/config";
 import { isAddressInFiveBoroughs } from "@/lib/nyc-bounds";
 
@@ -64,6 +65,7 @@ export default function SearchAddressPage() {
 	} | null>(null);
 	const [products, setProducts] = useState<StripeProduct[]>([]);
 	const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
+	const [showNoBblAlert, setShowNoBblAlert] = useState(false);
 
 	const handleAddressSelect = (data: AddressData) => {
 		setAddressData(data);
@@ -143,10 +145,12 @@ export default function SearchAddressPage() {
 				const reports = await getReports();
 
 				// Filter to only show single-property reports created by the current user (exclude assemblage)
+				// In production: also exclude failed reports; in dev: show all reports
 				const userReports = reports.filter(
 					(report) =>
 						report.CreatedBy === currentUser.user.IdUser &&
-						report.ReportType !== "assemblage",
+						report.ReportType !== "assemblage" &&
+						(process.env.NODE_ENV !== "production" || report.Status !== "failed"),
 				);
 
 				// Sort by CreatedAt descending and take the 6 most recent
@@ -277,6 +281,7 @@ export default function SearchAddressPage() {
 
 		if (!isAddressInFiveBoroughs(addressData)) {
 			// Same flow as requiresSubscription: show subscription modal
+			setShowNoBblAlert(false); // Reset alert for 5-borough check
 			const annualProPrice = products.find(
 				(p) =>
 					p.id === STRIPE_PRODUCT_ID &&
@@ -320,9 +325,27 @@ export default function SearchAddressPage() {
 			const result = await response.json();
 
 			if (!response.ok) {
+				// Check for address out of range (no BBL) - show subscription modal with alert
+				if (result.addressOutOfRange) {
+					toast.dismiss("generate-report");
+					setShowNoBblAlert(true);
+					// Auto-select annual Pro plan when opening modal
+					const annualProPrice = products.find(
+						(p) =>
+							p.id === STRIPE_PRODUCT_ID &&
+							p.priceId === STRIPE_ANNUAL_PRICE_ID,
+					);
+					if (annualProPrice && !selectedPriceId) {
+						setSelectedPriceId(annualProPrice.priceId);
+					}
+					setShowSubscriptionModal(true);
+					return;
+				}
+
 				// Check if subscription is required
 				if (result.requiresSubscription) {
 					toast.dismiss("generate-report");
+					setShowNoBblAlert(false); // Reset alert for subscription-only case
 					// Auto-select annual Pro plan when opening modal
 					const annualProPrice = products.find(
 						(p) =>
@@ -529,7 +552,13 @@ export default function SearchAddressPage() {
 			{/* Subscription Required Modal */}
 			<AlertDialog
 				open={showSubscriptionModal}
-				onOpenChange={setShowSubscriptionModal}
+				onOpenChange={(open) => {
+					setShowSubscriptionModal(open);
+					if (!open) {
+						// Reset alert when modal closes
+						setShowNoBblAlert(false);
+					}
+				}}
 			>
 				<AlertDialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
 					{isOwner ? (
@@ -554,16 +583,16 @@ export default function SearchAddressPage() {
 								</div>
 							</AlertDialogHeader>
 
-							{/* Friendly design-partner message with icon */}
+							{/* Friendly design-partner message with icon - conditional text based on no BBL */}
 							<div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 mb-4">
 								<HeartHandshake
 									className="size-5 shrink-0 text-amber-600 mt-0.5"
 									aria-hidden
 								/>
 								<p className="leading-relaxed">
-									You’ve reached the end of your test reports.
-									Join the paid pilot to continue generating
-									reports and help shape Clermont.
+									{showNoBblAlert
+										? "We're working on addresses without a BBL. Join our pilot to get early access when this is released."
+										: "You've reached the end of your test reports. Join the paid pilot to continue generating reports and help shape Clermont."}
 								</p>
 							</div>
 

@@ -143,6 +143,16 @@ router.post("/generate", async (req, res) => {
 			req.body.clientId || null
 		);
 
+		// Check for address out of range (no BBL) - return 400 with flag for frontend
+		if (result.addressOutOfRange) {
+			return res.status(400).json({
+				status: "error",
+				addressOutOfRange: true,
+				reportId: result.reportId,
+				message: result.error || "Address number out of range - no BBL available",
+			});
+		}
+
 		// Notify admin of report result (production only; does not block response)
 		const createdAtEst = new Date().toLocaleString("en-US", { timeZone: "America/New_York" }) + " EST";
 		const notifyResult = await sendAdminReportCreatedNotification(
