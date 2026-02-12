@@ -262,8 +262,14 @@ export default function HomePage() {
 				setIsLoading(true);
 				setError(null);
 				const data = await getReports();
+				// Filter out failed reports in production (dev shows all reports)
+				const filtered = data.filter(
+					(report) =>
+						process.env.NODE_ENV !== "production" ||
+						report.Status !== "failed"
+				);
 				// Sort by CreatedAt descending (newest first)
-				const sorted = data.sort(
+				const sorted = filtered.sort(
 					(a, b) =>
 						new Date(b.CreatedAt).getTime() -
 						new Date(a.CreatedAt).getTime()

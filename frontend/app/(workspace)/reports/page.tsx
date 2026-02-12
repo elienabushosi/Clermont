@@ -39,7 +39,13 @@ export default function ReportsPage() {
 				setIsLoading(true);
 				setError(null);
 				const data = await getReports();
-				setReports(data);
+				// Filter out failed reports in production (dev shows all reports)
+				const filtered = data.filter(
+					(report) =>
+						process.env.NODE_ENV !== "production" ||
+						report.Status !== "failed"
+				);
+				setReports(filtered);
 			} catch (err) {
 				console.error("Error fetching reports:", err);
 				setError(
