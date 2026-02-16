@@ -1,17 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 
 interface FemaFloodMapProps {
 	lat: number;
 	lng: number;
 	address: string;
+	/** ID for print-only image (PDF export) */
+	printImageId?: string;
 	floodZoneData?: {
 		floodZone: string | null;
 		floodZoneLabel: string;
 		matched: boolean;
 		features?: any[];
 	} | null;
+}
+
+export interface FemaFloodMapHandle {
+	takeScreenshot(): Promise<string | null>;
 }
 
 // Declare global ArcGIS types
@@ -21,18 +27,35 @@ declare global {
 	}
 }
 
-export default function FemaFloodMap({
-	lat,
-	lng,
-	address,
-	floodZoneData,
-}: FemaFloodMapProps) {
+const FemaFloodMap = forwardRef<FemaFloodMapHandle, FemaFloodMapProps>(function FemaFloodMap(
+	{
+		lat,
+		lng,
+		address,
+		printImageId,
+		floodZoneData,
+	},
+	ref
+) {
 	const wrapperRef = useRef<HTMLDivElement>(null);
 	const mapContainerId = useRef(`fema-map-${Date.now()}-${Math.random()}`);
 	const mapViewRef = useRef<any>(null);
 	const [mapLoaded, setMapLoaded] = useState(false);
 	const [mapError, setMapError] = useState<string | null>(null);
 	const scriptLoadedRef = useRef(false);
+
+	useImperativeHandle(ref, () => ({
+		async takeScreenshot(): Promise<string | null> {
+			const view = mapViewRef.current;
+			if (!view || typeof view.takeScreenshot !== "function") return null;
+			try {
+				const result = await view.takeScreenshot({ format: "png" });
+				return result?.dataUrl ?? null;
+			} catch {
+				return null;
+			}
+		},
+	}), []);
 
 	const initializeMap = useCallback(() => {
 		if (!window.require || mapViewRef.current) return;
@@ -268,9 +291,10 @@ export default function FemaFloodMap({
 				</div>
 			)}
 
-			{/* Map Container */}
+			{/* Map Container - data-map-print-target used for PDF capture */}
 			<div
 				ref={wrapperRef}
+				data-map-print-target
 				className="w-full h-[500px] rounded-lg overflow-hidden border border-[rgba(55,50,47,0.12)] shadow-sm relative"
 			>
 				{!mapLoaded && (
@@ -279,9 +303,19 @@ export default function FemaFloodMap({
 					</div>
 				)}
 			</div>
+			{printImageId && (
+				<img
+					id={printImageId}
+					alt="FEMA Flood Map"
+					className="print-show-map-image w-full rounded-lg border border-[rgba(55,50,47,0.12)]"
+					style={{ display: "none", height: "500px", objectFit: "cover" }}
+				/>
+			)}
 			<p className="text-xs text-[#605A57] text-center">
 				Property location: {address}
 			</p>
 		</div>
 	);
-}
+});
+
+export default FemaFloodMap;

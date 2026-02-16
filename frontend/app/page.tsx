@@ -44,7 +44,7 @@ export default function LandingPage() {
 	useEffect(() => {
 		// Ensure mountedRef is true when effect runs
 		mountedRef.current = true;
-		
+
 		const progressInterval = setInterval(() => {
 			setProgress((prev) => {
 				const newProgress = prev + 2; // 2% every 100ms = 5 seconds total
@@ -169,7 +169,7 @@ export default function LandingPage() {
 							<div className="w-full max-w-[937px] lg:w-[937px] flex flex-col justify-center items-center gap-3 sm:gap-4 md:gap-5 lg:gap-6">
 								<div className="self-stretch rounded-[3px] flex flex-col justify-center items-center gap-4 sm:gap-5 md:gap-6 lg:gap-8">
 									<div className="w-full max-w-[748.71px] lg:w-[748.71px] text-center flex justify-center flex-col text-[#37322F] text-[24px] xs:text-[28px] sm:text-[36px] md:text-[52px] lg:text-[80px] font-normal leading-[1.1] sm:leading-[1.15] md:leading-[1.2] lg:leading-24 font-serif px-2 sm:px-4 md:px-0">
-										Get parcel feasibility reports
+										Get residential zoning reports
 										<br />
 										with Clermont
 									</div>
@@ -270,7 +270,7 @@ export default function LandingPage() {
 													key={i}
 													className="self-stretch h-3 sm:h-4 rotate-[-45deg] origin-top-left outline outline-[0.5px] outline-[rgba(3,7,18,0.08)] outline-offset-[-0.25px]"
 												></div>
-											)
+											),
 										)}
 									</div>
 								</div>
@@ -279,7 +279,7 @@ export default function LandingPage() {
 									{/* Feature Cards */}
 									<FeatureCard
 										title="Address Research"
-										description="Research addresses & properties from clients."
+										description="Research zoning constraints for addresses & properties."
 										isActive={activeCard === 0}
 										progress={
 											activeCard === 0 ? progress : 0
@@ -315,7 +315,7 @@ export default function LandingPage() {
 													key={i}
 													className="self-stretch h-3 sm:h-4 rotate-[-45deg] origin-top-left outline outline-[0.5px] outline-[rgba(3,7,18,0.08)] outline-offset-[-0.25px]"
 												></div>
-											)
+											),
 										)}
 									</div>
 								</div>
@@ -333,7 +333,7 @@ export default function LandingPage() {
 														key={i}
 														className="self-stretch h-3 sm:h-4 rotate-[-45deg] origin-top-left outline outline-[0.5px] outline-[rgba(3,7,18,0.08)] outline-offset-[-0.25px]"
 													/>
-												)
+												),
 											)}
 										</div>
 									</div>
@@ -346,9 +346,9 @@ export default function LandingPage() {
 													Fast. Simple. Accurate.
 												</h3>
 												<p className="text-[#605A57] text-sm md:text-base font-normal leading-relaxed font-sans">
-													Get parcel feasibility
-													reports with Clermont in
-													minutes, not hours.
+													Get parcel zoning reports
+													with Clermont in minutes,
+													not hours.
 												</p>
 											</div>
 											<div className="w-full h-[200px] sm:h-[250px] md:h-[300px] rounded-lg flex items-center justify-center overflow-hidden">
@@ -452,7 +452,7 @@ export default function LandingPage() {
 														key={i}
 														className="self-stretch h-3 sm:h-4 rotate-[-45deg] origin-top-left outline outline-[0.5px] outline-[rgba(3,7,18,0.08)] outline-offset-[-0.25px]"
 													/>
-												)
+												),
 											)}
 										</div>
 									</div>

@@ -11,8 +11,7 @@ export default function FooterSection() {
 						</div>
 					</div>
 					<div className="text-[rgba(73,66,61,0.90)] text-sm font-medium leading-[18px] font-sans">
-						Feasibility and site-intelligence for developers &
-						architects
+						Zoning and site-intelligence for developers & architects
 					</div>
 
 					{/* Social Media Icons */}

@@ -20,9 +20,9 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-	title: "Clermont - Property Feasibility Analysis for Developers & Architects",
+	title: "Clermont - Property Zoning Reports for Developers & Architects",
 	description:
-		"Client-intake and asset-analysis tool for developers & architects that automatically generates property feasibility snapshots using just a client's address.",
+		"Property zoning snapshots and asset-analysis tool for developers & architects that automatically generates property zoning reports using just a client's address.",
 	generator: "v0.app",
 	icons: {
 		icon: "/favicon-32x32.png",

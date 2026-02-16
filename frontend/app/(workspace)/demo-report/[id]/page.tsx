@@ -168,7 +168,7 @@ export default function DemoReportPage() {
 						</Button>
 						<div>
 							<h1 className="text-3xl font-semibold text-[#37322F] mb-2">
-								Property Feasibility Report
+								Property Zoning Report
 							</h1>
 							<div className="flex items-center gap-2 text-[#605A57]">
 								<MapPin className="size-4" />
@@ -192,14 +192,14 @@ export default function DemoReportPage() {
 							// Share functionality - can be enhanced later
 							if (navigator.share) {
 								navigator.share({
-									title: "Property Feasibility Report",
-									text: `Feasibility report for ${propertyData.address}`,
+									title: "Property Zoning Report",
+									text: `Zoning report for ${propertyData.address}`,
 									url: window.location.href,
 								});
 							} else {
 								// Fallback: copy to clipboard
 								navigator.clipboard.writeText(
-									window.location.href
+									window.location.href,
 								);
 								alert("Report link copied to clipboard!");
 							}
@@ -730,7 +730,7 @@ export default function DemoReportPage() {
 											<XCircle className="size-4 text-red-600 mt-0.5 flex-shrink-0" />
 											<span>{use}</span>
 										</li>
-									)
+									),
 								)}
 							</ul>
 						</CardContent>
@@ -765,9 +765,9 @@ export default function DemoReportPage() {
 														"High"
 															? "bg-green-100 text-green-700 border-green-200"
 															: option.feasibility ===
-															  "Moderate"
-															? "bg-yellow-100 text-yellow-700 border-yellow-200"
-															: "bg-red-100 text-red-700 border-red-200"
+																  "Moderate"
+																? "bg-yellow-100 text-yellow-700 border-yellow-200"
+																: "bg-red-100 text-red-700 border-red-200"
 													}
 												>
 													{option.feasibility}{" "}
@@ -787,7 +787,7 @@ export default function DemoReportPage() {
 													{option.considerations.map(
 														(
 															consideration,
-															idx
+															idx,
 														) => (
 															<li
 																key={idx}
@@ -802,7 +802,7 @@ export default function DemoReportPage() {
 																	}
 																</span>
 															</li>
-														)
+														),
 													)}
 												</ul>
 											</div>
@@ -814,7 +814,7 @@ export default function DemoReportPage() {
 											<Separator className="mt-6" />
 										)}
 									</div>
-								)
+								),
 							)}
 						</div>
 					</CardContent>

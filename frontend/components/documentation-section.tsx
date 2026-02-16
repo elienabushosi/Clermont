@@ -28,9 +28,9 @@ export default function DocumentationSection() {
 			image: "/addressresearchlower2.png",
 		},
 		{
-			title: "Parcel Feasibility Analysis",
+			title: "Parcel Zoning Analysis",
 			description:
-				"Analyze zoning, land-use, and building lot information to determine if a parcel is feasible for a project.",
+				"Analyze zoning, land-use, and building lot information to determine if a parcel is suitable for a project.",
 			image: "/feasabilityreportimage2.png",
 		},
 		{

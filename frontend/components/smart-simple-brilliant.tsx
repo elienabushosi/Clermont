@@ -31,14 +31,14 @@ const SmartSimpleBrilliant: React.FC<SmartSimpleBrilliantProps> = ({
 					"--ssb-border": "rgba(0,0,0,0.08)",
 					"--ssb-inner-border": "rgba(0,0,0,0.12)",
 					"--ssb-shadow": "rgba(0,0,0,0.12)",
-			  }
+				}
 			: ({
 					"--ssb-surface": "#333937",
 					"--ssb-text": "#f8f8f8",
 					"--ssb-border": "rgba(255,255,255,0.16)",
 					"--ssb-inner-border": "rgba(255,255,255,0.12)",
 					"--ssb-shadow": "rgba(0,0,0,0.28)",
-			  } as React.CSSProperties);
+				} as React.CSSProperties);
 
 	// Figma-exported SVG assets used for small icons
 	const img =
@@ -186,7 +186,7 @@ const SmartSimpleBrilliant: React.FC<SmartSimpleBrilliantProps> = ({
 											color: "#92400E",
 										}}
 									>
-										Review Parcel Feasibility
+										Review Parcel Zoning
 									</div>
 								</div>
 							</div>
