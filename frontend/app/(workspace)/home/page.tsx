@@ -27,6 +27,7 @@ import {
 	Search,
 	SquareDashed,
 	SquareStack,
+	MapPin,
 } from "lucide-react";
 
 function getStatusColor(status: string) {
