@@ -463,7 +463,7 @@ export default function LandingPage() {
 							{/* Testimonials Section */}
 							{/* <TestimonialsSection /> */}
 							{/* Pricing Section */}
-							{/* <PricingSection /> */}
+							<PricingSection />
 							{/* FAQ Section */}
 							<FAQSection />
 							{/* CTA Section */}
