@@ -38,6 +38,8 @@ export default function AddressAutocomplete({
 	const autocompleteInstanceRef =
 		useRef<google.maps.places.Autocomplete | null>(null);
 	const inputElementRef = useRef<HTMLInputElement | null>(null);
+	const onAddressSelectRef = useRef(onAddressSelect);
+	onAddressSelectRef.current = onAddressSelect;
 
 	const { isLoaded, loadError } = useLoadScript({
 		googleMapsApiKey: GOOGLE_MAPS_API_KEY || "",
@@ -149,7 +151,7 @@ export default function AddressAutocomplete({
 				// Defer update so input reliably fills on mobile/touch after dropdown dismisses
 				setTimeout(() => {
 					setInputValue(normalizedAddress);
-					onAddressSelect(payload);
+					onAddressSelectRef.current(payload);
 				}, 0);
 			});
 
@@ -163,7 +165,7 @@ export default function AddressAutocomplete({
 		return () => {
 			clearTimeout(timer);
 		};
-	}, [isLoaded, onAddressSelect]);
+	}, [isLoaded]);
 
 	if (loadError) {
 		return (
