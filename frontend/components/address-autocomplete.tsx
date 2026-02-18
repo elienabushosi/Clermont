@@ -114,7 +114,7 @@ export default function AddressAutocomplete({
 			autocompleteInstanceRef.current = autocomplete;
 			console.log("Autocomplete initialized");
 
-			// Handle place selection
+			// Handle place selection (setTimeout helps mobile/touch: update after dropdown closes)
 			const listener = autocomplete.addListener("place_changed", () => {
 				const place = autocomplete.getPlace();
 
@@ -135,11 +135,7 @@ export default function AddressAutocomplete({
 					state = stateComponent.short_name ?? stateComponent.long_name;
 				}
 
-				// Update input value
-				setInputValue(normalizedAddress);
-
-				// Call the callback with address data including coordinates and state
-				onAddressSelect({
+				const payload = {
 					address: normalizedAddress,
 					normalizedAddress: normalizedAddress,
 					location: {
@@ -148,7 +144,13 @@ export default function AddressAutocomplete({
 					},
 					placeId: place.place_id || "",
 					state,
-				});
+				};
+
+				// Defer update so input reliably fills on mobile/touch after dropdown dismisses
+				setTimeout(() => {
+					setInputValue(normalizedAddress);
+					onAddressSelect(payload);
+				}, 0);
 			});
 
 			return () => {
@@ -198,6 +200,7 @@ export default function AddressAutocomplete({
 			id="address-autocomplete-input"
 			name="address"
 			autoComplete="off"
+			style={{ touchAction: "manipulation" }}
 		/>
 	);
 }

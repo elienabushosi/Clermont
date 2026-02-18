@@ -4,6 +4,11 @@ import type React from "react";
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import AddressAutocomplete, {
+	type AddressData,
+} from "@/components/address-autocomplete";
+import { isAddressInFiveBoroughs } from "@/lib/nyc-bounds";
 import SmartSimpleBrilliant from "../components/smart-simple-brilliant";
 import YourWorkInSync from "../components/your-work-in-sync";
 import EffortlessIntegration from "../components/effortless-integration-updated";
@@ -33,8 +38,20 @@ export default function LandingPage() {
 	const router = useRouter();
 	const [activeCard, setActiveCard] = useState(0);
 	const [progress, setProgress] = useState(0);
+	const [addressError, setAddressError] = useState<string | null>(null);
 	const mountedRef = useRef(true);
 	const activeCardRef = useRef(0);
+
+	const handleAddressSelect = (addressData: AddressData) => {
+		// Defer validation so dropdown can close and input can update first (better mobile tap reliability)
+		setTimeout(() => {
+			setAddressError(null);
+			if (!isAddressInFiveBoroughs(addressData)) {
+				toast.error("Address must be within the 5 NYC boroughs");
+				setAddressError("Address must be within the 5 NYC boroughs");
+			}
+		}, 0);
+	};
 
 	// Keep ref in sync with state
 	useEffect(() => {
@@ -111,7 +128,7 @@ export default function LandingPage() {
 					{/* Right vertical line */}
 					<div className="w-[1px] h-full absolute right-4 sm:right-6 md:right-8 lg:right-0 top-0 bg-[rgba(55,50,47,0.12)] shadow-[1px_0px_0px_white] z-0"></div>
 
-					<div className="self-stretch pt-[9px] overflow-hidden border-b border-[rgba(55,50,47,0.06)] flex flex-col justify-center items-center gap-4 sm:gap-6 md:gap-8 lg:gap-[66px] relative z-10">
+					<div className="self-stretch pt-[9px] overflow-x-hidden overflow-y-visible border-b border-[rgba(55,50,47,0.06)] flex flex-col justify-center items-center gap-4 sm:gap-6 md:gap-8 lg:gap-[66px] relative z-10">
 						{/* Navigation */}
 						<div className="w-full h-12 sm:h-14 md:h-16 lg:h-[84px] absolute left-0 top-0 flex justify-center items-center z-20 px-6 sm:px-8 md:px-12 lg:px-0">
 							<div className="w-full h-0 absolute left-0 top-6 sm:top-7 md:top-8 lg:top-[42px] border-t border-[rgba(55,50,47,0.12)] shadow-[0px_1px_0px_white]"></div>
@@ -176,20 +193,45 @@ export default function LandingPage() {
 									<div className="w-full max-w-[506.08px] lg:w-[506.08px] text-center flex justify-center flex-col text-[rgba(55,50,47,0.80)] sm:text-lg md:text-xl leading-[1.4] sm:leading-[1.45] md:leading-[1.5] lg:leading-7 font-sans px-2 sm:px-4 md:px-0 lg:text-lg font-medium text-sm">
 										Streamline your parcel zoning research
 										with seamless automation
-										<br className="hidden sm:block" />
-										for every address.
 									</div>
 								</div>
 							</div>
-							<div className="w-full max-w-[497px] lg:w-[497px] flex flex-col justify-center items-center gap-6 sm:gap-8 md:gap-10 lg:gap-12 relative z-10 mt-6 sm:mt-8 md:mt-10 lg:mt-12">
-								<div className="backdrop-blur-[8.25px] flex justify-start items-center gap-4">
+							<div className="w-full max-w-[497px] md:max-w-[560px] lg:max-w-[680px] lg:w-[680px] flex flex-col justify-center items-center gap-6 sm:gap-8 md:gap-10 lg:gap-12 relative z-10 mt-6 sm:mt-8 md:mt-10 lg:mt-12">
+								<div className="flex justify-start items-center gap-4">
 									<button
 										onClick={() => router.push("/signup")}
-										className="h-10 sm:h-11 md:h-12 px-6 sm:px-8 md:px-10 lg:px-12 py-2 sm:py-[6px] relative bg-[#D09376] shadow-[0px_0px_0px_2.5px_rgba(255,255,255,0.08)_inset] overflow-hidden rounded-full flex justify-center items-center hover:bg-[#D09376]/90 transition-colors cursor-pointer"
+										className="hidden"
 									>
 										<div className="w-20 sm:w-24 md:w-28 lg:w-44 h-[41px] absolute left-0 top-[-0.5px] bg-gradient-to-b from-[rgba(255,255,255,0)] to-[rgba(0,0,0,0.05)] mix-blend-multiply"></div>
 										<div className="flex flex-col justify-center text-white text-sm sm:text-base md:text-[15px] font-medium leading-5 font-sans">
 											Start for free
+										</div>
+									</button>
+								</div>
+								<div className="w-full flex flex-col sm:flex-row gap-3 sm:gap-4 items-center">
+									<div className="w-full sm:flex-[3] flex flex-col gap-1">
+										<AddressAutocomplete
+											onAddressSelect={
+												handleAddressSelect
+											}
+											placeholder="Search Address"
+											className="w-full h-10 sm:h-11 md:h-12 px-4 sm:px-6 text-sm sm:text-base border border-[rgba(55,50,47,0.12)] rounded-md bg-white focus-visible:ring-2 focus-visible:ring-[#D09376] focus-visible:border-[#D09376]"
+										/>
+										{addressError && (
+											<p className="text-sm text-amber-700 px-2">
+												{addressError}
+											</p>
+										)}
+									</div>
+									<button
+										onClick={() =>
+											router.push("/report-options")
+										}
+										className="w-full sm:w-auto sm:flex-shrink-0 h-10 sm:h-11 md:h-12 px-6 sm:px-8 md:px-10 lg:px-12 py-2 sm:py-[6px] relative bg-[#D09376] shadow-[0px_0px_0px_2.5px_rgba(255,255,255,0.08)_inset] overflow-hidden rounded-md flex justify-center items-center hover:bg-[#D09376]/90 transition-colors cursor-pointer"
+									>
+										<div className="w-20 sm:w-24 md:w-28 lg:w-44 h-[41px] absolute left-0 top-[-0.5px] bg-gradient-to-b from-[rgba(255,255,255,0)] to-[rgba(0,0,0,0.05)] mix-blend-multiply"></div>
+										<div className="flex flex-col justify-center text-white text-sm sm:text-base md:text-[15px] font-medium leading-5 font-sans">
+											Generate Report for Free
 										</div>
 									</button>
 								</div>
