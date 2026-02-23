@@ -1377,8 +1377,8 @@ export function ReportViewContent({
 							</Card>
 						)}
 
-						{/* 3D Massing Visualization — inputs below 3D, Save persists to report; no report-derived defaults (hidden for now) */}
-						{false && report?.IdReport && report?.ReportType !== "assemblage" && (
+						{/* 3D Massing Visualization — inputs below 3D, Save persists to report; no report-derived defaults */}
+						{report?.IdReport && report?.ReportType !== "assemblage" && (
 							<ReportMassingSection
 								reportId={report.IdReport}
 								readOnly={isPublic}
